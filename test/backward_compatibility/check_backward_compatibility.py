@@ -36,15 +36,18 @@ white_list = [
     ('aten::strides', datetime.date(2020, 4, 30)),
     ('aten::backward', datetime.date(2020, 4, 30)),
     ('quantized::conv_prepack', datetime.date(2020, 6, 1)),
+    ('quantized::conv_unpack', datetime.date(2020, 6, 1)),
+    ('quantized::conv', datetime.date(2020, 6, 1)),
+    ('quantized::conv2d_prepack', datetime.date(2020, 6, 1)),
+    ('quantized::conv2d_unpack', datetime.date(2020, 6, 1)),
+    ('quantized::conv2d', datetime.date(2020, 6, 1)),
+    ('quantized::conv2d_relu', datetime.date(2020, 6, 1)),
     ('quantized::conv3d_prepack', datetime.date(2020, 6, 1)),
     ('quantized::conv3d_unpack', datetime.date(2020, 6, 1)),
     ('quantized::conv3d', datetime.date(2020, 6, 1)),
-    ('quantized::conv2d_relu', datetime.date(2020, 6, 1)),
-    ('quantized::conv2d', datetime.date(2020, 6, 1)),
+    ('quantized::conv3d_relu', datetime.date(2020, 5, 1)),
     ('_quantized::conv2d_relu', datetime.date(2020, 6, 1)),
     ('_quantized::conv2d', datetime.date(2020, 6, 1)),
-    ('quantized::conv2d_prepack', datetime.date(2020, 6, 1)),
-    ('quantized::conv3d_relu', datetime.date(2020, 6, 1)),
     ('aten::batch_norm_gather_stats_with_counts', datetime.date(2020, 6, 30)),
     ('_aten::*', datetime.date(2020, 6, 1)),
     ('_prim::*', datetime.date(2020, 6, 1)),
@@ -54,6 +57,17 @@ white_list = [
 # The nightly will fail to parse newly added syntax to schema declarations
 # Add new schemas that will fail the nightly here
 dont_parse_list = [
+    ('quantized::conv_prepack', datetime.date(2020, 5, 1)),
+    ('quantized::conv_unpack', datetime.date(2020, 5, 1)),
+    ('quantized::conv', datetime.date(2020, 5, 1)),
+    ('quantized::conv2d_prepack', datetime.date(2020, 5, 1)),
+    ('quantized::conv2d_unpack', datetime.date(2020, 5, 1)),
+    ('quantized::conv2d', datetime.date(2020, 5, 1)),
+    ('quantized::conv2d_relu', datetime.date(2020, 5, 1)),
+    ('quantized::conv3d_prepack', datetime.date(2020, 5, 1)),
+    ('quantized::conv3d_unpack', datetime.date(2020, 5, 1)),
+    ('quantized::conv3d', datetime.date(2020, 5, 1)),
+    ('quantized::conv3d_relu', datetime.date(2020, 5, 1)),
 ]
 
 

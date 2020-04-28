@@ -567,16 +567,15 @@ class TestStaticQuantizedModule(QuantizationTestCase):
 
         # Test serialization of quantized Conv Module using state_dict
         model_dict = qconv_module.state_dict()
-        self.assertEqual(W_q, model_dict['weight'])
+        self.assertEqual(model_dict['weight'], W_q)
         if use_bias:
-            self.assertEqual(b, model_dict['bias'])
+            self.assertEqual(model_dict['bias'], b)
         bytes_io = io.BytesIO()
         torch.save(model_dict, bytes_io)
         bytes_io.seek(0)
         loaded_dict = torch.load(bytes_io)
         for key in loaded_dict:
             self.assertEqual(model_dict[key], loaded_dict[key])
-
         loaded_qconv_module = type(qconv_module)(
             in_channels, out_channels, kernel_size, stride, padding, dilation,
             groups, use_bias, padding_mode="zeros")
@@ -663,8 +662,8 @@ class TestStaticQuantizedModule(QuantizationTestCase):
            Y_scale=st.floats(4.2, 5.6),
            Y_zero_point=st.integers(0, 4),
            use_bias=st.booleans(),
-           use_fused=st.booleans(),
-           use_channelwise=st.booleans(),
+           use_fused=st.sampled_from([False]),
+           use_channelwise=st.sampled_from([False]),
            qengine=st.sampled_from(("qnnpack", "fbgemm")))
     def test_conv2d_api(
         self, batch_size, in_channels_per_group, H, W, out_channels_per_group,
