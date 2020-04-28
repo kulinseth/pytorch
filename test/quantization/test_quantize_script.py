@@ -1639,6 +1639,7 @@ class TestQuantizeScriptPTSQOps(JitTestCase):
                 x = self.tanh(x)
                 x = F.tanh(x)
                 x = torch.tanh(x)
+                x = F.hardtanh(x)
                 x = self.conv(x)
                 return x
 
