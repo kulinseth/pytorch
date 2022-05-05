@@ -16,10 +16,6 @@ const char* MPSTensorImpl::tensorimpl_type_name() const {
   return "MPSTensorImpl";
 }
 
-const at::Storage& MPSTensorImpl::storage() const {
-  return this->storage_;
-}
-
 void MPSTensorImpl::release_resources() {
   TensorImpl::release_resources();
 }
