@@ -86,9 +86,8 @@ class TORCH_API Context {
   static bool hasLazy() {
     return c10::impl::hasDeviceGuardImpl(at::DeviceType::Lazy);
   }
-  static bool hasMLC() {
-    return c10::impl::hasDeviceGuardImpl(at::DeviceType::MLC);
-  }
+  static bool hasMPS();
+
   static bool hasORT() {
     return c10::impl::hasDeviceGuardImpl(at::DeviceType::ORT);
   }
@@ -118,6 +117,8 @@ class TORCH_API Context {
   void setUserEnabledCuDNN(bool e);
   bool userEnabledMkldnn() const;
   void setUserEnabledMkldnn(bool e);
+  bool userEnabledDebugMPSVerbose() const;
+  void setUserEnabledDebugMPSVerbose(bool e);
   bool benchmarkCuDNN() const;
   void setBenchmarkCuDNN(bool);
   bool deterministicCuDNN() const;
@@ -247,6 +248,7 @@ class TORCH_API Context {
   bool allow_tf32_cublas = true;
   bool allow_fp16_reduction_cublas = true;
   bool enabled_mkldnn = true;
+  bool enabled_debug_mps_verbose = false;
   at::LinalgBackend linalg_preferred_backend = at::LinalgBackend::Default;
   #ifdef C10_MOBILE
   bool release_original_weights = true;
@@ -287,6 +289,11 @@ static inline DeprecatedTypeProperties& HIP(ScalarType s) {
       Backend::HIP, s);
 }
 
+static inline DeprecatedTypeProperties& MPS(ScalarType s) {
+  return globalDeprecatedTypePropertiesRegistry().getDeprecatedTypeProperties(
+      Backend::MPS, s);
+}
+
 static inline bool hasCUDA() {
   return globalContext().hasCUDA();
 }
@@ -299,8 +306,8 @@ static inline bool hasXLA() {
   return globalContext().hasXLA();
 }
 
-static inline bool hasMLC() {
-  return globalContext().hasMLC();
+static inline bool hasMPS() {
+  return globalContext().hasMPS();
 }
 
 static inline bool hasORT() {

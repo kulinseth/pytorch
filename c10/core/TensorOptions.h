@@ -670,8 +670,8 @@ inline DispatchKey computeDispatchKey(
           return DispatchKey::XLA;
         case DeviceType::Lazy:
           return DispatchKey::Lazy;
-        case DeviceType::MLC:
-          return DispatchKey::MLC;
+        case DeviceType::MPS:
+          return DispatchKey::MPS;
         case DeviceType::Vulkan:
           return DispatchKey::Vulkan;
         case DeviceType::Metal:
@@ -785,9 +785,9 @@ inline DeviceType dispatchKeyToDeviceType(DispatchKey dispatch_key) {
     case DispatchKey::QuantizedXPU:
     case DispatchKey::AutogradXPU:
       return DeviceType::XPU;
-    case DispatchKey::MLC:
-    case DispatchKey::AutogradMLC:
-      return DeviceType::MLC;
+    case DispatchKey::MPS:
+    case DispatchKey::AutogradMPS:
+      return DeviceType::MPS;
     case DispatchKey::HPU:
     case DispatchKey::AutogradHPU:
       return DeviceType::HPU;

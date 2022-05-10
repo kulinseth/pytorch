@@ -54,6 +54,7 @@ class DispatchKey(Enum):
     FPGA = auto()
     ORT = auto()
     XLA = auto()
+    MPS = auto()
     Lazy = auto()
     Vulkan = auto()
     Metal = auto()
@@ -89,6 +90,7 @@ class DispatchKey(Enum):
     AutogradXLA = auto()
     AutogradLazy = auto()
     AutogradNestedTensor = auto()
+    AutogradMPS = auto()
     AutogradXPU = auto()
     AutogradPrivateUse1 = auto()
     AutogradPrivateUse2 = auto()
@@ -124,7 +126,8 @@ class DispatchKey(Enum):
                 return v
         raise AssertionError(f'unknown dispatch key {value}')
 
-STRUCTURED_DISPATCH_KEYS = {DispatchKey.CUDA, DispatchKey.CPU}
+STRUCTURED_DISPATCH_KEYS = {DispatchKey.MPS, DispatchKey.CUDA, DispatchKey.CPU}
+UFUNC_DISPATCH_KEYS = {DispatchKey.CUDA, DispatchKey.CPU}
 
 # Set of supported dispatch keys
 dispatch_keys = [
@@ -133,6 +136,7 @@ dispatch_keys = [
     DispatchKey.SparseCsrCPU,
     DispatchKey.MkldnnCPU,
     DispatchKey.CUDA,
+    DispatchKey.MPS,
     DispatchKey.SparseCUDA,
     DispatchKey.SparseCsrCUDA,
     DispatchKey.QuantizedCPU,
@@ -169,7 +173,7 @@ def is_structured_dispatch_key(dk: DispatchKey) -> bool:
 
 def is_ufunc_dispatch_key(dk: DispatchKey) -> bool:
     # For now, ufunc dispatch keys coincide with structured keys
-    return dk in STRUCTURED_DISPATCH_KEYS
+    return dk in UFUNC_DISPATCH_KEYS
 
 # This is oddly named ScalarType and not DType for symmetry with C++
 class ScalarType(Enum):
@@ -526,7 +530,7 @@ class NativeFunction:
         # Program the BackendIndex for the implicit dispatch entry from ufunc
         if ufunc_inner_loop:
             assert structured, "ufunc must be structured"
-            for dispatch_key in STRUCTURED_DISPATCH_KEYS:
+            for dispatch_key in UFUNC_DISPATCH_KEYS:
                 assert dispatch_key not in dispatch, \
                     f"ufunc should not have explicit dispatch entry for {dispatch_key}"
                 dispatch[dispatch_key] = BackendMetadata(

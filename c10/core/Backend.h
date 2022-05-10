@@ -49,7 +49,7 @@ enum class Backend {
   QuantizedXPU,
   Undefined,
   MkldnnCPU,
-  MLC,
+  MPS,
   HPU,
   Lazy,
   NumOptions
@@ -72,8 +72,8 @@ static inline Backend dispatchKeyToBackend(DispatchKey t) {
     return Backend::XLA;
   } else if (t == DispatchKey::Lazy || t == DispatchKey::AutogradLazy) {
     return Backend::Lazy;
-  } else if (t == DispatchKey::MLC || t == DispatchKey::AutogradMLC) {
-    return Backend::MLC;
+  } else if (t == DispatchKey::MPS || t == DispatchKey::AutogradMPS) {
+    return Backend::MPS;
   } else if (t == DispatchKey::Vulkan) {
     return Backend::Vulkan;
   } else if (t == DispatchKey::Metal) {
@@ -157,8 +157,8 @@ static inline DispatchKey backendToDispatchKey(Backend b) {
       return DispatchKey::QuantizedCUDA;
     case Backend::Undefined:
       return DispatchKey::Undefined;
-    case Backend::MLC:
-      return DispatchKey::MLC;
+    case Backend::MPS:
+      return DispatchKey::MPS;
     case Backend::HPU:
       return DispatchKey::HPU;
     default:
@@ -209,8 +209,8 @@ static inline DeviceType backendToDeviceType(Backend b) {
       return DeviceType::Vulkan;
     case Backend::Metal:
       return DeviceType::Metal;
-    case Backend::MLC:
-      return DeviceType::MLC;
+    case Backend::MPS:
+      return DeviceType::MPS;
     case Backend::HPU:
       return DeviceType::HPU;
     case Backend::Undefined:
@@ -241,8 +241,8 @@ static inline const char* toString(Backend b) {
       return "XLA";
     case Backend::Lazy:
       return "Lazy";
-    case Backend::MLC:
-      return "MLC";
+    case Backend::MPS:
+      return "MPS";
     case Backend::SparseCPU:
       return "SparseCPU";
     case Backend::SparseCUDA:

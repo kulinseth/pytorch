@@ -77,10 +77,6 @@
 #endif
 #endif
 
-#if defined(USE_MLCOMPUTE)
-#include <mlc/torch_mlc/csrc/MLCInit.h>
-#endif
-
 #if defined(USE_VALGRIND)
 #include <callgrind.h>
 #endif
@@ -694,6 +690,8 @@ static PyMethodDef TorchMethods[] = {
   {"_set_cublas_allow_tf32", THPModule_setAllowTF32CuBLAS, METH_O,  nullptr},
   {"_get_cublas_allow_fp16_reduced_precision_reduction", THPModule_allowFP16ReductionCuBLAS, METH_NOARGS, nullptr},
   {"_set_cublas_allow_fp16_reduced_precision_reduction", THPModule_setAllowFP16ReductionCuBLAS, METH_O, nullptr},
+  //{"_get_mps_debug_verbose", THPModule_getUserEnabledDebugMPSVerbose, METH_NOARGS,     nullptr},
+  //{"_set_mps_debug_verbose", THPModule_setUserEnabledDebugMPSVerbose, METH_O,  nullptr},
   {"_vmapmode_increment_nesting", THPModule_vmapmode_increment_nesting, METH_NOARGS, nullptr},
   {"_vmapmode_decrement_nesting", THPModule_vmapmode_decrement_nesting, METH_NOARGS, nullptr},
   {"_debug_only_display_vmap_fallback_warnings", THPModule_set_display_vmap_fallback_warnings_mode, METH_O, nullptr},
@@ -732,15 +730,14 @@ void initModule(PyObject *module);
 }} // namespace torch::cuda
 #endif
 
-#ifdef USE_MLCOMPUTE
-PyMethodDef* ModuleMLC_methods();
-namespace torch { namespace mlc {
-
-void initBindings(PyObject *module);
-
-}} // namespace torch::mlc
-#endif
-
+//bool THDPDoubleStorage_init(PyObject *module);
+//bool THDPFloatStorage_init(PyObject *module);
+//// TODO: fix
+////bool THDPHalfStorage_init(PyObject *module);
+//bool THDPLongStorage_init(PyObject *module);
+//bool THDPIntStorage_init(PyObject *module);
+//bool THDPShortStorage_init(PyObject *module);
+//bool THDPCharStorage_init(PyObject *module);
 bool THDPByteStorage_init(PyObject *module);
 
 static std::vector<PyMethodDef> methods;
@@ -794,9 +791,6 @@ PyObject* initModule() {
 #ifdef USE_CUDA
   THPUtils_addPyMethodDefs(methods, THCPModule_methods());
 #endif
-#ifdef USE_MLCOMPUTE
-  THPUtils_addPyMethodDefs(methods, ModuleMLC_methods());
-#endif
 #if defined(USE_DISTRIBUTED) && defined(USE_C10D)
   THPUtils_addPyMethodDefs(methods, torch::distributed::c10d::python_functions());
 #ifndef _WIN32
@@ -849,9 +843,13 @@ PyObject* initModule() {
 #ifdef USE_CUDA
   torch::cuda::initModule(module);
 #endif
-#ifdef USE_MLCOMPUTE
-  torch::mlc::init_bindings(module);
-#endif
+  //ASSERT_TRUE(THPDoubleStorage_init(module));
+  //ASSERT_TRUE(THPFloatStorage_init(module));
+  //ASSERT_TRUE(THPHalfStorage_init(module));
+  //ASSERT_TRUE(THPLongStorage_init(module));
+  //ASSERT_TRUE(THPIntStorage_init(module));
+  //ASSERT_TRUE(THPShortStorage_init(module));
+  //ASSERT_TRUE(THPCharStorage_init(module));
   ASSERT_TRUE(THPByteStorage_init(module));
 
 #ifdef USE_CUDA
@@ -1020,15 +1018,15 @@ Call this whenever a new thread is created in order to propagate values from
 #else
   PyObject *has_cuda = Py_False;
 #endif
-#ifdef USE_MLCOMPUTE
-  PyObject *has_mlc = Py_True;
+
+#ifdef USE_MPS
+  PyObject *has_mps = Py_True;
 #else
-  PyObject *has_mlc = Py_False;
+  PyObject *has_mps = Py_False;
 #endif
 
-  ASSERT_TRUE(set_module_attr("has_mlc", has_mlc));
-
   ASSERT_TRUE(set_module_attr("has_cuda", has_cuda));
+  ASSERT_TRUE(set_module_attr("has_mps", has_mps));
 
   ASSERT_TRUE(set_module_attr("has_mkldnn", at::hasMKLDNN() ? Py_True : Py_False));
 

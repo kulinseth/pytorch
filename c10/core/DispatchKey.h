@@ -68,7 +68,7 @@ enum class DispatchKey : uint8_t {
   ORT,
 
   XLA, // lives out of tree at https://github.com/pytorch/xla
-  MLC, // lives out of tree at https://github.com/pytorch/MLCompute
+  MPS,
   Vulkan,
   Metal,
   XPU, // For out of tree Intel's heterogeneous computing plug-in
@@ -238,7 +238,7 @@ enum class DispatchKey : uint8_t {
   AutogradXLA,
   AutogradLazy,
   AutogradXPU,
-  AutogradMLC,
+  AutogradMPS,
   AutogradHPU,
   AutogradNestedTensor, // lives out of tree at
   // https://github.com/pytorch/nestedtensor

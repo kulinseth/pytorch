@@ -27,8 +27,8 @@ const char* toString(DispatchKey t) {
       return "XLA";
     case DispatchKey::Lazy:
       return "Lazy";
-    case DispatchKey::MLC:
-      return "MLC";
+    case DispatchKey::MPS:
+      return "MPS";
     case DispatchKey::HPU:
       return "HPU";
     case DispatchKey::Vulkan:
@@ -99,8 +99,8 @@ const char* toString(DispatchKey t) {
       return "AutogradXLA";
     case DispatchKey::AutogradLazy:
       return "AutogradLazy";
-    case DispatchKey::AutogradMLC:
-      return "AutogradMLC";
+    case DispatchKey::AutogradMPS:
+      return "AutogradMPS";
     case DispatchKey::AutogradHPU:
       return "AutogradHPU";
     case DispatchKey::AutogradNestedTensor:
@@ -198,8 +198,8 @@ DispatchKey getAutogradKeyFromBackend(DispatchKey t) {
       return DispatchKey::AutogradXLA;
     case DispatchKey::Lazy:
       return DispatchKey::AutogradLazy;
-    case DispatchKey::MLC:
-      return DispatchKey::AutogradMLC;
+    case DispatchKey::MPS:
+      return DispatchKey::AutogradMPS;
     case DispatchKey::HPU:
       return DispatchKey::AutogradHPU;
     case DispatchKey::NestedTensor:
@@ -224,7 +224,7 @@ c10::DispatchKey parseDispatchKey(const std::string& k) {
       {"FPGA", c10::DispatchKey::FPGA},
       {"ORT", c10::DispatchKey::ORT},
       {"XLA", c10::DispatchKey::XLA},
-      {"MLC", c10::DispatchKey::MLC},
+      {"MPS", c10::DispatchKey::MPS},
       {"Vulkan", c10::DispatchKey::Vulkan},
       {"Metal", c10::DispatchKey::Metal},
       {"XPU", c10::DispatchKey::XPU},
@@ -264,7 +264,7 @@ c10::DispatchKey parseDispatchKey(const std::string& k) {
       {"AutogradXLA", c10::DispatchKey::AutogradXLA},
       {"AutogradLazy", c10::DispatchKey::AutogradLazy},
       {"AutogradXPU", c10::DispatchKey::AutogradXPU},
-      {"AutogradMLC", c10::DispatchKey::AutogradMLC},
+      {"AutogradMPS", c10::DispatchKey::AutogradMPS},
       {"AutogradHPU", c10::DispatchKey::AutogradHPU},
       {"AutogradNestedTensor", c10::DispatchKey::AutogradNestedTensor},
       {"AutogradPrivateUse1", c10::DispatchKey::AutogradPrivateUse1},

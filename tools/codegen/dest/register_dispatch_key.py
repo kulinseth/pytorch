@@ -40,6 +40,8 @@ def gen_registration_headers(
             headers.append("#include <ATen/hip/EmptyTensor.h>")
         else:
             headers.append("#include <ATen/cuda/EmptyTensor.h>")
+    elif backend_index.dispatch_key == DispatchKey.MPS:
+        headers.append("#include <ATen/native/mps/TensorFactory.h>")
     elif per_operator_headers:
         headers += [
             "#include <ATen/ops/empty.h>",
@@ -58,7 +60,7 @@ def gen_create_out_helper(backend_index: BackendIndex) -> List[str]:
         empty_options = "options"
 
     if backend_index.dispatch_key in (
-            DispatchKey.Meta, DispatchKey.CPU, DispatchKey.CUDA):
+            DispatchKey.Meta, DispatchKey.CPU, DispatchKey.CUDA, DispatchKey.MPS):
         dispatch = str(backend_index.dispatch_key).lower()
         empty_impl = f"at::detail::empty_{dispatch}"
         empty_strided_impl = f"at::detail::empty_strided_{dispatch}"
@@ -457,7 +459,9 @@ void set_output(int64_t output_idx, IntArrayRef sizes, IntArrayRef strides,
 """
 
     def gen_class_set_output_body(self, k: SchemaKind) -> str:
-        if self.backend_index.dispatch_key in [DispatchKey.CUDA, DispatchKey.CompositeExplicitAutograd]:
+        if self.backend_index.dispatch_key in [DispatchKey.CUDA,
+                DispatchKey.MPS,
+                DispatchKey.CompositeExplicitAutograd]:
             maybe_set_guard = """
 auto current_device = guard_.current_device();
 if (C10_UNLIKELY(current_device.has_value())) {
@@ -474,6 +478,7 @@ if (C10_UNLIKELY(current_device.has_value())) {
         if k is SchemaKind.functional:
             assert self.backend_index.dispatch_key in (
                 DispatchKey.Meta, DispatchKey.CPU, DispatchKey.CUDA,
+                DispatchKey.MPS,
                 DispatchKey.CompositeExplicitAutograd)
             return f"""{maybe_set_guard_line}
 outputs_[output_idx] = create_out(sizes, strides, options);"""
@@ -521,6 +526,8 @@ resize_out(out, sizes, strides, options);"""
             else:
                 guard_field = 'c10::cuda::OptionalCUDAGuard guard_;'
         elif self.backend_index.dispatch_key == DispatchKey.CompositeExplicitAutograd:
+            guard_field = 'c10::OptionalDeviceGuard guard_;'
+        elif self.backend_index.dispatch_key == DispatchKey.MPS:
             guard_field = 'c10::OptionalDeviceGuard guard_;'
         else:
             guard_field = ''

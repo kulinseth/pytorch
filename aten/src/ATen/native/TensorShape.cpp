@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <vector>
+#include <iostream>
 
 namespace at {
 namespace native {
@@ -169,6 +170,27 @@ Tensor broadcast_to(const Tensor& self, IntArrayRef size) {
 
 std::vector<Tensor> broadcast_tensors(TensorList tensors) {
   return expand_outplace(tensors);
+}
+
+// Check to see if the shape of tensors is compatible
+// for being concatenated along a given dimension.
+inline c10::MemoryFormat compute_output_memory_format(const TensorList &inputs) {
+  c10::optional<c10::MemoryFormat> format = c10::nullopt;
+  for (auto &t : inputs) {
+    auto f = t.suggest_memory_format();
+    if (!format.has_value()) {
+      format = f;
+      continue;
+    }
+    if (format.value() == f) {
+      continue;
+    }
+    bool contiguous = (format.value() == c10::MemoryFormat::Contiguous || f == c10::MemoryFormat::Contiguous || format.value() != f);
+    if (contiguous) {
+      return c10::MemoryFormat::Contiguous;
+    }
+  }
+  return format.value();
 }
 
 static bool should_skip(const Tensor& t) {

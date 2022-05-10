@@ -137,6 +137,30 @@ void Context::setBenchmarkCuDNN(bool b) {
   benchmark_cudnn = b;
 }
 
+bool Context::userEnabledDebugMPSVerbose() const {
+#if defined(__APPLE__) and defined(TARGET_ON_MAC)
+  if (@available(macOS 12.3, *)) {
+    return enabled_debug_mps_verbose;
+  } else {
+    return false;
+  }
+#else
+  return false;
+#endif
+}
+
+void Context::setUserEnabledDebugMPSVerbose(bool e) {
+#if defined(__APPLE__) and defined(TARGET_ON_MAC)
+  if (@available(macOS 12.3, *)) {
+    enabled_debug_mps_verbose = e;
+  } else {
+    enabled_debug_mps_verbose = false;
+  }
+#else
+  enabled_debug_mps_verbose = false;
+#endif
+}
+
 bool Context::allowTF32CuBLAS() const {
   return allow_tf32_cublas;
 }
@@ -183,6 +207,19 @@ bool Context::hasMKL() {
 bool Context::hasMKLDNN() {
 #if AT_MKLDNN_ENABLED()
   return true;
+#else
+  return false;
+#endif
+}
+
+bool Context::hasMPS() {
+#if defined(__APPLE__) and defined(TARGET_ON_MAC)
+  if (@available(macOS 12.3, *)) {
+    return c10::impl::hasDeviceGuardImpl(at::DeviceType::MPS);
+  } else {
+    TORCH_WARN("MPS device is available macOS 12.3+");
+    return false;
+  }
 #else
   return false;
 #endif

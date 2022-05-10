@@ -945,8 +945,8 @@ struct C10_API TensorImpl : public c10::intrusive_ptr_target {
     return key_set_.has(DispatchKey::Metal);
   }
 
-  bool is_mlc() const {
-    return key_set_.has(DispatchKey::MLC);
+  bool is_mps() const {
+    return key_set_.has(DispatchKey::MPS);
   }
 
   bool is_ort() const {
