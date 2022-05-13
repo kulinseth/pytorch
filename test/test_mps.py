@@ -79,12 +79,19 @@ class MPSReluTest(TestCase):
 
 
 class MatmulTest(TestCase):
-    def _helper(self, shape_tensor_1, shape_tensor_2):
-        tensor1_cpu = torch.randn(shape_tensor_1, device="cpu")
-        tensor2_cpu = torch.randn(shape_tensor_2, device="cpu")
+    def _helper(self, shape_tensor_1, shape_tensor_2, expand_tensor_1_shape=None, expand_tensor_2_shape=None):
+        if expand_tensor_1_shape:
+            tensor1_mps = torch.randn(shape_tensor_1, device="mps").expand(expand_tensor_1_shape)
+        else:
+            tensor1_mps = torch.randn(shape_tensor_1, device="mps")
+            
+        if expand_tensor_2_shape:
+            tensor2_mps = torch.randn(shape_tensor_2, device="mps").expand(expand_tensor_2_shape)
+        else:
+            tensor2_mps = torch.randn(shape_tensor_2, device="mps")
 
-        tensor1_mps = tensor1_cpu.to("mps")
-        tensor2_mps = tensor2_cpu.to("mps")
+        tensor1_cpu = tensor1_mps.to("cpu")
+        tensor2_cpu = tensor2_mps.to("cpu")
 
         matmul_cpu = torch.matmul(tensor1_cpu, tensor2_cpu)
         matmul_mps = torch.matmul(tensor1_mps, tensor2_mps)
@@ -108,7 +115,10 @@ class MatmulTest(TestCase):
 
     def test_batched_matrix_x_broadcasted_matrix(self):
         self._helper((10, 3, 4), (4, 5))
-
+    
+    def test_matmul_expand(self):
+        self._helper((2, 1), (5, 2),
+                     (2, 5), None)
 
 class MPSLeakyReluTest(TestCase):
     def _npLeakyRelu(self, np_features, negative_slope=0.1):
@@ -3929,8 +3939,8 @@ class TestLinalgMPS(TestCase):
         if beta != 0:
             res3 += (torch.mul(t, beta)).to(numpy_dtype).cpu().numpy()
         res3 = torch.from_numpy(res3).to(dtype)
-        # self.assertEqual(res1, res2)
-        # self.assertEqual(res1, res3)
+        self.assertEqual(res1, res2)
+        self.assertEqual(res1, res3)
 
     def test_addmm(self, device="mps", dtype=torch.float32):
         M = torch.randn(10, 25, device=device).to(dtype)
@@ -3938,11 +3948,11 @@ class TestLinalgMPS(TestCase):
         m2 = torch.randn(50, 25, device=device).to(dtype)
         self._test_addmm_addmv(torch.addmm, M, m1, m2)
 
-        # # Test 0-strided
-        # M = torch.randn(10, 1, device=device).to(dtype).expand(10, 25)
-        # m1 = torch.randn(10, 1, device=device).to(dtype).expand(10, 50)
-        # m2 = torch.randn(50, 25, device=device).to(dtype)
-        # self._test_addmm_addmv(torch.addmm, M, m1, m2)
+        # Test 0-strided
+        M = torch.randn(10, 1, device=device).to(dtype).expand(10, 25)
+        m1 = torch.randn(10, 1, device=device).to(dtype).expand(10, 50)
+        m2 = torch.randn(50, 25, device=device).to(dtype)
+        self._test_addmm_addmv(torch.addmm, M, m1, m2)
 
         # Test beta=0, M=nan
         M = torch.full((10, 25), math.nan, device=device).to(dtype)
@@ -3950,17 +3960,17 @@ class TestLinalgMPS(TestCase):
         m2 = torch.randn(50, 25, device=device).to(dtype)
         self._test_addmm_addmv(torch.addmm, M, m1, m2, beta=0)
 
-        # # Test transpose
-        # for t1, t2, t3, t4 in itertools.product([True, False], repeat=4):
-        # def maybe_transpose(cond, m):
-        # if not cond:
-        # return m
-        # return m.t().clone(memory_format=torch.contiguous_format).t()
+        # Test transpose
+        for t1, t2, t3, t4 in itertools.product([True, False], repeat=4):
+            def maybe_transpose(cond, m):
+                if not cond:
+                    return m
+                return m.t().clone(memory_format=torch.contiguous_format).t()
 
-        # M = maybe_transpose(t1, torch.randn(10, 25, device=device).to(dtype))
-        # m1 = maybe_transpose(t2, torch.randn(10, 50, device=device).to(dtype))
-        # m2 = maybe_transpose(t3, torch.randn(50, 25, device=device).to(dtype))
-        # self._test_addmm_addmv(torch.addmm, M, m1, m2, transpose_out=t4)
+        M = maybe_transpose(t1, torch.randn(10, 25, device=device).to(dtype))
+        m1 = maybe_transpose(t2, torch.randn(10, 50, device=device).to(dtype))
+        m2 = maybe_transpose(t3, torch.randn(50, 25, device=device).to(dtype))
+        self._test_addmm_addmv(torch.addmm, M, m1, m2, transpose_out=t4)
 
 
 class TestRNNMPS(TestCase):
