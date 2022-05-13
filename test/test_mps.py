@@ -77,14 +77,13 @@ class MPSReluTest(TestCase):
                 np.array([[-9, 7, -5, 3, -1], [1, -3, 5, -7, 9]]).astype(t),
                 device="mps")
 
-
 class MatmulTest(TestCase):
     def _helper(self, shape_tensor_1, shape_tensor_2, expand_tensor_1_shape=None, expand_tensor_2_shape=None):
         if expand_tensor_1_shape:
             tensor1_mps = torch.randn(shape_tensor_1, device="mps").expand(expand_tensor_1_shape)
         else:
             tensor1_mps = torch.randn(shape_tensor_1, device="mps")
-            
+
         if expand_tensor_2_shape:
             tensor2_mps = torch.randn(shape_tensor_2, device="mps").expand(expand_tensor_2_shape)
         else:
@@ -115,10 +114,9 @@ class MatmulTest(TestCase):
 
     def test_batched_matrix_x_broadcasted_matrix(self):
         self._helper((10, 3, 4), (4, 5))
-    
+
     def test_matmul_expand(self):
-        self._helper((2, 1), (5, 2),
-                     (2, 5), None)
+        self._helper((2, 1), (5, 2), (2, 5), None)
 
 class MPSLeakyReluTest(TestCase):
     def _npLeakyRelu(self, np_features, negative_slope=0.1):
@@ -3138,6 +3136,41 @@ class TestNLLLoss(TestCase):
         # Test empty shape too
         for shape in [(0, 3), [], (2, 3), (2, 8, 4, 5)]:
             helper(shape)
+
+    def test_gelu(self):
+        def _test_gelu(n, m, dtype, contiguous, atol=None, rtol=None):
+            numpy_dtype = {
+                torch.bfloat16: torch.float, torch.float: torch.float, torch.double: torch.double
+            }[dtype]
+            devices = ['cpu']
+            devices += ['mps']
+
+            def _gelu_ref(X):
+                return X * stats.norm.cdf(X)
+
+            for d in devices:
+                if contiguous:
+                    X = torch.rand(n, m, dtype=dtype, requires_grad=True, device=d)
+                else:
+                    X = torch.rand(n, m, dtype=dtype, requires_grad=True, device=d)[:, ::2]
+                res = F.gelu(X)
+                print (res)
+                ref = _gelu_ref(X.to(numpy_dtype).cpu().detach().numpy())
+                print (ref)
+                self.assertEqual(res, ref, rtol=rtol, atol=atol, exact_dtype=False)
+
+        for n in range(1, 10):
+            for m in range(1, 10):
+                _test_gelu(n, m, torch.float32, True)
+                _test_gelu(n, m, torch.float32, False)
+
+        # Test multi threaded
+        num_threads = torch.get_num_threads()
+        torch.set_num_threads(4)
+        try:
+            _test_gelu(32, 32, torch.float32, False)
+        finally:
+            torch.set_num_threads(num_threads)
 
     # Test hardtanh
     def test_hardtanh(self):

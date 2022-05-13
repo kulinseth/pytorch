@@ -211,9 +211,6 @@ static at::Tensor& copy_from_mps_(at::Tensor& self, const at::Tensor& src,
   if (size == 0) return self;
   void* host_dst = self.data_ptr();
 
-  if (!self.is_contiguous()) {
-    auto self_ = self.contigious();
-
   // MTLContext* context = static_cast<MTLContext *>(device->device_handle);
   auto storage_byte_offset = src.storage_offset() * src.itemsize();
   id<MTLBuffer> sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src.storage().data());

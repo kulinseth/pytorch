@@ -18,30 +18,6 @@ namespace native {
 
 /*
  * Helper functions to be used for mm/addmm for detecting the Transpositions
- * when doing GEMM operations.
- */
-static c10::MaybeOwned<Tensor> inline prepare_matrix_by_transposing(
-                              const Tensor& tensor, bool& transpose_tensor) {
-  if (tensor.is_non_overlapping_and_dense()) { // common case
-      transpose_tensor = false;
-      return c10::MaybeOwned<Tensor>::borrowed(tensor);
-  }
-  IntArrayRef tensor_strides = tensor.strides();
-  IntArrayRef tensor_sizes = tensor.sizes();
-  if ((tensor_strides[0] == 1) && (tensor_strides[1] >= std::max<int64_t>(1, tensor_sizes[0]))) {
-    transpose_tensor = false;
-    return c10::MaybeOwned<Tensor>::borrowed(tensor);
-  } else if ((tensor_strides[1] == 1) && (tensor_strides[0] >= std::max<int64_t>(1, tensor_sizes[1]))) {
-    transpose_tensor = true;
-    return c10::MaybeOwned<Tensor>::borrowed(tensor);
-  } else {
-    transpose_tensor = true;
-    return c10::MaybeOwned<Tensor>::owned(tensor.clone(at::MemoryFormat::Contiguous));
-  }
-}
-
-/*
- * Helper functions to be used for mm/addmm for detecting the Transpositions
  * when doing Batched GEMM operations.
  */
 
@@ -87,12 +63,11 @@ static Tensor prepare_batch_matrix_by_transposing(const Tensor& tensor,
 void prepare_matrices_for_broadcasting(
   const Tensor * bias,
   const Tensor & self,
-  const Tensor & other, 
+  const Tensor & other,
   const Scalar * beta,
-  bool * transpose_mat1_times_mat2, 
-  bool & transpose_mat1, 
+  bool * transpose_mat1_times_mat2,
+  bool & transpose_mat1,
   bool & transpose_mat2) {
-  
   TORCH_CHECK(self.dim() == 2 && other.dim() == 2, "tensors must be 2-D");
   if (bias && beta->toDouble() != 0.0f) {
     TORCH_CHECK(bias->dim() == 2, "tensors must be 2-D");
@@ -101,14 +76,13 @@ void prepare_matrices_for_broadcasting(
   std::pair<int64_t, int64_t> mat1_sizes;
   std::pair<int64_t, int64_t> mat2_sizes;
 
-  mat1_sizes = std::make_pair(self.sizes()[0], self.sizes()[1]); 
-  mat2_sizes = std::make_pair(other.sizes()[0], other.sizes()[1]); 
+  mat1_sizes = std::make_pair(self.sizes()[0], self.sizes()[1]);
+  mat2_sizes = std::make_pair(other.sizes()[0], other.sizes()[1]);
 
   if (mat1_sizes == mat2_sizes) {
     transpose_mat2 = true;
     std::swap(mat2_sizes.first, mat2_sizes.second);
   }
-  
   if (bias && beta && transpose_mat1_times_mat2) {
     if (beta->toDouble() != 0.0f && mat1_sizes.first == bias->sizes()[1] && mat2_sizes.second == bias->sizes()[0])
       *transpose_mat1_times_mat2 = true;
