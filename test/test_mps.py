@@ -14,6 +14,7 @@ from torch.nn import Parameter
 from torch.testing._internal.common_utils import run_tests, TestCase, download_file, TEST_WITH_UBSAN
 import torch.backends.mps
 from torch.distributions import (Uniform)
+from scipy import stats
 
 from torch.testing._internal.common_nn import NNTestCase
 import numpy as np
@@ -1380,8 +1381,8 @@ class TestNLLLoss(TestCase):
             cpu_x = torch.tensor(values, device='cpu')
             ones1 = torch.tensor(values_1, device='mps')
             x = cpu_x.detach().clone().to('mps').requires_grad_()
-            strided_cpu = torch.as_strided(cpu_x, (2, 2), (2, 2))
-            strided_mps = torch.as_strided(x, (2, 2), (2, 2))
+            strided_cpu = torch.as_strided(cpu_x, (2, 2), (1, 2))
+            strided_mps = torch.as_strided(x, (2, 2), (1, 2))
 
             print("Strided MPS {}".format(strided_mps.to('cpu')))
             print("Strided cpu {}".format(strided_cpu))
@@ -3136,6 +3137,39 @@ class TestNLLLoss(TestCase):
         for shape in [(0, 3), [], (2, 3), (2, 8, 4, 5)]:
             helper(shape)
 
+    def test_gelu(self):
+        def _test_gelu(n, m, dtype, contiguous, atol=None, rtol=None):
+            numpy_dtype = {
+                torch.bfloat16: torch.float, torch.float: torch.float, torch.double: torch.double
+            }[dtype]
+            devices = ['cpu']
+            devices += ['mps']
+
+            def _gelu_ref(X):
+                return X * stats.norm.cdf(X)
+
+            for d in devices:
+                if contiguous:
+                    X = torch.rand(n, m, dtype=dtype, requires_grad=True, device=d)
+                else:
+                    X = torch.rand(n, m, dtype=dtype, requires_grad=True, device=d)[:, ::2]
+                res = F.gelu(X)
+                ref = _gelu_ref(X.to(numpy_dtype).cpu().detach().numpy())
+                self.assertEqual(res, ref, rtol=rtol, atol=atol, exact_dtype=False)
+
+        for n in range(1, 10):
+            for m in range(1, 10):
+                _test_gelu(n, m, torch.float32, True)
+                _test_gelu(n, m, torch.float32, False)
+
+        # Test multi threaded
+        num_threads = torch.get_num_threads()
+        torch.set_num_threads(4)
+        try:
+            _test_gelu(32, 32, torch.float32, False)
+        finally:
+            torch.set_num_threads(num_threads)
+
     # Test hardtanh
     def test_hardtanh(self):
         def helper(shape, min_val, max_val, inplace=False):
@@ -3166,6 +3200,70 @@ class TestNLLLoss(TestCase):
             for min_val, max_val in zip([-1, -2, 3], [1, -1, 4]):
                 helper(shape, min_val, max_val)
                 helper(shape, min_val, max_val, inplace=True)
+
+    def test_transpose_2D(self):
+        values = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
+        values1 = [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]
+        cpu_x = torch.tensor(values, device='cpu')
+        mps_x = torch.tensor(values, device='mps')
+        mps_x1 = torch.tensor(values1, device='mps')
+
+        cpu_transpose = torch.transpose(cpu_x, 0, 1)
+        mps_transpose = torch.transpose(mps_x, 0, 1)
+        # mps_x1 = mps_x1 + mps_transpose
+        print (" CPU transpose {}".format(cpu_transpose))
+        print (" MPS transpose {}".format(mps_transpose.to('cpu')))
+        # print (" MPS x1 {}".format(mps_x1.to('cpu')))
+        # # print (mps_transpose.to('cpu'))
+        self.assertEqual(cpu_transpose, mps_transpose.to('cpu'))
+
+    def test_transpose_3D(self):
+        values = [[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], [[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]]
+        cpu_x = torch.tensor(values, device='cpu')
+        mps_x = torch.tensor(values, device='mps')
+
+        cpu_transpose1 = torch.transpose(cpu_x, 0, 1)
+        mps_transpose1 = torch.transpose(mps_x, 0, 1).to('cpu')
+        self.assertEqual(cpu_transpose1, mps_transpose1)
+
+        cpu_transpose2 = torch.transpose(cpu_x, 0, 2)
+        mps_transpose2 = torch.transpose(mps_x, 0, 2).to('cpu')
+        self.assertEqual(cpu_transpose2, mps_transpose2)
+
+        cpu_transpose3 = torch.transpose(cpu_x, 1, 2)
+        mps_transpose3 = torch.transpose(mps_x, 1, 2).to('cpu')
+        self.assertEqual(cpu_transpose3, mps_transpose3)
+
+
+    def test_transpose_4D(self):
+        values = [[[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]], [[7.0, 8.0, 9.0], [10.0, 11.0, 12.0]]],
+                    [[[13.0, 14.0, 15.0], [16.0, 17.0, 18.0]], [[19.0, 20.0, 21.0], [22.0, 23.0, 24.0]]]]
+        cpu_x = torch.tensor(values, device='cpu')
+        mps_x = torch.tensor(values, device='mps')
+
+        cpu_transpose1 = torch.transpose(cpu_x, 0, 1)
+        mps_transpose1 = torch.transpose(mps_x, 0, 1).to('cpu')
+        self.assertEqual(cpu_transpose1, mps_transpose1)
+
+        cpu_transpose2 = torch.transpose(cpu_x, 0, 2)
+        mps_transpose2 = torch.transpose(mps_x, 0, 2).to('cpu')
+        self.assertEqual(cpu_transpose2, mps_transpose2)
+
+        cpu_transpose3 = torch.transpose(cpu_x, 0, 3)
+        mps_transpose3 = torch.transpose(mps_x, 0, 3).to('cpu')
+        self.assertEqual(cpu_transpose3, mps_transpose3)
+
+        cpu_transpose4 = torch.transpose(cpu_x, 3, 1)
+        mps_transpose4 = torch.transpose(mps_x, 3, 1).to('cpu')
+        self.assertEqual(cpu_transpose4, mps_transpose4)
+
+        cpu_transpose5 = torch.transpose(cpu_x, 3, 2)
+        mps_transpose5 = torch.transpose(mps_x, 3, 2).to('cpu')
+        self.assertEqual(cpu_transpose5, mps_transpose5)
+
+        cpu_transpose6 = torch.transpose(cpu_x, 1, 2)
+        mps_transpose6 = torch.transpose(mps_x, 1, 2).to('cpu')
+        self.assertEqual(cpu_transpose6, mps_transpose6)
 
     # Test sign
     def test_sign(self):

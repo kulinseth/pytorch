@@ -200,31 +200,53 @@ void* pageAlignedBlockPtr(
   *alignedBlockSize = alignedLength;
   return (void*)alignedAddress;
 }
+static bool copy_requires_temporaries(const Tensor& dst, const Tensor& src) {
+  bool same_dtype = src.dtype() == dst.dtype();
+  if (same_dtype && src.is_contiguous() && dst.is_contiguous()) {
+    return false;
+  } else {
+    return true;
+  }
+}
 
-static at::Tensor& copy_from_mps_(at::Tensor& self, const at::Tensor& src,
+static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_,
                            bool non_blocking) {
 
   using namespace mps;
   id<MTLDevice> device = MPSDevice::getInstance()->device();
   MPSStream* stream = getCurrentMPSStream();
-  uint64_t size = src.nbytes();
-  if (size == 0) return self;
-  void* host_dst = self.data_ptr();
+  uint64_t size = src_.nbytes();
+  if (size == 0) return dst_;
+  Tensor dst;
+  Tensor src;
+  if (!dst_.is_contiguous()) {
+    dst = at::empty_like(dst_, LEGACY_CONTIGUOUS_MEMORY_FORMAT);
+  } else {
+    dst = dst_;
+  }
+  dst._set_conj(dst_.is_conj());
+  src._set_conj(src_.is_conj());
+
+  dst._set_neg(dst_.is_neg());
+  src._set_neg(src_.is_neg());
 
   // MTLContext* context = static_cast<MTLContext *>(device->device_handle);
-  auto storage_byte_offset = src.storage_offset() * src.itemsize();
-  id<MTLBuffer> sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src.storage().data());
-
-  if (!src.is_contiguous()) {
-    id<MTLBuffer> gatherTensor = gatherViewTensor(src, sourceBuffer);
+  auto storage_byte_offset = src_.storage_offset() * src_.itemsize();
+  id<MTLBuffer> sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src_.storage().data());
+  if (!src_.is_contiguous()) {
+    id<MTLBuffer> gatherTensor = gatherViewTensor(src_, sourceBuffer);
     if (gatherTensor) {
       sourceBuffer = gatherTensor;
       storage_byte_offset = 0;
     }
+  } else {
+    src = src_;
   }
 
-  if (sourceBuffer == nil) return self;
-  NSUInteger destOffset = 0;
+  void* host_dst = dst.storage().data();
+
+  if (sourceBuffer == nil) return dst_;
+  NSUInteger destOffset = dst.storage_offset() * dst.itemsize();
 
   @autoreleasepool {
     MTLResourceOptions options = MTLResourceOptionCPUCacheModeDefault | MTLResourceStorageModeShared;
@@ -261,8 +283,11 @@ static at::Tensor& copy_from_mps_(at::Tensor& self, const at::Tensor& src,
       }
     });
   }
+  if (!dst.is_same(dst_)) {
+    dst_.copy_(dst, non_blocking);
+  }
 
-  return self;
+  return dst_;
 }
 
 static at::Tensor& copy_to_mps_(at::Tensor& self, const at::Tensor& src,
