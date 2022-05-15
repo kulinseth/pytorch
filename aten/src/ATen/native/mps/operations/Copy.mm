@@ -238,6 +238,8 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_,
     if (gatherTensor) {
       sourceBuffer = gatherTensor;
       storage_byte_offset = 0;
+    } else {
+      src = src_.expand_as(dst).contiguous();
     }
   } else {
     src = src_;
@@ -290,15 +292,29 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_,
   return dst_;
 }
 
-static at::Tensor& copy_to_mps_(at::Tensor& self, const at::Tensor& src,
+static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_,
                          bool non_blocking) {
   MPSStream* stream = getCurrentMPSStream();
-  const void* host_src = src.data_ptr();
-  uint64_t size = src.nbytes();
+  Tensor dst;
+  Tensor src;
 
   id<MTLDevice> device = MPSDevice::getInstance()->device();
-  auto dst_byte_offset = self.storage_offset() * self.itemsize();
-  id<MTLBuffer> destBuffer = __builtin_bit_cast(id<MTLBuffer>, self.storage().data());
+  auto dst_byte_offset = dst_.storage_offset() * dst_.itemsize();
+  id<MTLBuffer> destBuffer = __builtin_bit_cast(id<MTLBuffer>, dst_.storage().data());
+
+
+  if (!src.is_contiguous()) {
+    src = src_.to(dst_.dtype()).expand_as(dst_).contiguous();
+    //src = src_.contiguous();
+  } else {
+    src = src_;
+  }
+
+  if (!dst_.is_contiguous()) {
+    TORCH_WARN("The dst MTL buffer in copy_to_mps is non-contiguous");
+  }
+  const void* host_src = src.storage().data();
+  uint64_t size = src.nbytes();
 
   NSUInteger sourceOffset = 0;
   @autoreleasepool {
@@ -334,7 +350,7 @@ static at::Tensor& copy_to_mps_(at::Tensor& self, const at::Tensor& src,
     [sourceBuffer release];
   }
 
-  return self;
+  return dst_;
 }
 
 void copy_blit_mps(void* dst, const void* src, size_t size) {

@@ -90,6 +90,8 @@ class _Formatter(object):
         self.int_mode = True
         self.sci_mode = False
         self.max_width = 1
+        if isinstance(tensor, torch.Tensor) and (tensor.is_mps):
+            tensor = tensor.to('cpu')
 
         with torch.no_grad():
             tensor_view = tensor.reshape(-1)
@@ -107,9 +109,9 @@ class _Formatter(object):
                 return
 
             # Convert to double for easy calculation. HalfTensor overflows with 1e8, and there's no div() on CPU.
-            nonzero_finite_abs = tensor_totype(nonzero_finite_vals.abs())
-            nonzero_finite_min = tensor_totype(nonzero_finite_abs.min())
-            nonzero_finite_max = tensor_totype(nonzero_finite_abs.max())
+            nonzero_finite_abs = (nonzero_finite_vals.abs().double())
+            nonzero_finite_min = (nonzero_finite_abs.min().double())
+            nonzero_finite_max = (nonzero_finite_abs.max().double())
 
             for value in nonzero_finite_vals:
                 if value != torch.ceil(value):
