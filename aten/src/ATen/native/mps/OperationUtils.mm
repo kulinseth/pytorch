@@ -324,13 +324,18 @@ id<MTLBuffer> gatherViewTensor(const at::Tensor& src, id<MTLBuffer> sourceBuffer
   return nil;
 }
 
-
-
-Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& self, MPSShape *mpsShape)
+Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& self,
+                         MPSShape *mpsShape, bool check_view)
 {
   TORCH_CHECK(self.is_mps(), "Placeholder storage has not been allocated on MPS device!");
-  // extract the pointer to MTLBuffer from the Tensor's storage
+    // extract the pointer to MTLBuffer from the Tensor's storage
   id<MTLBuffer> selfBuf = __builtin_bit_cast(id<MTLBuffer>, self.storage().data());
+  if (check_view && !self.is_contiguous()) {
+    id<MTLBuffer> gatherTensor = gatherViewTensor(self, selfBuf);
+    if (gatherTensor) {
+      selfBuf = gatherTensor;
+    }
+  }
   const size_t buf_size = [selfBuf length];
 
   // tensor.numel() could be zero, but tensor is valid as long as the buffer size is non-zero.
