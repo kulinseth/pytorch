@@ -610,6 +610,24 @@ class TestMPS(TestCase):
                 self.assertEqual(len(w), 0)
 
 
+    def test_nhwc_operation(self):
+        def helper(shape, channels_last=False):
+            import numpy as np
+            np.random.seed(332)
+            arr = (256 - 128) * np.random.random_sample(size=shape) + 128
+            cpu_x = torch.tensor(arr, device='cpu', dtype=torch.float, requires_grad=True)
+            if(channels_last):
+                cpu_x = cpu_x.to(memory_format=torch.channels_last)
+                cpu_x.retain_grad()
+            x = cpu_x.detach().clone().to('mps').requires_grad_()
+
+            # This passes
+            self.assertEqual(x, cpu_x)
+            # This fails
+            self.assertEqual(F.relu(x), F.relu(cpu_x))
+
+        helper((2, 2, 2, 2), True)
+
     # Test forward batch norm
     def test_batch_norm(self):
         def helper(shape, eps=1, momentum=0.1, wts=False, training=False, channels_last=False,
@@ -721,6 +739,10 @@ class TestMPS(TestCase):
                 ref_y = batchnorm_op(cpu_x)
                 y = mps_batchnorm_op(x)
 
+            print(ref_y.stride())
+            print(y.stride())
+            print(y)
+            print(ref_y)
             self.assertEqual(y, ref_y)
             if(not test_module):
                 self.assertEqual(running_mean, cpu_running_mean)
@@ -746,7 +768,8 @@ class TestMPS(TestCase):
         for shape in [(2, 3, 2, 2), (2, 3, 2, 2, 2), (2, 3, 2)]:
             for test_module in [False, True]:
                 for track_running_stats in [True, False]:
-                    for channels_last in [False, True]:
+                    # for channels_last in [False, True]:
+                    for channels_last in [True]:
                         if(channels_last and len(shape) != 4):
                             continue
                         # Running stats must be tracked in eval mode
