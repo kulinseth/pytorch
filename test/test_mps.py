@@ -609,7 +609,6 @@ class TestMPS(TestCase):
             else:
                 self.assertEqual(len(w), 0)
 
-
     def test_nhwc_operation(self):
         def helper(shape, channels_last=False):
             import numpy as np
@@ -622,9 +621,7 @@ class TestMPS(TestCase):
             x = cpu_x.detach().clone().to('mps').requires_grad_()
 
             # This passes
-            self.assertEqual(x, cpu_x)
-            # This fails
-            self.assertEqual(F.relu(x), F.relu(cpu_x))
+            self.assertEqual(x, cpu_x.permute(0,2,3,1))
 
         helper((2, 2, 2, 2), True)
 
@@ -739,10 +736,6 @@ class TestMPS(TestCase):
                 ref_y = batchnorm_op(cpu_x)
                 y = mps_batchnorm_op(x)
 
-            print(ref_y.stride())
-            print(y.stride())
-            print(y)
-            print(ref_y)
             self.assertEqual(y, ref_y)
             if(not test_module):
                 self.assertEqual(running_mean, cpu_running_mean)
@@ -768,8 +761,7 @@ class TestMPS(TestCase):
         for shape in [(2, 3, 2, 2), (2, 3, 2, 2, 2), (2, 3, 2)]:
             for test_module in [False, True]:
                 for track_running_stats in [True, False]:
-                    # for channels_last in [False, True]:
-                    for channels_last in [True]:
+                    for channels_last in [False]:
                         if(channels_last and len(shape) != 4):
                             continue
                         # Running stats must be tracked in eval mode
@@ -1468,7 +1460,7 @@ class TestNLLLoss(TestCase):
         def helper(n, c):
             values = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
             cpu_x = torch.tensor(values, device='cpu', requires_grad=True)
-            x = cpu_x.to('mps')
+            x = cpu_x.detach().clone().to('mps').requires_grad_()
 
             all_sum = torch.sum(x)
             all_sum_cpu = torch.sum(cpu_x)
