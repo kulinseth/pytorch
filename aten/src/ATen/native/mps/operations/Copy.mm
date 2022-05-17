@@ -19,63 +19,64 @@ MPSGraphTensor* chainViewOperation(MPSGraph* mpsGraph, IntArrayRef size,
                              IntArrayRef stride, int64_t storage_offset,
                              MPSGraphTensor* inputTensor, const Tensor& self) {
   MPSGraphTensor *outputTensor = nil;
-  @autoreleasepool {
-      int32_t* sizeArray = new int32_t[size.size()]();
-      for (int i = 0; i < size.size(); i++) {
-        sizeArray[i] = size[i];
-      }
-      NSData* shapeData = [NSData dataWithBytes : sizeArray
-                                    length : size.size()*sizeof(int32_t)];
+  const size_t shape_size = size.size();
 
-      MPSGraphTensor* shapeTensor =  [mpsGraph constantWithData : shapeData
-                                                        shape : @[[NSNumber numberWithUnsignedInteger: size.size()]]
-                                                      dataType : MPSDataTypeInt32];
-      MPSGraphTensor* storageOffsetTensor = [mpsGraph constantWithScalar :  storage_offset
-                                                            dataType : MPSDataTypeInt32];
-      MPSGraphTensor* strideTensor = [mpsGraph constantWithScalar : stride[self.dim()-1]
-                                                      dataType : MPSDataTypeInt32];
+  @autoreleasepool {
+      int32_t* sizeArray = new int32_t[shape_size];
+      for (int i = 0; i < shape_size; i++) {
+        sizeArray[i] = static_cast<int32_t>(size[i]);
+      }
+      NSData* shapeData = [NSData dataWithBytes:sizeArray
+                                         length:shape_size * sizeof(int32_t)];
+      MPSGraphTensor* shapeTensor =  [mpsGraph constantWithData:shapeData
+                                                          shape:@[[NSNumber numberWithUnsignedInteger: shape_size]]
+                                                       dataType:MPSDataTypeInt32];
+      delete[] sizeArray;
+
+      MPSGraphTensor* storageOffsetTensor = [mpsGraph constantWithScalar:storage_offset
+                                                                dataType:MPSDataTypeInt32];
+      MPSGraphTensor* strideTensor = [mpsGraph constantWithScalar:stride[shape_size - 1]
+                                                         dataType:MPSDataTypeInt32];
       MPSGraphTensor* rangeTensor = [mpsGraph coordinateAlongAxis:-1
-                                                      withShapeTensor : shapeTensor
-                                                              name : nil];
-      MPSGraphTensor* indexTensor = [mpsGraph multiplicationWithPrimaryTensor :  rangeTensor
-                                                          secondaryTensor : strideTensor
-                                                              name : nil];
+                                                  withShapeTensor:shapeTensor
+                                                             name:nil];
+      MPSGraphTensor* indexTensor = [mpsGraph multiplicationWithPrimaryTensor:rangeTensor
+                                                              secondaryTensor:strideTensor
+                                                                         name:nil];
       MPSGraphTensor* indicesTensor = indexTensor;
       // create stride Tensors for each rank of the input tensor
-      for (int i = 1; i < self.dim(); i++) {
-        strideTensor = [mpsGraph constantWithScalar : stride[self.dim() - i - 1]
-                                        dataType : MPSDataTypeInt32];
-        MPSGraphTensor* rangeTensor = [mpsGraph coordinateAlongAxis: (-i-1)
-                                                        withShapeTensor : shapeTensor
-                                                                name : nil];
-        MPSGraphTensor* indexTensor = [mpsGraph multiplicationWithPrimaryTensor :  rangeTensor
-                                                            secondaryTensor : strideTensor
-                                                                name : nil];
-        indicesTensor = [mpsGraph additionWithPrimaryTensor : indexTensor
-                                          secondaryTensor : indicesTensor
-                                              name : nil];
+      for (int i = 1; i < shape_size; i++) {
+        strideTensor = [mpsGraph constantWithScalar:stride[shape_size - i - 1]
+                                           dataType:MPSDataTypeInt32];
+        MPSGraphTensor* rangeTensor = [mpsGraph coordinateAlongAxis:(-i - 1)
+                                                    withShapeTensor:shapeTensor
+                                                               name:nil];
+        MPSGraphTensor* indexTensor = [mpsGraph multiplicationWithPrimaryTensor:rangeTensor
+                                                                secondaryTensor:strideTensor
+                                                                           name:nil];
+        indicesTensor = [mpsGraph additionWithPrimaryTensor:indexTensor
+                                            secondaryTensor:indicesTensor
+                                                       name:nil];
       }
-      indicesTensor = [mpsGraph additionWithPrimaryTensor : indicesTensor
-                                            secondaryTensor : storageOffsetTensor
-                                                  name : nil];
+      indicesTensor = [mpsGraph additionWithPrimaryTensor:indicesTensor
+                                          secondaryTensor:storageOffsetTensor
+                                                     name:nil];
       MPSGraphTensor *reshapedInputTensor = [mpsGraph reshapeTensor:inputTensor
-                                                         withShape:@[@-1]
-                                                              name:nil];
+                                                          withShape:@[@-1]
+                                                               name:nil];
       MPSGraphTensor *reshapedIndicesTensor = [mpsGraph reshapeTensor:indicesTensor
-                                                 withShape:@[@-1]
-                                                      name:nil];
+                                                            withShape:@[@-1]
+                                                                 name:nil];
       // Call gather to coalesce the needed values. Result will be of same shape as flattened indices tensor
       MPSGraphTensor *gatheredTensor = [mpsGraph gatherWithUpdatesTensor:reshapedInputTensor
-                                                        indicesTensor:reshapedIndicesTensor
-                                                                 axis:0
-                                                      batchDimensions:0
-                                                                 name:nil];
-
-      delete[] sizeArray;
+                                                           indicesTensor:reshapedIndicesTensor
+                                                                    axis:0
+                                                         batchDimensions:0
+                                                                    name:nil];
       // Reshape the data to desired size
       outputTensor =  [mpsGraph reshapeTensor:gatheredTensor
-                               withShapeTensor:shapeTensor
-                                          name:nil];
+                              withShapeTensor:shapeTensor
+                                         name:nil];
   }
   return outputTensor;
 }
