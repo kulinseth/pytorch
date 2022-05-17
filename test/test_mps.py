@@ -541,11 +541,15 @@ class TestMPS(TestCase):
     def test_adaptive_avg_pool2d_output_size_one(self):
         def helper(size, memory_format):
             x = torch.randint(1, 10, size, dtype=torch.float, device='mps', requires_grad=True)
-            x = x.to(memory_format=memory_format)
+            if memory_format == 'non_contiguous':
+                x = x[::2, ::2, ::2, ::2]
+            else:
+                x = x.to(memory_format=memory_format)
 
             net = torch.nn.AdaptiveAvgPool2d((1, 1))
             out = net(x)
             ref_out = x.contiguous().mean((-1, -2)).view((x.size(0), x.size(1), 1, 1))
+            print (ref_out)
 
             out.sum().backward()    # make sure it doesn't crash
 
@@ -559,7 +563,52 @@ class TestMPS(TestCase):
                 c = out.size(1)
                 self.assertEqual(out.stride(), [c, 1, 1, 1])
 
-        helper((2, 3, 6, 6), torch.contiguous_format)
+        for mf in (torch.contiguous_format, torch.channels_last, 'non_contiguous'):
+            helper((2, 3, 6, 6), mf)
+        # helper((2, 3, 6, 6), torch.contiguous_format)
+
+    def test_masked_fill(self):
+        device = "mps"
+        dtype = torch.float32
+        mask_dtype = torch.bool
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            num_dest = 10
+            dst = torch.zeros(num_dest, dtype=dtype, device=device)
+            mask = torch.randint(2, (num_dest,), dtype=mask_dtype, device=device)
+            val = random.random()
+            dst2 = torch.zeros(num_dest, dtype=dtype)
+            mask_cpu = mask.to("cpu")
+
+            dst.masked_fill_(mask, val)
+            for i in range(num_dest):
+                if mask_cpu[i]:
+                    dst2[i] = val
+            self.assertEqual(dst.to("cpu"), dst2, atol=0, rtol=0)
+
+            # test non-contiguous case
+            dst = ((torch.randn(num_dest, num_dest, num_dest) * 10).to(dtype)).permute((2, 0, 1))
+            dst2 = dst.contiguous()
+            if dtype.is_complex:
+                mask = dst.abs() > 0
+            else:
+                mask = dst > 0
+            self.assertTrue(not dst.is_contiguous())
+            self.assertTrue(dst2.is_contiguous())
+            dst.masked_fill_(mask.to(mask_dtype), val)
+            dst2.masked_fill_(mask.to(mask_dtype), val)
+            self.assertEqual(dst, dst2, atol=0, rtol=0)
+
+            if mask_dtype == torch.uint8:
+                self.assertEqual(len(w), 3)
+
+                warn = 'masked_fill_ received a mask with dtype torch.uint8,'
+                for wi in w:
+                    self.assertEqual(str(wi.message)[0:52], str(warn))
+            else:
+                self.assertEqual(len(w), 0)
+
 
     # Test forward batch norm
     def test_batch_norm(self):
@@ -1392,7 +1441,24 @@ class TestNLLLoss(TestCase):
             self.assertEqual(strided_mps, strided_cpu)
 
         helper(3, 3)
+    def test_sum_backward(self):
+        def helper(n, c):
+            values = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
+            cpu_x = torch.tensor(values, device='cpu', requires_grad=True)
+            x = cpu_x.to('mps')
 
+            all_sum = torch.sum(x)
+            all_sum_cpu = torch.sum(cpu_x)
+
+            all_sum.backward()
+            all_sum_cpu.backward()
+            print ("MPS Sum backward {}".format(x.grad.to('cpu')))
+            print(torch.ones(1, device="mps").expand(10).clone())
+            # print ("CPU Sum {}".format(cpu_x.grad))
+            self.assertEqual(all_sum, all_sum_cpu)
+            self.assertEqual(x.grad, cpu_x.grad)
+
+        helper(3, 3)
     def test_nll_loss_empty_tensor_reduction_none(self, device='cpu'):
         self._nll_loss_helper([1, 3], "none", torch.empty([0], device=device))
         self._nll_loss_helper([3, 5, 7], "none", torch.empty([5, 7], device=device))
