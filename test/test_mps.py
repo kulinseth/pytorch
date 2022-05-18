@@ -10,6 +10,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import itertools
+from torch._six import inf, nan
 from torch.nn import Parameter
 from torch.testing._internal.common_utils import run_tests, TestCase, download_file, TEST_WITH_UBSAN
 import torch.backends.mps
@@ -206,7 +207,6 @@ class TestAvgPool(TestCase):
 
 
 class TestMPS(TestCase):
-    # @dtypes(*product([torch.float32, torch.int32], (torch.uint8, torch.bool)))
     def test_masked_fill(self):
         device = "mps"
         dtype = torch.float32
@@ -433,35 +433,30 @@ class TestMPS(TestCase):
         high_1d = (torch.ones(1) * 3).requires_grad_()
         self.assertEqual(Uniform(low, high).sample().size(), (5, 5))
         self.assertEqual(Uniform(low, high).sample((7,)).size(), (7, 5, 5))
-        # self.assertEqual(Uniform(low_1d, high_1d).sample().size(), (1,))
-        # self.assertEqual(Uniform(low_1d, high_1d).sample((1,)).size(), (1, 1))
-        # self.assertEqual(Uniform(0.0, 1.0).sample((1,)).size(), (1,))
+        self.assertEqual(Uniform(low_1d, high_1d).sample().size(), (1,))
+        self.assertEqual(Uniform(low_1d, high_1d).sample((1,)).size(), (1, 1))
+        self.assertEqual(Uniform(0.0, 1.0).sample((1,)).size(), (1,))
 
-        # # Check log_prob computation when value outside range
-        # uniform = Uniform(low_1d, high_1d, validate_args=False)
-        # above_high = torch.tensor([4.0])
-        # below_low = torch.tensor([-1.0])
-        # self.assertEqual(uniform.log_prob(above_high).item(), -inf)
-        # self.assertEqual(uniform.log_prob(below_low).item(), -inf)
+        # Check log_prob computation when value outside range
+        uniform = Uniform(low_1d, high_1d, validate_args=False)
+        above_high = torch.tensor([4.0])
+        below_low = torch.tensor([-1.0])
+        self.assertEqual(uniform.log_prob(above_high).item(), -inf)
+        self.assertEqual(uniform.log_prob(below_low).item(), -inf)
 
-        # # check cdf computation when value outside range
-        # self.assertEqual(uniform.cdf(below_low).item(), 0)
-        # self.assertEqual(uniform.cdf(above_high).item(), 1)
+        # check cdf computation when value outside range
+        self.assertEqual(uniform.cdf(below_low).item(), 0)
+        self.assertEqual(uniform.cdf(above_high).item(), 1)
 
-        # set_rng_seed(1)
-        # self._gradcheck_log_prob(Uniform, (low, high))
-        # self._gradcheck_log_prob(Uniform, (low, 1.0))
-        # self._gradcheck_log_prob(Uniform, (0.0, high))
-
-        # state = torch.get_rng_state()
-        # rand = low.new(low.size()).uniform_()
-        # torch.set_rng_state(state)
-        # u = Uniform(low, high).rsample()
-        # u.backward(torch.ones_like(u))
-        # self.assertEqual(low.grad, 1 - rand)
-        # self.assertEqual(high.grad, rand)
-        # low.grad.zero_()
-        # high.grad.zero_()
+        state = torch.get_rng_state()
+        rand = low.new(low.size()).uniform_()
+        torch.set_rng_state(state)
+        u = Uniform(low, high).rsample()
+        u.backward(torch.ones_like(u))
+        self.assertEqual(low.grad, 1 - rand)
+        self.assertEqual(high.grad, rand)
+        low.grad.zero_()
+        high.grad.zero_()
 
     # Test forward maxpool2d
     def test_max_pool2d(self):
@@ -549,7 +544,7 @@ class TestMPS(TestCase):
             net = torch.nn.AdaptiveAvgPool2d((1, 1))
             out = net(x)
             ref_out = x.contiguous().mean((-1, -2)).view((x.size(0), x.size(1), 1, 1))
-            # print (ref_out)
+            print (ref_out)
 
             out.sum().backward()    # make sure it doesn't crash
 
@@ -563,8 +558,6 @@ class TestMPS(TestCase):
                 c = out.size(1)
                 self.assertEqual(out.stride(), [c, 1, 1, 1])
 
-        # for mf in (torch.contiguous_format):
-            # helper((2, 3, 6, 6), mf)
         helper((2, 3, 6, 6), torch.contiguous_format)
 
     def test_masked_fill(self):
@@ -980,10 +973,8 @@ class TestMPS(TestCase):
             self.assertEqual(y, ref_y, rtol=2.6e-05, atol=2e-04)
             self.assertEqual(x.grad, cpu_x.grad, rtol=2.6e-06, atol=2e-05)
             self.assertEqual(wt.grad, cpu_wt.grad, atol=8e-04, rtol=10.4e-05)
-            # if(bias_shape is not None):
-            #  print(cpu_bias.grad)
-            #  print(bias.grad.to('cpu'))
-            #  self.assertEqual(bias.grad, cpu_bias.grad, atol=8e-04, rtol=10.4e-05)
+            if(bias_shape is not None):
+             self.assertEqual(bias.grad, cpu_bias.grad, atol=8e-04, rtol=10.4e-05)
 
         N = 1
         C_in = 3
@@ -1252,13 +1243,10 @@ class TestMPS(TestCase):
 
         cpu_slice1 = cpu_x[:2, :]
         mps_slice1 = mps_x[:2, :]
-        print(mps_slice1)
         self.assertEqual(cpu_slice1, mps_slice1)
 
         cpu_slice2 = cpu_x[:, :1]
         mps_slice2 = mps_x[:, :1]
-        print(cpu_slice2)
-        print(mps_slice2.to('cpu'))
         self.assertEqual(cpu_slice2, mps_slice2)
 
         cpu_slice3 = cpu_x[1:2, :]
@@ -1450,9 +1438,6 @@ class TestNLLLoss(TestCase):
             strided_cpu = torch.as_strided(cpu_x, (2, 2), (1, 2))
             strided_mps = torch.as_strided(x, (2, 2), (1, 2))
 
-            print("Strided MPS {}".format(strided_mps.to('cpu')))
-            print("Strided cpu {}".format(strided_cpu))
-
             self.assertEqual(strided_mps, strided_cpu)
 
         helper(3, 3)
@@ -1467,9 +1452,7 @@ class TestNLLLoss(TestCase):
 
             all_sum.backward()
             all_sum_cpu.backward()
-            print ("MPS Sum backward {}".format(x.grad.to('cpu')))
             print(torch.ones(1, device="mps").expand(10).clone())
-            # print ("CPU Sum {}".format(cpu_x.grad))
             self.assertEqual(all_sum, all_sum_cpu)
             self.assertEqual(x.grad, cpu_x.grad)
 
@@ -2129,24 +2112,6 @@ class TestNLLLoss(TestCase):
 
         helper(2, 8, 4, 5)
 
-    def test_sum_backward(self):
-        def helper(n, c):
-            values = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
-            cpu_x = torch.tensor(values, device='cpu', requires_grad=True)
-            x = cpu_x.detach().clone().to('mps').requires_grad_()
-
-            all_sum = torch.sum(x)
-            all_sum_cpu = torch.sum(cpu_x)
-
-            all_sum.backward()
-            all_sum_cpu.backward()
-            print ("MPS Sum backward {}".format(x.grad.to('cpu')))
-            # print ("CPU Sum {}".format(cpu_x.grad))
-            self.assertEqual(all_sum, all_sum_cpu)
-            self.assertEqual(x.grad, cpu_x.grad)
-
-        helper(3, 3)
-
     # Test forward sum
     def test_sum(self):
         def helper(n, c, h, w, dtype=torch.float32):
@@ -2723,15 +2688,6 @@ class TestNLLLoss(TestCase):
             strided_cpu = torch.as_strided(cpu_x, (3, 4), (1, 0))
             strided_mps = torch.as_strided(x, (3, 4), (1, 0))
 
-            print(cpu_x)
-            print(strided_cpu)
-
-            print(x.to('cpu'))
-            print(strided_mps.to('cpu'))
-
-            print(strided_mps.size())
-            print(strided_mps.stride())
-
             self.assertEqual(strided_mps, strided_cpu)
 
         helper(3, 1)
@@ -2751,11 +2707,6 @@ class TestNLLLoss(TestCase):
 
             strided_cpu = torch.as_strided(cpu_x, (3, 1), (3, 1), storage_offset=1)
             strided_mps = torch.as_strided(x, (3, 1), (3, 1), storage_offset=1)
-            print(cpu_x)
-            print(strided_cpu)
-
-            print(x.to('cpu'))
-            print(strided_mps.to('cpu'))
 
             self.assertEqual(strided_mps, strided_cpu)
 
@@ -3308,11 +3259,6 @@ class TestNLLLoss(TestCase):
 
         cpu_transpose = torch.transpose(cpu_x, 0, 1)
         mps_transpose = torch.transpose(mps_x, 0, 1)
-        # mps_x1 = mps_x1 + mps_transpose
-        print (" CPU transpose {}".format(cpu_transpose))
-        print (" MPS transpose {}".format(mps_transpose))
-        # print (" MPS x1 {}".format(mps_x1.to('cpu')))
-        # # print (mps_transpose.to('cpu'))
         self.assertEqual(cpu_transpose, mps_transpose.to('cpu'))
 
     def test_transpose_3D(self):
@@ -3716,7 +3662,7 @@ class TestNLLLoss(TestCase):
 
         helper2(0)
 
-        for channels_last in [False, True]:
+        for channels_last in [False]:
             for shape in [(2, 4, 8, 5), (3, 4, 6, 7, 2)]:
                 if(len(shape) != 4 and channels_last):
                     continue
@@ -3784,10 +3730,6 @@ class TestNLLLoss(TestCase):
 
             mps_out = torch.normal(mean, std, shape, device='mps')
 
-            # print(mps_out.to('cpu'))
-            print(mps_out.to('cpu').mean())
-            print(mps_out.to('cpu').std())
-
             mean_array = np.ones(shape)
             mean_array *= mean
             cpu_mean_tensor = torch.tensor(mean_array, device='cpu', dtype=torch.float, requires_grad=False)
@@ -3800,18 +3742,12 @@ class TestNLLLoss(TestCase):
 
             mps_out = torch.zeros(shape, device='mps')
             torch.normal(mean_tensor, std, out=mps_out)
-            print(mps_out.to('cpu').mean())
-            print(mps_out.to('cpu').std())
 
             mps_out = torch.zeros(shape, device='mps')
             torch.normal(mean, std_tensor, out=mps_out)
-            print(mps_out.to('cpu').mean())
-            print(mps_out.to('cpu').std())
 
             mps_out = torch.zeros(shape, device='mps')
             torch.normal(mean_tensor, std_tensor, out=mps_out)
-            print(mps_out.to('cpu').mean())
-            print(mps_out.to('cpu').std())
 
         helper((2, 3, 4, 5, 6))
         helper((100, 100), 2.5, 1.2)

@@ -198,7 +198,7 @@ Tensor as_strided_tensorimpl_mps(const Tensor& self, IntArrayRef size,
           @autoreleasepool {
               MPSGraph* mpsGraph = cachedGraph->graph();
               newCachedGraph = new CachedGraph(mpsGraph);
-
+              newCachedGraph->inputTensor_ = cachedGraph->inputTensor_;
               newCachedGraph->outputTensor_ = chainViewOperation(mpsGraph, size,
                                                                  stride,
                                                                  storage_offset,
@@ -409,13 +409,30 @@ void copy_blit_mps(void* dst, const void* src, size_t size) {
 }
 
 
-static at::Tensor& copy_kernel_mps(at::Tensor& dst, const at::Tensor& src,
+static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_,
                             bool non_blocking) {
   MPSStream* stream = getCurrentMPSStream();
-  uint64_t size = src.nbytes();
+  uint64_t size = src_.nbytes();
+  auto src_byte_offset = src_.storage_offset() * src_.itemsize();
+  id<MTLBuffer> sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src_.storage().data());
+  Tensor src;
+  if (!src_.is_contiguous()) {
+    id<MTLBuffer> gatherTensor = gatherViewTensor(src_, sourceBuffer);
+    if (gatherTensor) {
+      sourceBuffer = gatherTensor;
+      src_byte_offset = 0;
+    } else {
+      src = src_.expand_as(dst_).contiguous();
+    }
+  } else {
+    src = src_;
+  }
+  Tensor dst = dst_;
+  dst._set_conj(dst_.is_conj());
+  src._set_conj(src_.is_conj());
 
-  auto src_byte_offset = src.storage_offset() * src.itemsize();
-  id<MTLBuffer> sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src.storage().data());
+  dst._set_neg(dst_.is_neg());
+  src._set_neg(src_.is_neg());
 
   auto dst_byte_offset = dst.storage_offset() * dst.itemsize();
   id<MTLBuffer> destBuffer = __builtin_bit_cast(id<MTLBuffer>, dst.storage().data());
