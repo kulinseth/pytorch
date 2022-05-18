@@ -99,18 +99,6 @@ MPSGraphTensor* chainViewOperation(MPSGraph* mpsGraph, IntArrayRef size,
 //            |    /          \   |
 //            |   /            \  |
 //            NonView T         NonView T
-//
-//
-//           View Original [transpose] 3D (g1)
-//         /                         \
-//       slice[:, :, :1] (g12)    slice [:, :, :2]  (g13)
-//       /                              \
-//     slice [:, :1, :1]       slice [:, :2, :2] 
-//  g1 -> k1
-//  g12 -> k1
-// a = b.t()
-// c = a[:2]  // g12
-// d = b.t()
 Tensor as_strided_tensorimpl_mps(const Tensor& self, IntArrayRef size,
                                  IntArrayRef stride,
                                  optional<int64_t> storage_offset_) {
@@ -143,16 +131,10 @@ Tensor as_strided_tensorimpl_mps(const Tensor& self, IntArrayRef size,
     @autoreleasepool {
       string lookup_key = mps::getStridedKey(self, self.sizes(), self.strides(),
                       self.storage_offset());
-#if _DEBUG
-      std::cout << "Lookup key " << lookup_key << std::endl;
-#endif
       CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(lookup_key));
 
       if(!cachedGraph) {
         string insert_key = mps::getStridedKey(self,size, stride, storage_offset);
-#if _DEBUG
-        std::cout << "Insert key " << insert_key << std::endl;
-#endif
         CachedGraph* insertCachedGraph = static_cast<CachedGraph *>(cache_->LookUp(insert_key));
         if (!insertCachedGraph) {
           MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(insert_key, ^ MPSCachedGraph * () {
@@ -182,17 +164,7 @@ Tensor as_strided_tensorimpl_mps(const Tensor& self, IntArrayRef size,
       } else {
         // Else part takes care of the chaining where multiple view operations
         // were implemented on the same underlying data storage ptr
-        //cachedGraph->outputTensor_ = chainViewOperation(cachedGraph->graph(),
-                                      //size, stride, storage_offset,
-                                      //cachedGraph->outputTensor_, self);
-        //cachedGraph->size_ = size;
-        //cachedGraph->stride_ = stride;
-        //cachedGraph->storage_offset_ = storage_offset;
-
         string insert_key = mps::getStridedKey(self, size, stride, storage_offset);
-#if _DEBUG
-        std::cout << "Insert key " << insert_key << std::endl;
-#endif
         MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(insert_key, ^ MPSCachedGraph * () {
         CachedGraph *newCachedGraph = nil;
           @autoreleasepool {

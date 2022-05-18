@@ -310,13 +310,6 @@ id<MTLBuffer> gatherViewTensor(const at::Tensor& src, id<MTLBuffer> sourceBuffer
         };
 
         runMPSGraph(stream, cachedGraph->graph(), feeds, results);
-#if _DEBUG
-        NSLog(@"%@", [cachedGraph->graph() debugDescription]);
-        TORCH_WARN("We have a non-contiguous tensor in copy_from_mps with key ", key);
-
-        //// Update the Blit sourceBuffer to the result of this operation
-        printTensorNDArray(output);
-#endif
         return resultBuffer;
       }
     }
