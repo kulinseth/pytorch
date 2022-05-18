@@ -2129,6 +2129,24 @@ class TestNLLLoss(TestCase):
 
         helper(2, 8, 4, 5)
 
+    def test_sum_backward(self):
+        def helper(n, c):
+            values = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
+            cpu_x = torch.tensor(values, device='cpu', requires_grad=True)
+            x = cpu_x.detach().clone().to('mps').requires_grad_()
+
+            all_sum = torch.sum(x)
+            all_sum_cpu = torch.sum(cpu_x)
+
+            all_sum.backward()
+            all_sum_cpu.backward()
+            print ("MPS Sum backward {}".format(x.grad.to('cpu')))
+            # print ("CPU Sum {}".format(cpu_x.grad))
+            self.assertEqual(all_sum, all_sum_cpu)
+            self.assertEqual(x.grad, cpu_x.grad)
+
+        helper(3, 3)
+
     # Test forward sum
     def test_sum(self):
         def helper(n, c, h, w, dtype=torch.float32):
