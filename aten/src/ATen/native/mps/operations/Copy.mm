@@ -247,7 +247,7 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_,
       sourceBuffer = gatherTensor;
       storage_byte_offset = 0;
     } else {
-      src = src_.expand_as(dst).contiguous();
+      src = src_.to(dst.dtype()).expand_as(dst).contiguous();
       sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src.storage().data());
       storage_byte_offset = src.storage_offset() * src.itemsize();
     }

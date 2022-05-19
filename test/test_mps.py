@@ -241,6 +241,10 @@ class TestMPS(TestCase):
                 negative_slope=0.1,
                 device="mps")
 
+    def test_conversion_bool_to_float(self):
+        print(torch.tensor([[0, 0], [0, 1], [1, 0], [1, 1]],
+                device="mps").type(torch.float32))
+
     def test_fill(self):
 
         def helper(val, shape):
@@ -256,6 +260,12 @@ class TestMPS(TestCase):
 
         helper(0, [1024])
         helper(0.2, [2, 3])
+
+    def test_boolean_compare(self):
+        a = torch.tensor([1, 2, 3, 4], device='mps')
+        b = a[2:] <= a[:2]
+        print (b)
+        self.assertEqual(b, [False, False])
 
     def test_mm(self):
         B = torch.ones(5, 6).to("mps")
