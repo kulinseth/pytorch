@@ -8,7 +8,7 @@ void mps_fallback(const c10::OperatorHandle& op, torch::jit::Stack* stack)
 {
   TORCH_WARN_ONCE("The operator '", op.schema().operator_name(), "' is not currently supported ",
                   "on the MPS backend and will fall back to run on the CPU.",
-                  " This may performance implications.");
+                  " This may have performance implications.");
   native::cpu_fallback(op, stack);
 }
 
