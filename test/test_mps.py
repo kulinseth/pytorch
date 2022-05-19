@@ -2426,6 +2426,22 @@ class TestNLLLoss(TestCase):
 
         helper((4, 5, 6, 7))
 
+    # Test mul dtype
+    def test_mul_dtype(self):
+        def helper(shape1, shape2):
+            
+            cpu_x = torch.randn(shape1, device='cpu', dtype=torch.float32, requires_grad=False)
+            x = cpu_x.detach().clone().to('mps')
+
+            cpu_y = torch.randint(2, shape2, device='cpu', dtype=torch.bool, requires_grad=False)
+            y = cpu_y.detach().clone().to('mps')
+
+            result = x * y
+            result_cpu = cpu_x * cpu_y
+            self.assertEqual(result_cpu, result)
+
+        helper((1,1,1,1), (2,8,4,5))
+
     # test norm_out
     # CRASH in Fallback for svd_linalg op.
     # def test_norm(self):
