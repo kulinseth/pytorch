@@ -1283,6 +1283,17 @@ class TestMPS(TestCase):
                 self.assertEqual(p.grad, torch.zeros_like(p.grad))
         self.assertEqual(inp.grad, torch.zeros_like(inp))
 
+    def test_convert(self):
+
+        # print(torch.tensor([[0, 0], [0, 1], [1, 0], [1, 1]]).type(torch.float32))
+        # print(torch.tensor([[0, 0], [0, 1], [1, 0], [1, 1]], device="mps").type(torch.float32))
+
+        # x = torch.tensor([[0, 0], [0, 1], [1, 0], [1, 1]], device="mps").type(torch.int32)
+        x = torch.tensor([[1, 1], [1, 1], [1, 2], [1, 1]], device="mps")
+        print("Break")
+        y = x.type(torch.float32)
+        print(y)
+
 
 class TestSmoothL1Loss(TestCase):
 

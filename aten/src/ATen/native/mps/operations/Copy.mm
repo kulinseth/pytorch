@@ -419,6 +419,13 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_,
       id<MTLCommandBuffer> commandBuffer = stream->commandBuffer();
       id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
 
+      std::cout<<"src_byte_offset: "<<src_byte_offset<<endl;
+      std::cout<<"dst_byte_offset: "<<dst_byte_offset<<endl;
+      std::cout<<"src size: "<<src.nbytes()<<endl;
+      std::cout<<"dst size: "<<dst.nbytes()<<endl;
+      std::cout<<"src type: "<<src.type()<<endl;
+      std::cout<<"dst type: "<<dst.type()<<endl;
+
       [blitEncoder copyFromBuffer:sourceBuffer
                      sourceOffset:src_byte_offset
                          toBuffer:destBuffer
@@ -426,8 +433,10 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_,
                              size:size];
       [blitEncoder endEncoding];
       if (non_blocking) {
+        std::cout<<"Non blocking"<<endl;
         stream->commit(true);
       } else {
+        std::cout<<"Blocking"<<endl;
         stream->commitAndWait();
       }
     }
@@ -448,13 +457,16 @@ at::Tensor& mps_copy_(at::Tensor& dst, const at::Tensor& src, bool non_blocking)
   }
 
   if (src.device().type() == at::kMPS && dst.device().type() == at::kCPU) {
+    std::cout<<"MPS to CPU"<<endl;
     return copy_from_mps_(dst, src, non_blocking);
   }
   if (src.device().type() == at::kCPU && dst.device().type() == at::kMPS) {
+    std::cout<<"CPU to MPS"<<endl;
     return copy_to_mps_(dst, src, non_blocking);
   }
 
   if (src.device().type() == at::kMPS && dst.device().type() == at::kMPS) {
+    std::cout<<"MPS to MPS"<<endl;
     return copy_kernel_mps(dst, src, non_blocking);
   }
   TORCH_INTERNAL_ASSERT(
