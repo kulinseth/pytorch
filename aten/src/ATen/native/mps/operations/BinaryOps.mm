@@ -21,7 +21,7 @@ struct BinaryOpCachedGraph : public MPSCachedGraph
 typedef MPSGraphTensor* (^BinaryOpBlock)(MPSGraph*, MPSGraphTensor*, MPSGraphTensor*);
 #define BinaryOpFn() MPSGraphTensor* (MPSGraph* mpsGraph, MPSGraphTensor* primary, MPSGraphTensor* secondary)
 
-void binaryOpTensor(const Tensor& self_t, const Tensor& other_t, const Tensor& output, std::string op_name, BinaryOpBlock binaryBlock)
+void binaryOpTensor(const Tensor& self_t, const Tensor& other_t, const Tensor& output, std::string op_name, bool is_arithmetic, BinaryOpBlock binaryBlock)
 {
   // it's possible to receive empty tensors here
   if (self_t.numel() == 0 || other_t.numel() == 0) {
@@ -35,8 +35,12 @@ void binaryOpTensor(const Tensor& self_t, const Tensor& other_t, const Tensor& o
   Tensor self = is_self_scalar ? self_t : self_t.contiguous(at::MemoryFormat::Contiguous);
   Tensor other = is_other_scalar ? other_t : other_t.contiguous(at::MemoryFormat::Contiguous);
 
-  const MPSDataType self_dtype = getMPSScalarType((is_self_scalar && !is_other_scalar ? other_t : self_t).scalar_type());
-  const MPSDataType other_dtype = getMPSScalarType((!is_other_scalar ? other_t : self_t).scalar_type());
+  // const MPSDataType self_dtype = getMPSScalarType((is_self_scalar && !is_other_scalar ? other_t : self_t).scalar_type());
+  // const MPSDataType other_dtype = getMPSScalarType((!is_other_scalar ? other_t : self_t).scalar_type());
+
+  const MPSDataType self_dtype = getMPSScalarType(self_t.scalar_type());
+  const MPSDataType other_dtype = getMPSScalarType(other_t.scalar_type());
+  const MPSDataType output_dtype = getMPSScalarType(output.scalar_type());
 
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
@@ -51,7 +55,17 @@ void binaryOpTensor(const Tensor& self_t, const Tensor& other_t, const Tensor& o
           newCachedGraph = new BinaryOpCachedGraph(mpsGraph);
           newCachedGraph->primaryTensor   = mpsGraphRankedPlaceHolder(mpsGraph, self_dtype , getMPSShape(self));
           newCachedGraph->secondaryTensor = mpsGraphRankedPlaceHolder(mpsGraph, other_dtype, getMPSShape(other));
-          newCachedGraph->outputTensor = binaryBlock(mpsGraph, newCachedGraph->primaryTensor, newCachedGraph->secondaryTensor);
+          MPSGraphTensor* primary = nil;
+          MPSGraphTensor* secondary = nil;
+          if(is_arithmetic && self_dtype != output_dtype)
+            primary = [mpsGraph castTensor:newCachedGraph->primaryTensor toType:output_dtype name:@"primary"];
+          else
+            primary = newCachedGraph->primaryTensor;
+          if(is_arithmetic && other_dtype != output_dtype)
+            secondary = [mpsGraph castTensor:newCachedGraph->secondaryTensor toType:output_dtype name:@"primary"];
+          else
+            secondary = newCachedGraph->secondaryTensor;
+          newCachedGraph->outputTensor = binaryBlock(mpsGraph, primary, secondary);
         }
         return newCachedGraph;
       });
@@ -79,9 +93,9 @@ void binaryOpTensor(const Tensor& self_t, const Tensor& other_t, const Tensor& o
   }
 }
 
-void binaryOpScalar(const Tensor& self, const Scalar& other, const Tensor& output, std::string op_name, BinaryOpBlock binaryBlock)
+void binaryOpScalar(const Tensor& self, const Scalar& other, const Tensor& output, std::string op_name, bool is_arithmetic, BinaryOpBlock binaryBlock)
 {
-  binaryOpTensor(self, wrapped_scalar_tensor(other), output, op_name, binaryBlock);
+  binaryOpTensor(self, wrapped_scalar_tensor(other), output, op_name, is_arithmetic, binaryBlock);
 }
 
 void div_mode_template(const Tensor& self, const Tensor& other,
@@ -102,7 +116,7 @@ void div_mode_template(const Tensor& self, const Tensor& other,
     assert(0 && "Invalid rounding mode\n");
     return nullptr;
   };
-  binaryOpTensor(self, other, output, op_name + "_out_mps:" + (rounding_mode.has_value() ? c10::str(*rounding_mode) : ""), div_mode_op_block);
+  binaryOpTensor(self, other, output, op_name + "_out_mps:" + (rounding_mode.has_value() ? c10::str(*rounding_mode) : ""), true, div_mode_op_block);
 }
 
 void add_sub_template(const Tensor& self, const Tensor& other, const Scalar& alpha, const Tensor& output, std::string op_name)
@@ -127,14 +141,14 @@ void add_sub_template(const Tensor& self, const Tensor& other, const Scalar& alp
                                     secondaryTensor:secondaryTensor
                                                name:nil];
   };
-  binaryOpTensor(self, other, output, op_name + "_out_mps:" + std::to_string(alpha.toDouble()), add_sub_op_block);
+  binaryOpTensor(self, other, output, op_name + "_out_mps:" + std::to_string(alpha.toDouble()), true, add_sub_op_block);
 }
 
 } // namespace mps
 
 #define CREATE_MPS_BINARY_OP_FUNC(func_out, func_stub, other_type)                              \
 TORCH_IMPL_FUNC(func_out) (const Tensor& self, const other_type& other, const Tensor& output) { \
-  mps::binaryOp##other_type(self, other, output, #func_stub,                                    \
+  mps::binaryOp##other_type(self, other, output, #func_stub, true,                              \
     ^BinaryOpFn() {                                                                             \
       return [mpsGraph func_stub##WithPrimaryTensor:primary                                     \
                                     secondaryTensor:secondary                                   \
@@ -144,7 +158,7 @@ TORCH_IMPL_FUNC(func_out) (const Tensor& self, const other_type& other, const Te
 // Boolean Ops require casting output to "MPSDataTypeBool"
 #define CREATE_MPS_BOOLEAN_OP_FUNC(func_out, func_stub, other_type)                             \
 TORCH_IMPL_FUNC(func_out) (const Tensor& self, const other_type& other, const Tensor& output) { \
-  mps::binaryOp##other_type(self, other, output, #func_stub,                                    \
+  mps::binaryOp##other_type(self, other, output, #func_stub, false,                             \
     ^BinaryOpFn() {                                                                             \
       MPSGraphTensor* outputTensor = [mpsGraph func_stub##WithPrimaryTensor:primary             \
                                                             secondaryTensor:secondary           \

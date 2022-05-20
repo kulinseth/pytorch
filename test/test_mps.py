@@ -2427,6 +2427,39 @@ class TestNLLLoss(TestCase):
 
         helper((4, 5, 6, 7))
 
+    # Test mul dtype
+    def test_mul_dtype(self):
+
+        def helper_scalar():
+
+            cpu_x = torch.tensor(2)
+            x = cpu_x.detach().clone().to('mps')
+
+            cpu_y = torch.tensor(3)
+            y = cpu_y.detach().clone().to('mps')
+
+            result = x * y
+            result_cpu = cpu_x * cpu_y
+            self.assertEqual(result_cpu, result)
+
+        def helper(shape1, shape2):
+
+            cpu_x = torch.randn(shape1, device='cpu', dtype=torch.float32, requires_grad=False)
+            x = cpu_x.detach().clone().to('mps')
+
+            cpu_y = torch.randint(2, shape2, device='cpu', dtype=torch.bool, requires_grad=False)
+            y = cpu_y.detach().clone().to('mps')
+
+            result = x * y
+            result_cpu = cpu_x * cpu_y
+            self.assertEqual(result_cpu, result)
+
+        helper((1,1,1,1), (2,8,4,5))
+        helper([], (2,8,4,5))
+        helper_scalar()
+
+
+
     # Test minimum and maximum
     def test_minimum_maximum(self):
         def helper(n, c, h, w):
