@@ -323,6 +323,7 @@ Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src,
   TORCH_CHECK(src_.is_mps(), "Placeholder storage has not been allocated on MPS device!");
     // extract the pointer to MTLBuffer from the Tensor's storage
   id<MTLBuffer> srcBuf = __builtin_bit_cast(id<MTLBuffer>, src.storage().data());
+  size_t srcSize = [srcBuf length];
   if (check_view && !src.is_contiguous()) {
     id<MTLBuffer> gatherTensor = gatherViewTensor(src, srcBuf);
     if (gatherTensor) {
@@ -331,6 +332,27 @@ Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src,
       src_ = src.contiguous();
       srcBuf = __builtin_bit_cast(id<MTLBuffer>, src_.storage().data());
     }
+  }
+  else if (srcSize && src.storage_offset() && src.is_contiguous()) {
+    id<MTLDevice> device = MPSDevice::getInstance()->device();
+    MPSStream* mpsStream = getCurrentMPSStream();
+    id<MTLCommandQueue> commandQueue = mpsStream->commandQueue();
+    id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
+    id <MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
+    id<MTLBuffer> dstBuf = [[device newBufferWithLength: srcSize
+                                                options: srcBuf.resourceOptions] autorelease];
+
+    [blitEncoder copyFromBuffer: srcBuf
+                   sourceOffset: src.storage_offset() * src.element_size()
+                       toBuffer: dstBuf 
+              destinationOffset: 0 
+                           size: srcSize - (src.storage_offset() * src.element_size())];
+#if MTL_SUPPORT_MANAGED_STORAGE
+    [blitEncoder synchronizeResource:dstBuf];
+#endif
+    [blitEncoder endEncoding];
+    [commandBuffer commit];
+    srcBuf = dstBuf;
   }
   const size_t buf_size = [srcBuf length];
 

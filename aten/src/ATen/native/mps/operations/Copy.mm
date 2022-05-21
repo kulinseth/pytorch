@@ -287,11 +287,6 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_,
   } else {
     dst = dst_;
   }
-  dst._set_conj(dst_.is_conj());
-  src._set_conj(src_.is_conj());
-
-  dst._set_neg(dst_.is_neg());
-  src._set_neg(src_.is_neg());
 
   auto storage_byte_offset = src_.storage_offset() * src_.itemsize();
   id<MTLBuffer> sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src_.storage().data());
