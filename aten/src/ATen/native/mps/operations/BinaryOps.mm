@@ -41,6 +41,8 @@ void castInputsArithmeticOp(MPSGraph* mpsGraph,
 }
 
 // alpha is always 1.0 except when this function is called from add_sub_template()
+// is_arithmetic lets us check for arithmetic ops, so we can cast the input to output type if needed
+// because in arithmetic ops the input and output types match
 void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha,
                     const Tensor& output, std::string op_name, bool is_arithmetic, BinaryOpBlock binaryBlock)
 {
