@@ -21,6 +21,8 @@ struct BinaryOpCachedGraph : public MPSCachedGraph
 typedef MPSGraphTensor* (^BinaryOpBlock)(MPSGraph*, MPSGraphTensor*, MPSGraphTensor*);
 #define BinaryOpFn() MPSGraphTensor* (MPSGraph* mpsGraph, MPSGraphTensor* primary, MPSGraphTensor* secondary)
 
+// is_arithmetic lets us check for arithmetic ops, so we can cast the input to output type if needed
+// because in arithmetic ops the input and output types match
 void binaryOpTensor(const Tensor& self_t, const Tensor& other_t, const Tensor& output, std::string op_name, bool is_arithmetic, BinaryOpBlock binaryBlock)
 {
   // it's possible to receive empty tensors here
