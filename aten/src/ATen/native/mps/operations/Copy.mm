@@ -114,7 +114,7 @@ Tensor as_strided_tensorimpl_mps(const Tensor& self, IntArrayRef size,
   // 0 sizes won't result in any change in the shape of the Tensor so we can
   // skip it. Also if the memory is contiguous we don't need to do
   // gather-scatter operations using graph.
-  if (size.size() > 0 && (!result.is_contiguous())) {
+  if (size.size() > 0) {
 
     // If self itself was a view tensor, that means we need to chain the graphs
     // else we will create a new entry in the cache
@@ -394,6 +394,8 @@ static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_,
                                          options:options
                                      deallocator:nil];
     sourceOffset = uintptr_t(host_src) - uintptr_t(alignedPtr);
+    if (src_.is_view())
+      sourceOffset += src_.storage_offset() * src_.itemsize();
 
     dispatch_sync(stream->queue(), ^() {
       @autoreleasepool {

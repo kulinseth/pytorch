@@ -55,17 +55,18 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Tensor& outpu
       cachedGraph = static_cast<BinaryOpCachedGraph *>(tmpCachedGraph);
     }
 
-    NSMutableDictionary *feeds = [[NSMutableDictionary new] autorelease];
+    NSMutableDictionary *feeds   = [[NSMutableDictionary new] autorelease];
+    Placeholder selfPlaceholder  = Placeholder(cachedGraph->primaryTensor, self, nullptr, true);
+    Placeholder otherPlaceholder = Placeholder(cachedGraph->secondaryTensor, other, nullptr, true);
+
     if (is_self_scalar) {
       feeds[cachedGraph->primaryTensor] = getMPSGraphTensorFromScalar(mpsStream, self.item(), self_dtype);
     } else {
-      Placeholder selfPlaceholder = Placeholder(cachedGraph->primaryTensor, self, nullptr, true);
       feeds[selfPlaceholder.getMPSGraphTensor()] = selfPlaceholder.getMPSGraphTensorData();
     }
     if (is_other_scalar) {
       feeds[cachedGraph->secondaryTensor] = getMPSGraphTensorFromScalar(mpsStream, other.item(), other_dtype);
     } else {
-      Placeholder otherPlaceholder = Placeholder(cachedGraph->secondaryTensor, other, nullptr, true);
       feeds[otherPlaceholder.getMPSGraphTensor()] = otherPlaceholder.getMPSGraphTensorData();
     }
     Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor, output, nullptr);
