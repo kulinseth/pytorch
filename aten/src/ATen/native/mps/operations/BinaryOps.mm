@@ -42,7 +42,10 @@ void binaryOpTensor(const Tensor& self_t, const Tensor& other_t, const Tensor& o
 
   const MPSDataType self_dtype = getMPSScalarType(self_t.scalar_type());
   const MPSDataType other_dtype = getMPSScalarType(other_t.scalar_type());
-  const MPSDataType output_dtype = getMPSScalarType(output.scalar_type());
+  const auto output_scalar_type = output.scalar_type();
+  const MPSDataType output_dtype = getMPSScalarType(output_scalar_type);
+  // Accumulate dtype
+  const MPSDataType acc_dtype = getMPSScalarType(at::acc_type<output_scalar_type, true>);
 
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
@@ -59,15 +62,33 @@ void binaryOpTensor(const Tensor& self_t, const Tensor& other_t, const Tensor& o
           newCachedGraph->secondaryTensor = mpsGraphRankedPlaceHolder(mpsGraph, other_dtype, getMPSShape(other));
           MPSGraphTensor* primary = nil;
           MPSGraphTensor* secondary = nil;
-          if(is_arithmetic && self_dtype != output_dtype)
-            primary = [mpsGraph castTensor:newCachedGraph->primaryTensor toType:output_dtype name:@"primary"];
-          else
-            primary = newCachedGraph->primaryTensor;
-          if(is_arithmetic && other_dtype != output_dtype)
-            secondary = [mpsGraph castTensor:newCachedGraph->secondaryTensor toType:output_dtype name:@"primary"];
-          else
-            secondary = newCachedGraph->secondaryTensor;
+
+          if(is_arithmetic) {
+            if(self_dtype != acc_dtype)
+              primary = [mpsGraph castTensor:newCachedGraph->primaryTensor toType:acc_dtype name:@"primary"];
+            else
+              primary = newCachedGraph->primaryTensor;
+            if(other_dtype != acc_dtype)
+              secondary = [mpsGraph castTensor:newCachedGraph->secondaryTensor toType:acc_dtype name:@"secondary"];
+            else
+              secondary = newCachedGraph->secondaryTensor;
+          }
+          else { // Boolean op
+            if(self_dtype != other_dtype) {
+              // TODO: Cast one to the type of other
+              
+            }
+            else {
+              primary = newCachedGraph->primaryTensor;
+              secondary = newCachedGraph->secondaryTensor;
+            }
+          }
+
           newCachedGraph->outputTensor = binaryBlock(mpsGraph, primary, secondary);
+
+          if(is_arithmetic && output_dtype != acc_dtype)
+            newCachedGraph->outputTensor = [mpsGraph castTensor:newCachedGraph->outputTensor toType:output_dtype name:@"output"];
+
         }
         return newCachedGraph;
       });
