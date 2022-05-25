@@ -315,10 +315,9 @@ class TestMPS(TestCase):
             output_cpu = torch.baddbmm(M_cpu, batch1_cpu, batch2_cpu, beta=beta, alpha=alpha)
             output_mps = torch.baddbmm(M_mps, batch1_mps, batch2_mps, beta=beta, alpha=alpha)
 
-            print(output_cpu.shape)
-            print(output_mps.shape)
             self.assertEqual(output_cpu, output_mps)
             self.assertEqual(output_cpu.size(), output_mps.size())
+
         helper(input_shape=(3, 5), batch1_shape=(10, 3, 4), batch2_shape=(10, 4, 5))
         helper(input_shape=(10, 3, 5), batch1_shape=(10, 3, 4), batch2_shape=(10, 4, 5))
         helper(input_shape=(1, 77, 77), batch1_shape=(8, 77, 64), batch2_shape=(8, 64, 77))

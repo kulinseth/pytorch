@@ -394,7 +394,7 @@ static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_,
                                          options:options
                                      deallocator:nil];
     sourceOffset = uintptr_t(host_src) - uintptr_t(alignedPtr);
-    if (src_.is_view())
+    if (src_.is_view() || !src_.is_contiguous())
       sourceOffset += src_.storage_offset() * src_.itemsize();
 
     dispatch_sync(stream->queue(), ^() {

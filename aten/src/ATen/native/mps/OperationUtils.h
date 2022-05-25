@@ -76,7 +76,7 @@ class Placeholder {
 
   void allocateViewTensor(const at::Tensor& src)
   {
-    assert (src.is_view() && !_viewOutput.numel());
+    assert (!_viewOutput.numel());
     _viewOutput = at::native::empty_mps(
                   src.sizes(),
                   src.scalar_type(),
