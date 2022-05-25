@@ -38,7 +38,15 @@ at::Allocator* GetMPSAllocator(bool useSharedAllocator) {
 }
 
 bool is_available() {
-  return MPSDevice::getInstance()->device() != nil;
+#if __is_target_os(macOS)
+  if ( @available(macOS 12.3, *) ) {
+     return MPSDevice::getInstance()->device() != nil;
+  } else {
+     return false;
+  }
+#else
+ return false;
+#endif
 }
 
 } // namespace mps
