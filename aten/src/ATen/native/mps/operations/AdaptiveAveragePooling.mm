@@ -64,10 +64,10 @@ Tensor& adaptive_avg_pool2d_out_mps
   int64_t kernel_sizeH;
   int64_t kernel_sizeW;
 
-  set_kernel_params(isizeH, isizeW,
-                    osizeH, osizeW,
-                    strideH, strideW,
-                    kernel_sizeH, kernel_sizeW);
+  mps::set_kernel_params(isizeH, isizeW,
+                         osizeH, osizeW,
+                         strideH, strideW,
+                         kernel_sizeH, kernel_sizeW);
 
   output =  at::avg_pool2d(input,
                            IntArrayRef({kernel_sizeH, kernel_sizeW}),
@@ -131,10 +131,10 @@ Tensor adaptive_avg_pool2d_backward_mps
 
     int64_t strideH, strideW, kernel_sizeH, kernel_sizeW;
 
-    set_kernel_params(isizeH, isizeW,
-                      osizeH, osizeW,
-                      strideH, strideW,
-                      kernel_sizeH, kernel_sizeW);
+    mps::set_kernel_params(isizeH, isizeW,
+                           osizeH, osizeW,
+                           strideH, strideW,
+                           kernel_sizeH, kernel_sizeW);
     auto gradInput = at::zeros_like(input, LEGACY_CONTIGUOUS_MEMORY_FORMAT);
     if (gradInput.numel() != 0)
       gradInput = at::avg_pool2d_backward(gradOutput,
