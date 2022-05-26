@@ -3092,9 +3092,12 @@ class TestNLLLoss(TestCase):
     # Test max avg pool2d - when the input size is a multiple of output size
     # Not testing for channels last right now
     def test_adaptive_max_pool2d_simple(self):
-        def helper(input_shape, out_shape, return_indices, channels_last=False):
-            torch.manual_seed(12)
-            cpu_x = torch.randn(input_shape, device='cpu', dtype=torch.float, requires_grad=True)
+        def helper(input_shape, out_shape, return_indices, dtype, channels_last=False):
+            cpu_x = None
+            if(dtype in [torch.float16, torch.float32]):
+                cpu_x = torch.randn(input_shape, device='cpu', dtype=dtype, requires_grad=True)
+            else:
+                cpu_x = torch.randint(50, input_shape, device='cpu', dtype=dtype, requires_grad=True)
             if(channels_last):
                 cpu_x = cpu_x.to(memory_format=torch.channels_last)
                 cpu_x.retain_grad()
@@ -3121,13 +3124,14 @@ class TestNLLLoss(TestCase):
                 self.assertEqual(max_indices, max_indices_cpu)
             self.assertEqual(x.grad, cpu_x.grad)
 
-        for return_indices in [False, True]:
-            helper((2, 2, 4, 4), (2, 2), return_indices)
-            helper((2, 2, 9, 9), (3, 3), return_indices)
-            helper((2, 2, 9, 9), (9, 9), return_indices)
-            helper((2, 2, 16, 16), (2, 2), return_indices)
-            helper((2, 2, 16, 16), (2, 16), return_indices)
-            helper((2, 16, 16), (4, 4), return_indices)
+        for dtype in [torch.float32]:
+            for return_indices in [False, True]:
+                helper((2, 2, 4, 4), (2, 2), return_indices, dtype)
+                helper((2, 2, 9, 9), (3, 3), return_indices, dtype)
+                helper((2, 2, 9, 9), (9, 9), return_indices, dtype)
+                helper((2, 2, 16, 16), (2, 2), return_indices, dtype)
+                helper((2, 2, 16, 16), (2, 16), return_indices, dtype)
+                helper((2, 16, 16), (4, 4), return_indices, dtype)
 
     def test_gelu_simple(self):
         def helper(shape):
