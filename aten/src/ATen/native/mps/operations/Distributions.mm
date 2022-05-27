@@ -554,6 +554,10 @@ Tensor& multinomial_with_replacement_mps_kernel(
     MPSGraphTensor *randomTensor = generatorTensors[0];
 
     auto broadcastShape = @[ns_numDist ,ns_n_sample, ns_numCategories];
+    int broadcastShapeVals[3] = {numDist, n_sample, numCategories};
+    MPSGraphTensor *broadcastShapeTensor = [mpsGraph constantWithData:[NSData dataWithBytes:broadcastShapeVals length:sizeof(int) * broadcastShape.count]
+                                                                shape:@[[NSNumber numberWithUnsignedInteger:broadcastShape.count]]
+                                                             dataType:MPSDataTypeUInt32];
 
     MPSGraphTensor *samplesTensor = [mpsGraph broadcastTensor:randomTensor
                                                       toShape:broadcastShape
@@ -571,7 +575,7 @@ Tensor& multinomial_with_replacement_mps_kernel(
                                                toType:MPSDataTypeInt32
                                                  name:@"sampleMask"];
     MPSGraphTensor *categoriesTensor = [mpsGraph coordinateAlongAxis:-1
-                                                           withShape:broadcastShape
+                                                     withShapeTensor:broadcastShapeTensor
                                                                 name:nil];
     MPSGraphTensor *binnedSamplesTensor = [mpsGraph multiplicationWithPrimaryTensor:categoriesTensor
                                                                  secondaryTensor:sampleMask
