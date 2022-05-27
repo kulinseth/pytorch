@@ -471,19 +471,6 @@ string get_mem_format_string(c10::MemoryFormat memory_format) {
   return mem_format_key;
 }
 
-void set_kernel_params
-  (int64_t isizeH, int64_t isizeW,
-   int64_t osizeH, int64_t osizeW,
-   int64_t &strideH, int64_t &strideW,
-   int64_t &kernel_sizeH, int64_t &kernel_sizeW) {
-
-  strideH = (int64_t) (isizeH / osizeH);
-  strideW = (int64_t) (isizeW / osizeW);
-
-  kernel_sizeH = isizeH - (osizeH-1) * strideH;
-  kernel_sizeW = isizeW - (osizeW-1) * strideW;
-}
-
 MPSGraphCache* MPSGraphCache::_instance_cache = nullptr;
 
 } // namespace mps

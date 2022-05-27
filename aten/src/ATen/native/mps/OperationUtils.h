@@ -94,8 +94,6 @@ MPSGraphTensor* mpsGraphConstantPlaceHolder(MPSGraph *mpsGraph, const double val
 
 string get_mem_format_string(c10::MemoryFormat memory_format);
 
-void set_kernel_params(int64_t isizeH, int64_t isizeW, int64_t osizeH, int64_t osizeW, int64_t &strideH, int64_t &strideW, int64_t &kernel_sizeH, int64_t &kernel_sizeW);
-
 using MPSCacheKey = int64_t;
 
 // derive this class to cache a graph and its inputs/ouputs
