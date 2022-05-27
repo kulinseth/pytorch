@@ -3842,6 +3842,21 @@ class TestNLLLoss(TestCase):
         helper([100, 100], 23, 89, dtype=torch.int64)
         helper([100, 100], 0, 2, dtype=torch.bool)
 
+    # Test exponential
+    def test_exponential(self):
+        def helper(shape, lamda, dtype=torch.float32):
+
+            mps_out = torch.zeros(shape, device='mps', dtype=dtype)
+            mps_out.exponential_(lamda)
+
+            print(mps_out.to('cpu').float().mean(), 1 / lamda)
+            print(mps_out.to('cpu').float().std() ** 2, 1 / (lamda**2))
+
+        helper([100, 100], 2)
+        helper([100, 100], 1)
+        helper([100, 100], 3)
+        helper([100, 100], 0.5)
+
     # Test add
     def test_add_binary_op(self):
         def helper(shape, alpha):
