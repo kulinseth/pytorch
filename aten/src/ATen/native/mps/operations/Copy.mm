@@ -290,18 +290,20 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_,
 
   auto storage_byte_offset = src_.storage_offset() * src_.itemsize();
   id<MTLBuffer> sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src_.storage().data());
-  if (!src_.is_contiguous()) {
-    id<MTLBuffer> gatherTensor = gatherViewTensor(src_, sourceBuffer);
-    if (gatherTensor) {
-      sourceBuffer = gatherTensor;
-      storage_byte_offset = 0;
+  @autoreleasepool {
+    if (!src_.is_contiguous()) {
+      id<MTLBuffer> gatherTensor = gatherViewTensor(src_, sourceBuffer);
+      if (gatherTensor) {
+        sourceBuffer = gatherTensor;
+        storage_byte_offset = 0;
+      } else {
+        src = src_.expand_as(dst).contiguous();
+        sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src.storage().data());
+        storage_byte_offset = src.storage_offset() * src.itemsize();
+      }
     } else {
-      src = src_.expand_as(dst).contiguous();
-      sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src.storage().data());
-      storage_byte_offset = src.storage_offset() * src.itemsize();
+      src = src_;
     }
-  } else {
-    src = src_;
   }
 
   void* host_dst = dst.storage().data();
@@ -377,8 +379,8 @@ static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_,
     }
   }
 
-  if (!dst_.is_contiguous()) {
-    TORCH_WARN("The dst MTL buffer in copy_to_mps is non-contiguous");
+  if (dst_.is_view()) {
+    TORCH_WARN("The dst MTL buffer in copy_to_mps is view operation");
   }
   const void* host_src = src.storage().data();
   uint64_t size = src.nbytes();
@@ -450,18 +452,21 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_,
   auto src_byte_offset = src_.storage_offset() * src_.itemsize();
   id<MTLBuffer> sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src_.storage().data());
   Tensor src;
-  if (!src_.is_contiguous()) {
-    id<MTLBuffer> gatherTensor = gatherViewTensor(src_, sourceBuffer);
-    if (gatherTensor) {
-      sourceBuffer = gatherTensor;
-      src_byte_offset = 0;
+
+  @autoreleasepool {
+    if (!src_.is_contiguous()) {
+      id<MTLBuffer> gatherTensor = gatherViewTensor(src_, sourceBuffer);
+      if (gatherTensor) {
+        sourceBuffer = gatherTensor;
+        src_byte_offset = 0;
+      } else {
+        src = src_.expand_as(dst_).contiguous();
+        sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src.storage().data());
+        src_byte_offset = src.storage_offset() * src.itemsize();
+      }
     } else {
-      src = src_.expand_as(dst_).contiguous();
-      sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src.storage().data());
-      src_byte_offset = src.storage_offset() * src.itemsize();
+      src = src_;
     }
-  } else {
-    src = src_;
   }
   Tensor dst = dst_;
   dst._set_conj(dst_.is_conj());

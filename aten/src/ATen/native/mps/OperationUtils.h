@@ -73,8 +73,7 @@ class Placeholder {
     return _value == nullptr;
   }
 
-  void allocateViewTensor(const at::Tensor& src)
-  {
+  void allocateViewTensor(const at::Tensor& src) {
     assert (!_viewOutput.numel());
     _viewOutput = at::native::empty_mps(
                   src.sizes(),
@@ -85,6 +84,15 @@ class Placeholder {
                   c10::nullopt);
   }
 
+  static Tensor getAllocateViewTensor(const at::Tensor& src) {
+    return at::native::empty_mps(
+                  src.sizes(),
+                  src.scalar_type(),
+                  c10::nullopt,
+                  kMPS,
+                  c10::nullopt,
+                  c10::nullopt);
+  }
  private:
   MPSGraphTensor* _placeholder;
   MPSGraphTensorData* _value;
@@ -95,6 +103,7 @@ void resize_tensor(Tensor* output);
 MPSGraphTensor* trunc_tensor(MPSGraph* mpsGraph, MPSGraphTensor* inputTensor);
 MPSGraphTensorData *getMPSGraphTensorData(MPSGraph* mpsGraph, MPSStream* mpsStream, const Tensor& tensor);
 MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, const Scalar& scalar, MPSDataType dataType);
+void printTensorNDArray(const Tensor& t, id<MTLBuffer> buf);
 
 MPSGraph* make_mps_graph();
 void printTensorNDArray(const Tensor& t);
@@ -207,6 +216,8 @@ struct MPSGraphCache
   dispatch_queue_t serialQueue_ = nullptr;
 
 };
+
+MPSCachedGraph* _getCachedGraph(const at::Tensor& src);
 
 } // namespace mps
 } // namespace native

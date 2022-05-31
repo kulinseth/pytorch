@@ -250,19 +250,25 @@ MPSShape* getMPSShape(IntArrayRef sizes) {
   return [NSArray arrayWithObjects:numbers count:sz_];
 }
 
-void printTensorNDArray(const Tensor& t) {
+void printTensorNDArray(const Tensor& t, id<MTLBuffer> buf) {
   if (!t.is_mps()) return;
   if(t.numel() == 0) return;
   // Get shape and data type
   auto selfShape = getMPSShape(t);
   auto selfDType = getMPSDataType(t.scalar_type());
-
-  // Initialize data
-  id<MTLBuffer> selfBuf = __builtin_bit_cast(id<MTLBuffer>, t.storage().data());
-  MPSGraphTensorData* tdata = [[[MPSGraphTensorData alloc] initWithMTLBuffer:selfBuf
+  MPSGraphTensorData* tdata = [[[MPSGraphTensorData alloc] initWithMTLBuffer:buf
                                                             shape:selfShape
                                                          dataType:selfDType] autorelease];
   [tdata printNDArray];
+}
+
+void printTensorNDArray(const Tensor& t) {
+  if (!t.is_mps()) return;
+  if(t.numel() == 0) return;
+
+  // Initialize data
+  id<MTLBuffer> selfBuf = __builtin_bit_cast(id<MTLBuffer>, t.storage().data());
+  printTensorNDArray(t, selfBuf);
 }
 
 MPSCachedGraph* _getCachedGraph(const at::Tensor& src) {
@@ -309,6 +315,9 @@ id<MTLBuffer> _gatherViewTensor(const at::Tensor& src, id<MTLBuffer> sourceBuffe
     };
 
     runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+#if 1
+    [outputTensorData printNDArray];
+#endif
     return resultBuffer;
   }
 }
