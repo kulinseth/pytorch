@@ -79,6 +79,7 @@ Tensor& linspace_out_mps(const Scalar& start, const Scalar& end, int64_t steps, 
     result.resize_({steps});
   }
 
+
   if (steps == 0) {
     // skip
   } else if (steps == 1) {
@@ -110,7 +111,7 @@ Tensor& linspace_out_mps(const Scalar& start, const Scalar& end, int64_t steps, 
                                                                shape: @[@1]
                                                               dataType:MPSDataTypeInt32];
             MPSGraphTensor* coordsTensor = [mpsGraph coordinateAlongAxis:0
-                                                         withShapeTensor:shapeTensor
+                                                        withShapeTensor:shapeTensor
                                                                     name:nil];
             coordsTensor = [mpsGraph castTensor:coordsTensor toType:MPSDataTypeFloat32 name:@"coords"];
 
@@ -168,6 +169,8 @@ Tensor& linspace_out_mps(const Scalar& start, const Scalar& end, int64_t steps, 
       result.copy_(r);
     }
   }
+
   return result;
 }
+
 }} // namespace at::native
