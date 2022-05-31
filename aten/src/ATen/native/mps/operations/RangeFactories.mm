@@ -79,7 +79,6 @@ Tensor& linspace_out_mps(const Scalar& start, const Scalar& end, int64_t steps, 
     result.resize_({steps});
   }
 
-
   if (steps == 0) {
     // skip
   } else if (steps == 1) {
