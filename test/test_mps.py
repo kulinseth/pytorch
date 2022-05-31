@@ -3946,10 +3946,23 @@ class TestNLLLoss(TestCase):
             print(mps_out.to('cpu').float().mean(), 1 / lamda)
             print(mps_out.to('cpu').float().std() ** 2, 1 / (lamda**2))
 
-        helper([100, 100], 2)
-        helper([100, 100], 1)
-        helper([100, 100], 3)
-        helper([100, 100], 0.5)
+        for dtype in [torch.float32, torch.float16]:
+            helper([100, 100], 2, dtype)
+            helper([100, 100], 1, dtype)
+            helper([100, 100], 3, dtype)
+            helper([100, 100], 0.5, dtype)
+
+    # Do kstest for exponential distribution
+    def test_exponential_kstest(self):
+        device = 'mps'
+        dtype = torch.float32
+        for dtype in [torch.float32, torch.float16]:
+            from scipy import stats
+            size = 1000
+            for lambd in [0.5, 1.0, 5.0]:
+                t = torch.empty(size, dtype=dtype, device=device).exponential_(lambd=lambd)
+                res = stats.kstest(t.cpu().to(torch.double), 'expon', args=(0, 1 / lambd,))
+                self.assertTrue(res.statistic < 0.1)
 
     # Test add
     def test_add_binary_op(self):

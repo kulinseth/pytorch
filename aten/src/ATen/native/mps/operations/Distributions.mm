@@ -502,6 +502,11 @@ Tensor& exponential_mps_(Tensor& self, double lambda, c10::optional<Generator> g
                                                        secondaryTensor:minusLambdaTensor
                                                                   name:nil];
 
+    if(getMPSDataType(self.scalar_type()) != MPSDataTypeFloat32)
+      outputTensor = [mpsGraph castTensor:outputTensor
+                                   toType:getMPSDataType(self.scalar_type())
+                                     name:@"output"];
+
     auto outputPlaceholder = Placeholder(outputTensor, self);
     NSDictionary<MPSGraphTensor *, MPSGraphTensorData *> *feeds = nil;
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
