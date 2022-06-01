@@ -3,6 +3,7 @@
 #include <ATen/ATen.h>
 #include <ATen/Tensor.h>
 #include <ATen/Utils.h>
+#include <ATen/AccumulateType.h>
 #include <ATen/mps/MPSStream.h>
 #include <ATen/native/mps/OperationUtils.h>
 #include <torch/library.h>
@@ -45,7 +46,45 @@ void castInputsBooleanOp(MPSGraph* mpsGraph,
                          MPSGraphTensor* &primary, MPSGraphTensor* &secondary,
                          const MPSDataType self_dtype, const MPSDataType other_dtype) {
 
-  // TODO: Cast one to the type of other
+  if(self_dtype != other_dtype) {
+    // Cast one to the type of other, so that they can be compared
+    if(type_precedence_number(self_dtype) > type_precedence_number(other_dtype)) {
+      primary = primaryTensor;
+      secondary = [mpsGraph castTensor:secondaryTensor toType:self_dtype name:@"secondary"];
+    }
+    else {
+      primary = [mpsGraph castTensor:primaryTensor toType:other_dtype name:@"primary"];
+      secondary = secondaryTensor;
+    }
+  }
+  else {
+    primary = primaryTensor;
+    secondary = secondaryTensor;
+  }
+
+}
+
+// Assign a precedence to types for comparing in boolean operation
+int type_precedence_number(const MPSDataType tensor_dtype) {
+
+  switch (tensor_dtype) {
+    case MPSDataTypeFloat32:
+      return 7;
+    case MPSDataTypeFloat16:
+      return 6;
+    case MPSDataTypeInt64:
+      return 5;
+    case MPSDataTypeInt32:
+      return 4;
+    case MPSDataTypeInt16:
+      return 3;
+    case MPSDataTypeInt8:
+      return 2;
+    case MPSDataTypeBool:
+      return 1;
+    default:
+      TORCH_CHECK_TYPE(false, "Unsupported data type")
+  }
 
 }
 
@@ -75,7 +114,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
   const auto output_scalar_type = output.scalar_type();
   const MPSDataType output_dtype = getMPSScalarType(output_scalar_type);
   // Accumulate dtype
-  const MPSDataType acc_dtype = getMPSScalarType(at::acc_type<output_scalar_type, true>);
+  const MPSDataType acc_dtype = getMPSScalarType(at::toAccumulateType(output_scalar_type, true));
 
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {

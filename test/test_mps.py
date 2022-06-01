@@ -2575,15 +2575,24 @@ class TestNLLLoss(TestCase):
 
         def helper_scalar():
 
-            cpu_x = torch.tensor(2)
-            x = cpu_x.detach().clone().to('mps')
+            for d1 in [torch.float32, torch.float16, torch.int64, torch.int32, torch.int16, torch.int16, torch.bool]:
+                for d2 in [torch.float32, torch.float16, torch.int64, torch.int32, torch.int16, torch.int16, torch.bool]:
+                    # if(not (d1 == torch.float16 and d2 == torch.float16)):
+                    #     continue
+                    if((d1 == torch.float16 or d2 == torch.float16)):
+                        continue
+                    print(d1, d2)
+                    cpu_x = torch.tensor(2, dtype=d1)
+                    # x = cpu_x.detach().clone().to('mps')
+                    x = torch.tensor(2, dtype=d1, device='mps')
 
-            cpu_y = torch.tensor(3)
-            y = cpu_y.detach().clone().to('mps')
+                    cpu_y = torch.tensor(3, dtype=d2)
+                    # y = cpu_y.detach().clone().to('mps')
+                    y = torch.tensor(3, dtype=d2, device='mps')
 
-            result = x * y
-            result_cpu = cpu_x * cpu_y
-            self.assertEqual(result_cpu, result)
+                    result = x * y
+                    result_cpu = cpu_x * cpu_y
+                    self.assertEqual(result_cpu, result)
 
         def helper(shape1, shape2):
 
@@ -2597,9 +2606,35 @@ class TestNLLLoss(TestCase):
             result_cpu = cpu_x * cpu_y
             self.assertEqual(result_cpu, result)
 
-        helper((1,1,1,1), (2,8,4,5))
-        helper([], (2,8,4,5))
+        # helper((1,1,1,1), (2,8,4,5))
+        # helper([], (2,8,4,5))
         helper_scalar()
+
+    # Test compare dtype
+    def test_cmp_dtype(self):
+
+        def helper():
+
+            for d1 in [torch.float32, torch.float16, torch.int64, torch.int32, torch.int16, torch.int16, torch.bool]:
+                for d2 in [torch.float32, torch.float16, torch.int64, torch.int32, torch.int16, torch.int16, torch.bool]:
+                    if(not (d1 == torch.float16 and d2 == torch.float16)):
+                        continue
+                    cpu_x = torch.tensor(2, dtype=d1)
+                    # x = cpu_x.detach().clone().to('mps')
+                    x = torch.tensor(2, dtype=d1, device='mps')
+
+                    cpu_y = torch.tensor(3, dtype=d2)
+                    # y = cpu_y.detach().clone().to('mps')
+                    y = torch.tensor(3, dtype=d2, device='mps')
+
+                    result = (x == y)
+                    result_cpu = (cpu_x == cpu_y)
+                    print(d1,d2)
+                    print(result_cpu, result)
+                    print(x.to('cpu'), y.to('cpu'))
+                    self.assertEqual(result_cpu, result)
+
+        helper()
 
 
 
