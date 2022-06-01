@@ -51,13 +51,13 @@ int type_precedence_number(const MPSDataType tensor_dtype) {
 void binaryOpTensor(const Tensor& self_t, const Tensor& other_t, const Tensor& output, std::string op_name, bool is_arithmetic, BinaryOpBlock binaryBlock)
 {
   // it's possible to receive empty tensors here
-  if (self.numel() == 0 || other.numel() == 0) {
+  if (self_t.numel() == 0 || other_t.numel() == 0) {
     return;
   }
   MPSStream* mpsStream = getCurrentMPSStream();
 
-  const bool is_self_scalar = self.dim() == 0;
-  const bool is_other_scalar = other.dim() == 0;
+  const bool is_self_scalar = self_t.dim() == 0;
+  const bool is_other_scalar = other_t.dim() == 0;
 
   Tensor self = is_self_scalar ? self_t : self_t.contiguous(at::MemoryFormat::Contiguous);
   Tensor other = is_other_scalar ? other_t : other_t.contiguous(at::MemoryFormat::Contiguous);
