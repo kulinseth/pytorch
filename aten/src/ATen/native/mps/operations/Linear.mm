@@ -26,9 +26,6 @@ Tensor _mps_linear(
   using namespace mps;
 
   TORCH_CHECK(input.dtype() == weight.dtype(), "tensors must have the same dtype");
-  if (bias_opt.has_value()) {
-    TORCH_CHECK(input.dtype() == bias_opt.value().dtype(), "tensors must have the same dtype");
-  }
   TORCH_CHECK(isFloatingType(input.scalar_type()), "Only floating point dtypes are supported for mm on MPS.");
 
   // See [Note: hacky wrapper removal for optional tensor]
