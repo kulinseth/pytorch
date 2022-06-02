@@ -210,8 +210,6 @@ Tensor& addmm_out_mps_impl(
 
   TORCH_CHECK(output.is_mps());
   TORCH_CHECK(self.dim() == 2 && other.dim() == 2, "tensors must be 2-D");
-  TORCH_CHECK(self.dtype() == other.dtype(), "tensors must have the same dtype");
-  TORCH_CHECK(self.dtype() == bias.dtype(), "tensors must have the same dtype");
   TORCH_CHECK(isFloatingType(self.scalar_type()), "Only floating point dtypes are supported for mm on MPS.");
 
   TensorArg args[]{{output, "out", 0}, {bias, "self", 1}, {self, "mat1", 2}, {other, "mat2", 3}};
