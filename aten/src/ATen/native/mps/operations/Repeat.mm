@@ -90,6 +90,14 @@ Tensor repeat_mps(const Tensor& self, IntArrayRef repeats) {
   auto num_input_dims = [input_shape count];
   auto num_repeat_dims = repeats.size();
 
+  if (num_repeat_dims == 0) {
+    return at::native::empty_mps(
+                        {}, self.scalar_type(),
+                        c10::nullopt,
+                        kMPS,
+                        c10::nullopt,
+                        c10::nullopt);
+  }
   set_apparent_shapes(input_shape,
                       apparent_input_shape,
                       num_input_dims,
