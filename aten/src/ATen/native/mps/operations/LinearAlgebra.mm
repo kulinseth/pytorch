@@ -100,8 +100,6 @@ Tensor& mm_out_mps_impl(
     Tensor& output) {
   using namespace mps;
   TORCH_CHECK(self.dim() == 2 && other.dim() == 2, "tensors must be 2-D");
-  TORCH_CHECK(self.dtype() == other.dtype(), "tensors must have the same dtype");
-  TORCH_CHECK(isFloatingType(self.scalar_type()), "Only floating point dtypes are supported for mm on MPS.");
 
   TensorArg args[]{{output, "out", 0}, {self, "mat1", 1}, {other, "mat2", 2}};
   checkAllSameGPU("mm", args);
@@ -210,7 +208,6 @@ Tensor& addmm_out_mps_impl(
 
   TORCH_CHECK(output.is_mps());
   TORCH_CHECK(self.dim() == 2 && other.dim() == 2, "tensors must be 2-D");
-  TORCH_CHECK(isFloatingType(self.scalar_type()), "Only floating point dtypes are supported for mm on MPS.");
 
   TensorArg args[]{{output, "out", 0}, {bias, "self", 1}, {self, "mat1", 2}, {other, "mat2", 3}};
   checkAllSameGPU(__func__, args);
@@ -373,9 +370,6 @@ Tensor& bmm_out_mps_impl(
     return result;
   }
 
-  TORCH_CHECK(batch1.dtype() == batch2.dtype(), "tensors must have the same dtype");
-  TORCH_CHECK(isFloatingType(batch1.scalar_type()), "Only floating point dtypes are supported for mm on MPS.");
-
   MPSStream* stream = getCurrentMPSStream();
 
   struct CachedGraph : public mps::MPSCachedGraph
@@ -459,10 +453,6 @@ Tensor& addbmm_or_baddbmm_out_mps_impl(
       "Incompatible matrix sizes for bmm (",
       batch1.size(1), "x", batch1.size(2), " and ",
       batch2.size(1), "x", batch2.size(2), ")");
-
-  TORCH_CHECK(input.dtype() == batch1.dtype(), "tensors must have the same dtype");
-  TORCH_CHECK(batch1.dtype() == batch2.dtype(), "tensors must have the same dtype");
-  TORCH_CHECK(isFloatingType(batch1.scalar_type()), "Only floating point dtypes are supported for mm on MPS.");
 
   if (opType == ADDBMM_OP_TYPE)
   {
