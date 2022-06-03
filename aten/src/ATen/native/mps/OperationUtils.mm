@@ -71,7 +71,8 @@ std::string getStridedKey(const Tensor& self, const IntArrayRef sz,
   return std::to_string((uintptr_t)self.storage().data()) +
               ":" + mps::getArrayRefString(sz) +
               ":" + mps::getArrayRefString(strides) +
-              ":" + std::to_string(offset);
+              ":" + std::to_string(offset) +
+              ":" + getMPSTypeString(self.scalar_type());
 }
 
 void runMPSGraph(
