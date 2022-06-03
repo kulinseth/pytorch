@@ -399,15 +399,18 @@ MPSGraphTensorData *getMPSGraphTensorData(MPSGraph* mpsGraph,
 }
 
 MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, const Scalar& scalar, MPSDataType dataType) {
-  union v_t {
+  union {
     float f; // MPS doesn't support 'double'
+    at::Half h;
     int64_t i;
     bool b;
   } v;
   switch (dataType) {
     case MPSDataTypeFloat32:
-    case MPSDataTypeFloat16:
       v.f = scalar.to<float>();
+      break;
+    case MPSDataTypeFloat16:
+      v.h = scalar.to<at::Half>();
       break;
     case MPSDataTypeInt64:
       v.i = scalar.to<int64_t>();
