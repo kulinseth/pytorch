@@ -3925,6 +3925,7 @@ class TestNLLLoss(TestCase):
                 cpu_out = torch.add(cpu_x, cpu_y, alpha=alpha)
                 mps_out = torch.add(mps_x, mps_y, alpha=alpha)
                 # fp16 isn't accurate when alpha is passed
+                # TODO: remove or fix 'tol' when we fix problems with fp16
                 tol = 1e-3 if dtype is torch.float16 else None
                 self.assertEqual(mps_out, cpu_out, rtol=tol, atol=tol)
                 # create a scalar tensor
@@ -3936,13 +3937,14 @@ class TestNLLLoss(TestCase):
                 self.assertEqual(torch.add(cpu_x, cpu_s), torch.add(mps_x, mps_s))
 
         helper((2, 8, 4, 5), 1.0)
+        helper((2, 8, 4, 5), 0.0)
         helper((2, 8, 4, 5), 0.1)
         helper((2, 8, 3, 5), 0.1)
         helper((2, 8, 3, 5), 0.2)
 
     # Test add
     def test_add_scalars(self):
-        def helper(alpha=1.0):
+        def helper(alpha):
             for dtype in [torch.float16, torch.float32]:
                 cpu_x = torch.tensor(2.3, device='cpu', dtype=dtype, requires_grad=False)
                 x = cpu_x.detach().clone().to('mps')
@@ -3956,7 +3958,8 @@ class TestNLLLoss(TestCase):
                 tol = 1e-3 if dtype is torch.float16 else None
                 self.assertEqual(out, cpu_out, rtol=tol, atol=tol)
 
-        helper()
+        helper(1.0)
+        helper(0.0)
         helper(0.1)
         helper(0.2)
 
