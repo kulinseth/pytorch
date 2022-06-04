@@ -35,7 +35,11 @@ class IMpsAllocatorCallback {
     RELEASED,  // buffer memory released
   };
   virtual ~IMpsAllocatorCallback() = default;
+<<<<<<< HEAD
   virtual void executeMPSAllocatorCallback(void* ptr, EventType event) = 0;
+=======
+  virtual bool executeMPSAllocatorCallback(void* ptr, EventType event) = 0;
+>>>>>>> 1ddca79abe (Remove view from graph cache when underlying buffer is freed (#78074))
 };
 
 // MPS allocator will execute every registered callback when a block of memory is freed.
@@ -226,7 +230,11 @@ private:
   void release_buffers(BufferPool& pool);
   bool release_available_cached_buffers(const AllocParams& p);
   bool release_cached_buffers();
+<<<<<<< HEAD
   void trigger_memory_callbacks(BufferBlock* buffer_block, IMpsAllocatorCallback::EventType event);
+=======
+  bool trigger_memory_callbacks(BufferBlock* buffer_block, IMpsAllocatorCallback::EventType event);
+>>>>>>> 1ddca79abe (Remove view from graph cache when underlying buffer is freed (#78074))
 
   BufferPool& get_pool(size_t Size, bool useShared) {
       return Size <= kMaxSmallAlloc ? (useShared ? m_small_pool_shared : m_small_pool_private) :
