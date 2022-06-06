@@ -1273,6 +1273,10 @@ TORCH_IMPL_FUNC(softplus_out_mps) (
   const Tensor& result) {
       using namespace mps;
       TORCH_CHECK(self.is_mps());
+      // Applies the Softplus function :math:`\text{Softplus}(x) = \frac{1}{\beta} *
+      // \log(1 + \exp(\beta * x))` element-wise.
+      // For numerical stability the implementation reverts to the linear function
+      // when :math:`input \times \beta > threshold`.
 
       // Empty output
       if(result.numel() == 0)
