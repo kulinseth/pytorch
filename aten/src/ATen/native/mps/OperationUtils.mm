@@ -464,6 +464,12 @@ MPSGraphTensor* mpsGraphRankedPlaceHolder(MPSGraph *mpsGraph, const Tensor& tens
                                      name:nil];
 }
 
+// this is meant to suppress the availability warning on castTensor
+// we pass ScalarType instead of MPSDataType to handle MPSDataTypeBoolean's availability too
+MPSGraphTensor* castMPSTensor(MPSGraph *mpsGraph, MPSGraphTensor* tensor, ScalarType toType) {
+  // TODO: enclose with "if (@available(macOS 12.0, *))" to suppress warnings
+  return [mpsGraph castTensor:tensor toType:getMPSScalarType(toType) name:@"castTensor"];
+}
 
 string get_mem_format_string(c10::MemoryFormat memory_format) {
   string mem_format_key;
