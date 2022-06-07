@@ -36,9 +36,6 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
   const bool is_self_scalar = self.dim() == 0;
   const bool is_other_scalar = other.dim() == 0;
 
-  const MPSDataType self_dtype = getMPSScalarType((is_self_scalar && !is_other_scalar ? other : self).scalar_type());
-  const MPSDataType other_dtype = getMPSScalarType((!is_other_scalar ? other : self).scalar_type());
-
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
     string key = op_name + getTensorsStringKey({self, other}, /*use_scalar_value*/ false);
@@ -50,21 +47,19 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
         @autoreleasepool {
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new BinaryOpCachedGraph(mpsGraph);
-          newCachedGraph->primaryTensor   = mpsGraphRankedPlaceHolder(mpsGraph, self_dtype , getMPSShape(self));
-          newCachedGraph->secondaryTensor = mpsGraphRankedPlaceHolder(mpsGraph, other_dtype, getMPSShape(other));
+          newCachedGraph->primaryTensor   = mpsGraphRankedPlaceHolder(mpsGraph, self);
+          newCachedGraph->secondaryTensor = mpsGraphRankedPlaceHolder(mpsGraph, other);
 
           MPSGraphTensor* primaryCastTensor   = newCachedGraph->primaryTensor;
           MPSGraphTensor* secondaryCastTensor = newCachedGraph->secondaryTensor;
 
-          if (!is_self_scalar && !is_other_scalar) {
-            // this type inference is only required at the time of graph creation
-            const ScalarType common_dtype = c10::promoteTypes(self.scalar_type(), other.scalar_type());
-            if (self.scalar_type() != common_dtype) {
-              primaryCastTensor = castMPSTensor(mpsGraph, newCachedGraph->primaryTensor, common_dtype);
-            }
-            if (other.scalar_type() != common_dtype) {
-              secondaryCastTensor = castMPSTensor(mpsGraph, newCachedGraph->secondaryTensor, common_dtype);
-            }
+          // this type inference is only required at the time of graph creation
+          const ScalarType common_dtype = c10::promoteTypes(self.scalar_type(), other.scalar_type());
+          if (self.scalar_type() != common_dtype) {
+            primaryCastTensor = castMPSTensor(mpsGraph, newCachedGraph->primaryTensor, common_dtype);
+          }
+          if (other.scalar_type() != common_dtype) {
+            secondaryCastTensor = castMPSTensor(mpsGraph, newCachedGraph->secondaryTensor, common_dtype);
           }
           newCachedGraph->outputTensor = binaryBlock(newCachedGraph, primaryCastTensor, secondaryCastTensor);
         }
@@ -78,20 +73,20 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
     Placeholder otherPlaceholder;
 
     if (is_self_scalar) {
-      feeds[cachedGraph->primaryTensor] = getMPSGraphTensorFromScalar(mpsStream, self.item(), self_dtype);
+      feeds[cachedGraph->primaryTensor] = getMPSGraphTensorFromScalar(mpsStream, self.item(), getMPSScalarType(self.scalar_type()));
     } else {
       selfPlaceholder = Placeholder(cachedGraph->primaryTensor, self);
       feeds[selfPlaceholder.getMPSGraphTensor()] = selfPlaceholder.getMPSGraphTensorData();
     }
     if (is_other_scalar) {
-      feeds[cachedGraph->secondaryTensor] = getMPSGraphTensorFromScalar(mpsStream, other.item(), other_dtype);
+      feeds[cachedGraph->secondaryTensor] = getMPSGraphTensorFromScalar(mpsStream, other.item(), getMPSScalarType(other.scalar_type()));
     } else {
       otherPlaceholder = Placeholder(cachedGraph->secondaryTensor, other);
       feeds[otherPlaceholder.getMPSGraphTensor()] = otherPlaceholder.getMPSGraphTensorData();
     }
     // 'cachedGraph->alphaTensor' is not nil only if add_sub_template() was called with an alpha value != 1.0
     if (cachedGraph->alphaTensor) {
-      feeds[cachedGraph->alphaTensor] = getMPSGraphTensorFromScalar(mpsStream, alpha, other_dtype);
+      feeds[cachedGraph->alphaTensor] = getMPSGraphTensorFromScalar(mpsStream, alpha, getMPSScalarType(other.scalar_type()));
     }
 
     Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor, output);
