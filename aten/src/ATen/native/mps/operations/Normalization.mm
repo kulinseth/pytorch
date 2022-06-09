@@ -808,7 +808,6 @@ std::tuple<Tensor, Tensor, Tensor> layer_norm_mps(
     const c10::optional<Tensor>& bias_opt,
     double eps) {
 
-  // See [Note: hacky wrapper removal for optional tensor]
   c10::MaybeOwned<Tensor> weight_maybe_owned = at::borrow_from_optional_tensor(weight_opt);
   const Tensor& weight = *weight_maybe_owned;
   c10::MaybeOwned<Tensor> bias_maybe_owned = at::borrow_from_optional_tensor(bias_opt);
@@ -869,7 +868,6 @@ std::tuple<Tensor, Tensor, Tensor> layer_norm_backward_mps(
     const c10::optional<Tensor>& bias_opt /* optional */,
     std::array<bool, 3> grad_input_mask) {
 
-  // See [Note: hacky wrapper removal for optional tensor]
   c10::MaybeOwned<Tensor> weight_maybe_owned =
       at::borrow_from_optional_tensor(weight_opt);
   const Tensor& weight = *weight_maybe_owned;
