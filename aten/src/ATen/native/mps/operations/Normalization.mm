@@ -1064,6 +1064,15 @@ std::tuple<Tensor, Tensor, Tensor> layer_norm_backward_mps(
               MPSGraphTensor* bnGradOutputTensor = [mpsGraph reshapeTensor:gradOutputTensor
                                                                  withShape:bn_shape
                                                                       name:nil];
+              // Do this at the end
+              if(has_weight) {
+                MPSGraphTensor* bnGammaTensor = [mpsGraph reshapeTensor:weightTensor
+                                                              withShape:bn_gamma_shape
+                                                                   name:nil];
+                bnGradOutputTensor = [mpsGraph multiplicationWithPrimaryTensor:bnGradOutputTensor
+                                                               secondaryTensor:bnGammaTensor
+                                                                          name:nil];
+              }
               MPSGraphTensor* bnMeanTensor = [mpsGraph reshapeTensor:meanTensor
                                                            withShape:bn_mean_shape
                                                                 name:nil];
@@ -1139,16 +1148,6 @@ std::tuple<Tensor, Tensor, Tensor> layer_norm_backward_mps(
               MPSGraphTensor* gradient = [mpsGraph subtractionWithPrimaryTensor:gradient4
                                                                 secondaryTensor:gradient3
                                                                            name:nil];
-
-              // Do this at the end
-              if(has_weight) {
-                MPSGraphTensor* bnGammaTensor = [mpsGraph reshapeTensor:weightTensor
-                                                              withShape:bn_gamma_shape
-                                                                   name:nil];
-                gradient = [mpsGraph multiplicationWithPrimaryTensor:gradient
-                                                     secondaryTensor:bnGammaTensor
-                                                                name:nil];
-              }
 
               gradInputTensor = [mpsGraph reshapeTensor:gradient
                                               withShape:input_shape
