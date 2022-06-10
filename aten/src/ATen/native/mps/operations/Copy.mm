@@ -127,18 +127,18 @@ Tensor as_strided_tensorimpl_mps(const Tensor& self, IntArrayRef size,
     MPSGraphCache* cache_ = MPSGraphCache::getInstance();
 
     @autoreleasepool {
-      string lookup_key = mps::getStridedKey(self, self.sizes(), self.strides(),
-                self.storage_offset());
-
-      MPSGraphTensor *parentInputTensor = nil;
-      CachedGraph* parentCachedGraph = static_cast<CachedGraph *>(cache_->LookUp(lookup_key));
-      if (parentCachedGraph) {
-        parentInputTensor = parentCachedGraph->inputTensor_;
-      }
-
       string key = mps::getStridedKey(self, size, stride, storage_offset);
       CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
       if (!cachedGraph) {
+        string lookup_key = mps::getStridedKey(self, self.sizes(), self.strides(),
+          self.storage_offset());
+
+        MPSGraphTensor *parentInputTensor = nil;
+        CachedGraph* parentCachedGraph = static_cast<CachedGraph *>(cache_->LookUp(lookup_key));
+        if (parentCachedGraph) {
+          parentInputTensor = parentCachedGraph->inputTensor_;
+        }
+
         cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
           CachedGraph *newCachedGraph = nil;
           @autoreleasepool {
