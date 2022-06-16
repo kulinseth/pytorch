@@ -53,7 +53,7 @@ std::string getArrayRefString(const IntArrayRef s);
 std::string getStridedKey(const Tensor& self, const IntArrayRef sz,
                           const IntArrayRef strides, int64_t offset);
 id<MTLBuffer> gatherViewTensor(const at::Tensor& src, id<MTLBuffer> s);
-id<MTLBuffer> scatterViewTensor(at::Tensor& dst, const at::Tensor src, id<MTLBuffer> updatesTensorBuffer);
+id<MTLBuffer> scatterViewTensor(at::Tensor& output, const at::Tensor src, id<MTLBuffer> updatesTensorBuffer);
 
 MPSShape* getMPSShape(const Tensor& t);
 MPSShape* getMPSShape(IntArrayRef sizes);
