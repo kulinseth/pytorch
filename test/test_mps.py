@@ -4542,6 +4542,33 @@ class TestLinalgMPS(TestCase):
         m2 = maybe_transpose(t3, torch.randn(50, 25, device=device).to(dtype))
         self._test_addmm_addmv(torch.addmm, M, m1, m2, transpose_out=t4)
 
+class TestGatherScatter(TestCase):
+    def test_slicing_with_step(self):
+        # Slicing with step
+        # https://github.com/pytorch/pytorch/issues/78886
+        x_mps = torch.zeros(10, dtype=torch.float32, device="mps")
+        x_mps[::2] = 1.0
+
+        x_cpu = torch.zeros(10, dtype=torch.float32, device="mps")
+        x_cpu[::2] = 1.0
+
+        self.assertEqual(x_cpu, x_mps)
+
+    def test_slicing_replace_column(self):
+        def _helper(tensor_data):
+            # https://github.com/pytorch/pytorch/issues/78074
+            x_cpu = torch.tensor([[1,2,3],[4,5,6]])
+            x_mps = x_cpu.to('mps')
+
+            x_cpu[:,0] = 7
+            x_mps[:,0] = 7
+
+            self.assertEqual(x_cpu, x_mps)
+
+        _helper([[1,2,3],[4,5,6]])
+        _helper([[1,2,3],[4,5,6],[7,8,9]])
+        _helper([[1,2,3],[4,5,6],[7,8,9],[10,11,12]])
+
 class TestViewOpsMPS(TestCase):
     exact_dtype = True
 

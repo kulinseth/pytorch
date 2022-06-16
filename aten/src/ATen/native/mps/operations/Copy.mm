@@ -15,9 +15,17 @@
 namespace at {
 namespace native {
 
-MPSGraphTensor* chainViewOperation(MPSGraph* mpsGraph, IntArrayRef size,
-                             IntArrayRef stride, int64_t storage_offset,
-                             MPSGraphTensor* inputTensor, const Tensor& self) {
+MPSGraphTensor* chainViewOperation(
+  MPSGraph* mpsGraph,
+  IntArrayRef size,
+  IntArrayRef stride,
+  int64_t storage_offset,
+  MPSGraphTensor* inputTensor,
+  const Tensor& self,
+  MPSGraphTensor** scatteredTensor,
+  MPSGraphTensor** updatesTensor
+  ) {
+
   MPSGraphTensor *outputTensor = nil;
   const size_t shape_size = size.size();
 
@@ -44,6 +52,7 @@ MPSGraphTensor* chainViewOperation(MPSGraph* mpsGraph, IntArrayRef size,
       MPSGraphTensor* indexTensor = [mpsGraph multiplicationWithPrimaryTensor:rangeTensor
                                                               secondaryTensor:strideTensor
                                                                          name:nil];
+      *updatesTensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, mps::getMPSDataType(self.scalar_type()));
       MPSGraphTensor* indicesTensor = indexTensor;
       // create stride Tensors for each rank of the input tensor
       for (int i = 1; i < shape_size; i++) {
@@ -68,6 +77,17 @@ MPSGraphTensor* chainViewOperation(MPSGraph* mpsGraph, IntArrayRef size,
       MPSGraphTensor *reshapedIndicesTensor = [mpsGraph reshapeTensor:indicesTensor
                                                             withShape:@[@-1]
                                                                  name:nil];
+      MPSGraphTensor *reshapedUpdatesTensor = [mpsGraph reshapeTensor:*updatesTensor
+                                                            withShape:@[@-1]
+                                                                 name:nil];
+
+      *scatteredTensor = [mpsGraph scatterAlongAxis: 0
+                                    withDataTensor: reshapedInputTensor
+                                     updatesTensor: *updatesTensor
+                                     indicesTensor: reshapedIndicesTensor
+                                              mode: MPSGraphScatterModeSet
+                                              name:nil];
+
       // Call gather to coalesce the needed values. Result will be of same shape as flattened indices tensor
       MPSGraphTensor *gatheredTensor = [mpsGraph gatherWithUpdatesTensor:reshapedInputTensor
                                                            indicesTensor:reshapedIndicesTensor
@@ -121,6 +141,8 @@ Tensor as_strided_tensorimpl_mps(const Tensor& self, IntArrayRef size,
       CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
       MPSGraphTensor* inputTensor_ = nil;
       MPSGraphTensor* outputTensor_ = nil;
+      MPSGraphTensor* scatteredTensor_ = nil;
+      MPSGraphTensor* updatesTensor_ = nil;
     };
 
     MPSGraphCache* cache_ = MPSGraphCache::getInstance();
@@ -157,7 +179,8 @@ Tensor as_strided_tensorimpl_mps(const Tensor& self, IntArrayRef size,
                                                                       name : nil];
               newCachedGraph->inputTensor_ = inputTensor;
               newCachedGraph->outputTensor_ = chainViewOperation(mpsGraph, size, stride,
-                                                                 storage_offset, inputTensor, self);
+                                                                 storage_offset, inputTensor, self,
+                                                                 &newCachedGraph->scatteredTensor_, &newCachedGraph->updatesTensor_);
           }
           return newCachedGraph;
         }, self.storage().data());
@@ -428,6 +451,13 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_,
     if (gatherTensor) {
       sourceBuffer = gatherTensor;
       src_byte_offset = 0;
+      // Scatter to `dst` if the memory is not contiguous
+      // If the memory is not contiguous, it means that the tensor has strides and we would not be
+      // able to do the copy using a single blit
+      if (!dst_.is_contiguous()) {
+          scatterViewTensor(dst_, src_, sourceBuffer);
+          return dst_;
+      }
     } else {
       src = src_.expand_as(dst_).contiguous();
       sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src.storage().data());
