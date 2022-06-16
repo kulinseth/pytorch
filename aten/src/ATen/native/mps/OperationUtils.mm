@@ -302,7 +302,7 @@ id<MTLBuffer> scatterViewTensor(at::Tensor& dst, const at::Tensor src, id<MTLBuf
                                                                                    shape: shape
                                                                                 dataType: dataType] autorelease];
     MPSGraphTensorData* updatesTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer: updatesTensorBuffer
-                                                                                     shape: getMPSShape(src.sizes())
+                                                                                     shape: getMPSShape(src.numel())
                                                                                   dataType: dataType] autorelease];
     MPSGraphTensorData* outputTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer: dataBuffer
                                                                                     shape: shape

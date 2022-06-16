@@ -451,13 +451,6 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_,
     if (gatherTensor) {
       sourceBuffer = gatherTensor;
       src_byte_offset = 0;
-      // Scatter to `dst` if the memory is not contiguous
-      // If the memory is not contiguous, it means that the tensor has strides and we would not be
-      // able to do the copy using a single blit
-      if (!dst_.is_contiguous()) {
-          scatterViewTensor(dst_, src_, sourceBuffer);
-          return dst_;
-      }
     } else {
       src = src_.expand_as(dst_).contiguous();
       sourceBuffer = __builtin_bit_cast(id<MTLBuffer>, src.storage().data());
@@ -466,6 +459,14 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_,
   } else {
     src = src_;
   }
+
+  // Scatter to `dst` if the memory is not contiguous
+  // If the memory is not contiguous, it means that the tensor has strides and we would not be
+  // able to do the copy using a single blit
+  if (!dst_.is_contiguous()) {
+    scatterViewTensor(dst_, src_, sourceBuffer);
+    return dst_;
+}
   src._set_conj(src_.is_conj());
   src._set_neg(src_.is_neg());
 

@@ -4569,6 +4569,21 @@ class TestGatherScatter(TestCase):
         _helper([[1,2,3],[4,5,6],[7,8,9]])
         _helper([[1,2,3],[4,5,6],[7,8,9],[10,11,12]])
 
+    def test_inplace_scatter(self):
+        a_mps = torch.ones((2, 2),).to(torch.device("mps"))
+        b_mps = torch.ones((2, 2),).to(torch.device("mps"))
+
+        a_cpu = torch.ones((2, 2),).to(torch.device("cpu"))
+        b_cpu = torch.ones((2, 2),).to(torch.device("cpu"))
+
+        a_mps[:, 0] += b_mps[:, 0]
+        a_cpu[:, 0] += b_cpu[:, 0]
+        self.assertEqual(a_cpu, a_mps)
+
+        a_mps[:, 0] = a_mps[:, 0] + b_mps[:, 0]
+        a_cpu[:, 0] = a_cpu[:, 0] + b_cpu[:, 0]
+        self.assertEqual(a_cpu, a_mps)
+
 class TestViewOpsMPS(TestCase):
     exact_dtype = True
 
