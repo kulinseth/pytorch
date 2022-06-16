@@ -392,7 +392,7 @@ Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src, MPSS
   TORCH_CHECK(src_.is_mps(), "Placeholder storage has not been allocated on MPS device!");
     // extract the pointer to MTLBuffer from the Tensor's storage
   id<MTLBuffer> srcBuf = __builtin_bit_cast(id<MTLBuffer>, src.storage().data());
-  if (src.is_view()) {
+  if (src.is_view() || !src.is_contiguous()) {
     MPSCachedGraph* cachedGraph = _getCachedGraph(src);
     if (cachedGraph) {
       allocateViewTensor(src);
