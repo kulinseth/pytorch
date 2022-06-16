@@ -11,6 +11,7 @@
 #include <torch/library.h>
 #include <ATen/native/Resize.h>
 #include <c10/util/Optional.h>
+#include <ATen/native/mps/MPSDebugConfig.h>
 
 namespace at {
 namespace native {
@@ -22,8 +23,8 @@ MPSGraphTensor* chainViewOperation(
   int64_t storage_offset,
   MPSGraphTensor* inputTensor,
   const Tensor& self,
-  MPSGraphTensor** scatteredTensor,
-  MPSGraphTensor** updatesTensor
+  MPSGraphTensor* &scatteredTensor,
+  MPSGraphTensor* &updatesTensor
   ) {
 
   MPSGraphTensor *outputTensor = nil;
@@ -52,7 +53,7 @@ MPSGraphTensor* chainViewOperation(
       MPSGraphTensor* indexTensor = [mpsGraph multiplicationWithPrimaryTensor:rangeTensor
                                                               secondaryTensor:strideTensor
                                                                          name:nil];
-      *updatesTensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, mps::getMPSDataType(self.scalar_type()));
+      updatesTensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, mps::getMPSDataType(self.scalar_type()));
       MPSGraphTensor* indicesTensor = indexTensor;
       // create stride Tensors for each rank of the input tensor
       for (int i = 1; i < shape_size; i++) {
@@ -77,16 +78,16 @@ MPSGraphTensor* chainViewOperation(
       MPSGraphTensor *reshapedIndicesTensor = [mpsGraph reshapeTensor:indicesTensor
                                                             withShape:@[@-1]
                                                                  name:nil];
-      MPSGraphTensor *reshapedUpdatesTensor = [mpsGraph reshapeTensor:*updatesTensor
+      MPSGraphTensor *reshapedUpdatesTensor = [mpsGraph reshapeTensor:updatesTensor
                                                             withShape:@[@-1]
                                                                  name:nil];
 
-      *scatteredTensor = [mpsGraph scatterAlongAxis: 0
+      scatteredTensor = [mpsGraph scatterAlongAxis: 0
                                     withDataTensor: reshapedInputTensor
-                                     updatesTensor: *updatesTensor
+                                     updatesTensor: updatesTensor
                                      indicesTensor: reshapedIndicesTensor
                                               mode: MPSGraphScatterModeSet
-                                              name:nil];
+                                              name: nil];
 
       // Call gather to coalesce the needed values. Result will be of same shape as flattened indices tensor
       MPSGraphTensor *gatheredTensor = [mpsGraph gatherWithUpdatesTensor:reshapedInputTensor
@@ -180,7 +181,7 @@ Tensor as_strided_tensorimpl_mps(const Tensor& self, IntArrayRef size,
               newCachedGraph->inputTensor_ = inputTensor;
               newCachedGraph->outputTensor_ = chainViewOperation(mpsGraph, size, stride,
                                                                  storage_offset, inputTensor, self,
-                                                                 &newCachedGraph->scatteredTensor_, &newCachedGraph->updatesTensor_);
+                                                                 newCachedGraph->scatteredTensor_, newCachedGraph->updatesTensor_);
           }
           return newCachedGraph;
         }, self.storage().data());
@@ -464,8 +465,16 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_,
   // If the memory is not contiguous, it means that the tensor has strides and we would not be
   // able to do the copy using a single blit
   if (!dst_.is_contiguous()) {
-    scatterViewTensor(dst_, src_, sourceBuffer);
-    return dst_;
+    id<MTLBuffer> scatterTensor = scatterViewTensor(dst_, src_, sourceBuffer);
+    if (scatterTensor) {
+      return dst_;
+    }
+#if MPS_DEBUG_VIEW_OPS
+    else {
+      TORCH_WARN("Scatter key not found! Will perform a blit on non-contiguous memory!");
+    }
+#endif
+
 }
   src._set_conj(src_.is_conj());
   src._set_neg(src_.is_neg());

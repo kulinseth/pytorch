@@ -2,6 +2,7 @@
 
 #include <ATen/native/mps/OperationUtils.h>
 #include <ATen/mps/MPSAllocator.h>
+#include <ATen/native/mps/MPSDebugConfig.h>
 
 namespace at {
 namespace native {
@@ -265,14 +266,17 @@ MPSCachedGraph* _getCachedGraph(const at::Tensor& src) {
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   string key = getStridedKey(src, src.sizes(), src.strides(), src.storage_offset());
   MPSCachedGraph* cachedGraph = cache_->LookUp(key);
-
+#if MPS_DEBUG_VIEW_OPS
+  if (!cachedGraph)
+    TORCH_WARN("Couldn't find key: ", key);
+#endif
   return cachedGraph;
 }
 
 id<MTLBuffer> scatterViewTensor(at::Tensor& dst, const at::Tensor src, id<MTLBuffer> updatesTensorBuffer) {
   MPSCachedGraph* mpsCachedGraph = _getCachedGraph(dst);
-
-  TORCH_CHECK(mpsCachedGraph != nil);
+  if (!mpsCachedGraph)
+    return nil;
 
   MPSStream* stream = getCurrentMPSStream();
 
