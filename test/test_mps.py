@@ -4557,7 +4557,7 @@ class TestGatherScatter(TestCase):
     def test_slicing_replace_column(self):
         def _helper(tensor_data):
             # https://github.com/pytorch/pytorch/issues/78074
-            x_cpu = torch.tensor([[1,2,3],[4,5,6]])
+            x_cpu = torch.tensor(tensor_data)
             x_mps = x_cpu.to('mps')
 
             x_cpu[:,0] = 7
