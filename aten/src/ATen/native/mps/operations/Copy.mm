@@ -11,7 +11,6 @@
 #include <torch/library.h>
 #include <ATen/native/Resize.h>
 #include <c10/util/Optional.h>
-#include <ATen/native/mps/MPSDebugConfig.h>
 
 namespace at {
 namespace native {
@@ -469,13 +468,8 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_,
     if (scatterTensor) {
       return dst_;
     }
-#if MPS_DEBUG_VIEW_OPS
-    else {
-      TORCH_WARN("Scatter key not found! Will perform a blit on non-contiguous memory!");
-    }
-#endif
+  }
 
-}
   src._set_conj(src_.is_conj());
   src._set_neg(src_.is_neg());
 
