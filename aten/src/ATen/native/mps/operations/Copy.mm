@@ -22,9 +22,8 @@ MPSGraphTensor* chainViewOperation(
   int64_t storage_offset,
   MPSGraphTensor* inputTensor,
   const Tensor& self,
-  MPSGraphTensor* &scatteredTensor,
-  MPSGraphTensor* &updatesTensor
-  ) {
+  MPSGraphTensor* &reshapedInputTensor,
+  MPSGraphTensor* &reshapedIndicesTensor) {
 
   MPSGraphTensor *outputTensor = nil;
   const size_t shape_size = size.size();
@@ -52,7 +51,6 @@ MPSGraphTensor* chainViewOperation(
       MPSGraphTensor* indexTensor = [mpsGraph multiplicationWithPrimaryTensor:rangeTensor
                                                               secondaryTensor:strideTensor
                                                                          name:nil];
-      updatesTensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, mps::getMPSDataType(self.scalar_type()));
       MPSGraphTensor* indicesTensor = indexTensor;
       // create stride Tensors for each rank of the input tensor
       for (int i = 1; i < shape_size; i++) {
@@ -68,25 +66,16 @@ MPSGraphTensor* chainViewOperation(
                                             secondaryTensor:indicesTensor
                                                        name:nil];
       }
-      indicesTensor = [mpsGraph additionWithPrimaryTensor:indicesTensor
-                                          secondaryTensor:storageOffsetTensor
-                                                     name:nil];
-      MPSGraphTensor *reshapedInputTensor = [mpsGraph reshapeTensor:inputTensor
-                                                          withShape:@[@-1]
-                                                               name:nil];
-      MPSGraphTensor *reshapedIndicesTensor = [mpsGraph reshapeTensor:indicesTensor
-                                                            withShape:@[@-1]
-                                                                 name:nil];
-      MPSGraphTensor *reshapedUpdatesTensor = [mpsGraph reshapeTensor:updatesTensor
+      indicesTensor = [mpsGraph additionWithPrimaryTensor: indicesTensor
+                                          secondaryTensor: storageOffsetTensor
+                                                     name: nil];
+      reshapedInputTensor = [mpsGraph reshapeTensor: inputTensor
+                                          withShape: @[@-1]
+                                               name: nil];
+      reshapedIndicesTensor = [mpsGraph reshapeTensor:indicesTensor
                                                             withShape:@[@-1]
                                                                  name:nil];
 
-      scatteredTensor = [mpsGraph scatterAlongAxis: 0
-                                    withDataTensor: reshapedInputTensor
-                                     updatesTensor: updatesTensor
-                                     indicesTensor: reshapedIndicesTensor
-                                              mode: MPSGraphScatterModeSet
-                                              name: nil];
 
       // Call gather to coalesce the needed values. Result will be of same shape as flattened indices tensor
       MPSGraphTensor *gatheredTensor = [mpsGraph gatherWithUpdatesTensor:reshapedInputTensor
@@ -141,8 +130,8 @@ Tensor as_strided_tensorimpl_mps(const Tensor& self, IntArrayRef size,
       CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
       MPSGraphTensor* inputTensor_ = nil;
       MPSGraphTensor* outputTensor_ = nil;
-      MPSGraphTensor* scatteredTensor_ = nil;
-      MPSGraphTensor* updatesTensor_ = nil;
+      MPSGraphTensor* reshapedInputTensor_ = nil;
+      MPSGraphTensor* reshapedIndicesTensor_ = nil;
     };
 
     MPSGraphCache* cache_ = MPSGraphCache::getInstance();
@@ -180,7 +169,7 @@ Tensor as_strided_tensorimpl_mps(const Tensor& self, IntArrayRef size,
               newCachedGraph->inputTensor_ = inputTensor;
               newCachedGraph->outputTensor_ = chainViewOperation(mpsGraph, size, stride,
                                                                  storage_offset, inputTensor, self,
-                                                                 newCachedGraph->scatteredTensor_, newCachedGraph->updatesTensor_);
+                                                                 newCachedGraph->reshapedInputTensor_, newCachedGraph->reshapedIndicesTensor_);
           }
           return newCachedGraph;
         }, self.storage().data());

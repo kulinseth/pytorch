@@ -59,9 +59,6 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
       needsScatterOrNotContig = true;
     }
   }
-  else {
-    output = output_;
-  }
 
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
@@ -116,13 +113,13 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
       feeds[cachedGraph->alphaTensor] = getMPSGraphTensorFromScalar(mpsStream, alpha, getMPSScalarType(other.scalar_type()));
     }
 
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor, output);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor, needsScatterOrNotContig ? output : output_);
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
     runMPSGraph(mpsStream, cachedGraph->graph(), feeds, results);
     if (needsScatterOrNotContig) {
-      const_cast<Tensor&>(output_) = output;
+      output_.copy_(output);
     }
   }
 }

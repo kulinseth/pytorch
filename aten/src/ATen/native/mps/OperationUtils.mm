@@ -275,7 +275,7 @@ MPSCachedGraph* _getCachedGraph(const at::Tensor& src) {
 }
 
 id<MTLBuffer> _gattherScatterViewTensor(
-  const at::Tensor& src, 
+  const at::Tensor& src,
   id<MTLBuffer> sourceBuffer,
   MPSCachedGraph* mpsCachedGraph,
   at::Tensor& output,
@@ -289,54 +289,68 @@ id<MTLBuffer> _gattherScatterViewTensor(
     CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
     MPSGraphTensor* inputTensor_ = nil;
     MPSGraphTensor* outputTensor_ = nil;
-
-    MPSGraphTensor* scatteredTensor_ = nil;
-    MPSGraphTensor* updatesTensor_ = nil;
+    MPSGraphTensor* reshapedInputTensor_ = nil;
+    MPSGraphTensor* reshapedIndicesTensor_ = nil;
   };
 
   CachedGraph* cachedGraph = static_cast<CachedGraph *>(mpsCachedGraph);
 
   @autoreleasepool {
     MPSGraphTensor* inputTensor = cachedGraph->inputTensor_;
+    MPSGraphTensor* outputTensor = cachedGraph->outputTensor_;
     MPSShape *inputShape = [inputTensor shape];
     MPSShape *resultShape = getMPSShape(src.sizes());
     auto dataType = [inputTensor dataType];
 
-    id<MTLBuffer> dataBuffer = sourceBuffer;
+    id<MTLBuffer> inputBuffer = sourceBuffer;
     id<MTLBuffer> resultBuffer = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
 
     if (scatterViewOp) {
-      dataBuffer = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
-      resultBuffer = dataBuffer;
+      // In case of Scatter, we are doing an in-place operation. Input will be the same as the output buffer.
+      // The result shape will be of the same shape as the input tensor
+      inputBuffer = resultBuffer;
       resultShape = inputShape;
     }
 
-    MPSGraphTensorData* inputTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer: dataBuffer
+    MPSGraphTensorData* inputTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer: inputBuffer
                                                                                    shape: inputShape
                                                                                 dataType: dataType] autorelease];
-    MPSGraphTensorData* updatesTensorData = nil;
-    if (scatterViewOp) {
-      updatesTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer: sourceBuffer
-                                                                   shape: getMPSShape(src.numel())
-                                                                dataType: dataType] autorelease];
-    }
     MPSGraphTensorData* outputTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer: resultBuffer
                                                                                     shape: resultShape
                                                                                  dataType: getMPSDataType(src.scalar_type())] autorelease];
-    MPSGraphTensor *scatteredTensor = nil;
+    MPSGraphTensor* updatesTensor = nil;
+    MPSGraphTensorData* updatesTensorData = nil;
     if (scatterViewOp) {
-      scatteredTensor = [cachedGraph->graph() reshapeTensor: cachedGraph->scatteredTensor_
-                                                  withShape: resultShape
-                                                       name: nil];
+      MPSGraph *mpsGraph = cachedGraph->graph();
+      MPSShape *updatesTensorShape = getMPSShape(src.numel());
+      updatesTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer: sourceBuffer
+                                                                   shape: updatesTensorShape
+                                                                dataType: dataType] autorelease];
+
+      updatesTensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, dataType, updatesTensorShape);
+      MPSGraphTensor *reshapedUpdatesTensor = [mpsGraph reshapeTensor: updatesTensor
+                                                            withShape: @[@-1]
+                                                                 name: nil];
+
+      MPSGraphTensor* scatterTensor = [mpsGraph scatterAlongAxis: 0
+                                                  withDataTensor: cachedGraph->reshapedInputTensor_
+                                                   updatesTensor: updatesTensor
+                                                   indicesTensor: cachedGraph->reshapedIndicesTensor_
+                                                            mode: MPSGraphScatterModeSet
+                                                            name: nil];
+
+      outputTensor = [cachedGraph->graph() reshapeTensor: scatterTensor
+                                               withShape: resultShape
+                                                    name: nil];
     }
 
     NSMutableDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds =[NSMutableDictionary dictionary];
     feeds[inputTensor] = inputTensorData;
     if (scatterViewOp)
-      feeds[cachedGraph->updatesTensor_] = updatesTensorData;
-    
+      feeds[updatesTensor] = updatesTensorData;
+
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
-       (scatterViewOp ? scatteredTensor : cachedGraph->outputTensor_) : outputTensorData
+       outputTensor : outputTensorData
     };
 
     runMPSGraph(stream, cachedGraph->graph(), feeds, results);
