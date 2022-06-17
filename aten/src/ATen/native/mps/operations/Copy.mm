@@ -125,8 +125,11 @@ void createCachedGraph(
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
     if (!cachedGraph) {
       MPSGraphTensor *parentInputTensor = nil;
+
+      // Get parent's shape if this is a chained view
+      // Scatter will have the same hierarchy of views as gather
       string lookup_key_parent = mps::getStridedKey(self, self.sizes(), self.strides(),
-              self.storage_offset(), viewOpType);
+              self.storage_offset(), mps::GatherScatterViewOpType::Gather);
 
       CachedGraph* parentCachedGraph = static_cast<CachedGraph *>(cache_->LookUp(lookup_key_parent));
         if (parentCachedGraph) {
@@ -197,9 +200,6 @@ Tensor as_strided_tensorimpl_mps(const Tensor& self, IntArrayRef size,
 
     // Create a gather cached graph if there is none already in the cache
     createCachedGraph(self, size, stride, storage_offset, GatherScatterViewOpType::Gather);
-
-    // Create a scatter cached graph if there is none already in the cache
-    createCachedGraph(self, size, stride, storage_offset, GatherScatterViewOpType::Scatter);
   }
   return result;
 }
@@ -478,6 +478,8 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_,
   // If the memory is not contiguous, it means that the tensor has strides and we would not be
   // able to do the copy using a single blit
   if (!dst_.is_contiguous()) {
+    // Create a scatter cached graph if there is none already in the cache
+    createCachedGraph(dst_, dst_.sizes(), dst_.strides(), dst_.storage_offset(), mps::GatherScatterViewOpType::Scatter);
     id<MTLBuffer> scatterTensor = scatterViewTensor(dst_, src_, sourceBuffer);
     if (scatterTensor) {
       return dst_;
