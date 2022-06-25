@@ -472,24 +472,24 @@ bool is2D)
 void nllnd_loss_forward_impl
 (Tensor& output,
  Tensor& total_weight,
- const Tensor& input,
- const Tensor& target,
+ const Tensor& input_arg,
+ const Tensor& target_arg,
  const Tensor& weight,
  int64_t reduction,
  int64_t ignore_index,
  bool is2D)
 {
-    std::vector<long long> reshapedTarget(target.sizes().begin(), target.sizes().end());
+    std::vector<long long> reshapedTarget(target_arg.sizes().begin(), target_arg.sizes().end());
     reshapedTarget.push_back(1);
 
-    Tensor batchSizeTensor = at::empty_like(input).resize_(IntArrayRef(1));
+    Tensor batchSizeTensor = at::empty_like(input_arg).resize_(IntArrayRef(1));
     float batchVal = 1.0f;
     for(size_t i = 0; i < reshapedTarget.size(); ++i)
         batchVal *= reshapedTarget[i];
     batchSizeTensor[0] = batchVal;
 
     if(reduction == Reduction::None)
-        output.resize_(target.sizes());
+        output.resize_(target_arg.sizes());
     if(reduction == Reduction::Sum)
         output.resize_({});
     if(reduction == Reduction::Mean)
@@ -515,6 +515,10 @@ void nllnd_loss_forward_impl
     MPSGraphCache* cache_ = MPSGraphCache::getInstance();
 
     MPSStream* stream = getCurrentMPSStream();
+
+    auto input = input_arg.dim() == 1 ? input_arg.view({1, input_arg.size(0)}) : input_arg;
+
+    auto target = target_arg.dim() == 1 ? target_arg.view({1}) : target_arg;
 
     @autoreleasepool {
 
