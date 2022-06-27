@@ -314,10 +314,10 @@ Tensor& bce_loss_out_impl(const Tensor& input, const Tensor& target,
 
 // NLLLoss
 void nllnd_loss_backward_impl(
-Tensor& grad_input,
+Tensor& grad_input_arg,
 const Tensor& grad_output,
-const Tensor& input,
-const Tensor& target,
+const Tensor& input_arg,
+const Tensor& target_arg,
 const Tensor& weight,
 int64_t reduction,
 int64_t ignore_index,
@@ -325,7 +325,7 @@ const Tensor& total_weight,
 bool is2D)
 {
     // Empty output
-    if(grad_input.numel() == 0)
+    if(grad_input_arg.numel() == 0)
         return;
 
     MPSStream* stream = getCurrentMPSStream();
@@ -341,6 +341,12 @@ bool is2D)
     };
 
     MPSGraphCache* cache_ = MPSGraphCache::getInstance();
+
+    auto input = input_arg.dim() == 1 ? input_arg.view({1, input_arg.size(0)}) : input_arg;
+
+    auto target = target_arg.dim() == 1 ? target_arg.view({1}) : target_arg;
+
+    auto grad_input = grad_input_arg.dim() == 1 ? grad_input_arg.view({1, grad_input_arg.size(0)}) : grad_input_arg;
 
     @autoreleasepool {
 
