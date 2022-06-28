@@ -340,6 +340,9 @@
   self: grad.bmm(mat2.transpose(1, 2).conj())
   mat2: self.transpose(1, 2).conj().bmm(grad)
   result: self_t.bmm(mat2_p) + self_p.bmm(mat2_t)
+  
+- name: ndmm(Tensor self, Tensor mat2) -> Tensor
+  self, mat2: ndmm_backward(self, mat2, grad, grad_input_mask)
 
 - name: cat(Tensor[] tensors, int dim=0) -> Tensor
   tensors: cat_tensors_backward(grad, to_args_sizes(tensors), to_args_scalartypes(tensors), dim)

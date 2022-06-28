@@ -27,6 +27,7 @@ from torch.testing._internal.common_device_type import dtypes, ops, instantiate_
 from torch.testing import make_tensor
 from functools import partial
 from torch.testing._internal.common_nn import NNTestCase
+from itertools import product
 import numpy as np
 import torch
 
@@ -126,6 +127,168 @@ class MatmulTest(TestCase):
     def test_batched_matrix_x_broadcasted_matrix(self):
         self._helper((10, 3, 4), (4, 5))
 
+
+class MatmulTest2(TestCase):
+    def check_single_matmul(self, x, y):
+
+        def assertEqual(answer, expected):
+            if x.dtype.is_floating_point or x.dtype.is_complex:
+                k = max(x.shape[-1], 1)  # Scale the atol with the size of the matrix
+                self.assertEqual(answer, expected,
+                                 msg=f"{x.shape} x {y.shape} = {answer.shape}",
+                                 atol=k * 5e-5,
+                                 rtol=1e-4)
+            else:
+                self.assertEqual(answer, expected, msg=f"{x.shape} x {y.shape} = {answer.shape}")
+
+        # test x @ y
+        expected = np.matmul(x.cpu(), y.cpu())
+        ans = torch.matmul(x, y)
+        self.assertTrue(ans.is_contiguous())
+        ans_cpu = ans.to("cpu")
+        assertEqual(ans, expected)
+
+        # test out
+        out = torch.empty_like(ans)
+        ans = torch.matmul(x, y, out=out)
+        self.assertIs(ans, out)
+        self.assertTrue(ans.is_contiguous())
+        assertEqual(ans, expected)
+
+    def gen_sizes_matmul(self, x_dim, y_dim=4, matrix_size=4, batch_size=3):
+        """
+        Generates sequences of tuples (x, y) of with size(x) = x_dim and
+        size(y) <= y_dim that are compatible wrt. matmul
+        """
+        assert x_dim >= 1
+        assert y_dim >= 2
+        x = x_dim
+        for y in range(1, y_dim + 1):
+            for batch, mn in product(product(range(batch_size), repeat=max(x - 2, y - 2, 0)),
+                                     product(range(matrix_size), repeat=min(y, 2))):
+                if x == 1:
+                    size_x = mn[:1]
+                    size_y = batch + mn
+                    yield size_x, size_y
+                else:
+                    for k in range(matrix_size):
+                        size_x = (k,) + mn[:1]
+                        if x > 2:
+                            size_x = batch[-(x - 2):] + size_x
+                        size_y = mn
+                        if y > 2:
+                            size_y = batch[-(y - 2):] + size_y
+                        yield size_x, size_y
+
+    def test_matmul_small_brute_force_1d_Nd(self, device="mps", dtype=torch.float32):
+        make_arg = partial(make_tensor, device=device, dtype=dtype)
+
+        for (size_x, size_y), nctg_x, nctg_y in product(self.gen_sizes_matmul(1), (True, False), (True, False)):
+            #TODO: Skipping 0 tensors as behavior is unclear
+            if 0 in size_x or 0 in size_y: continue
+            x = make_arg(size_x, noncontiguous=nctg_x)
+            y = make_arg(size_y, noncontiguous=nctg_y)
+            self.check_single_matmul(x, y)
+
+
+class MatmulTest3(TestCase):
+    def _select_broadcastable_dims(self, dims_full=None):
+        # select full dimensionality
+        if dims_full is None:
+            dims_full = []
+            ndims = random.randint(1, 4)
+            dims_full = [random.randint(1, 8) for _ in range(ndims)]
+        else:
+            ndims = len(dims_full)
+
+        # select actual dimensions for ops:
+        # larger: full ndims, individual sizes may be reduced
+        # smaller: possibly reduced ndims, sizes may be reduced
+        smaller_ndims = random.randint(1, ndims)
+        dims_small = []
+        dims_large = []
+        for i in range(ndims - 1, -1, -1):
+            j = random.randint(1, 3)
+            if j == 1:  # no reduced singleton dimension
+                ds = dims_full[i]
+                dl = dims_full[i]
+            elif j == 2:  # larger may have reduced singleton dimension
+                ds = dims_full[i]
+                dl = 1 if len(dims_small) < smaller_ndims else dims_full[i]
+            elif j == 3:  # smaller may have reduced singleton dimension
+                ds = 1
+                dl = dims_full[i]
+            dims_large = [dl] + dims_large
+            if len(dims_small) < smaller_ndims:
+                dims_small = [ds] + dims_small
+        return (dims_small, dims_large, dims_full)
+
+    def test_broadcast_batched_matmul(self, device="mps"):
+        n_dim = random.randint(1, 8)
+        m_dim = random.randint(1, 8)
+        p_dim = random.randint(1, 8)
+        full_batch_dims = [random.randint(1, 3) for i in range(random.randint(1, 3))]
+        (batch_dims_small, _, _) = self._select_broadcastable_dims(full_batch_dims)
+
+        def verify_batched_matmul(full_lhs, one_dimensional):
+            if not one_dimensional:
+                lhs_dims = [n_dim, m_dim]
+                rhs_dims = [m_dim, p_dim]
+                result_dims = [n_dim, p_dim]
+            else:
+                lhs_dims = [n_dim, m_dim] if full_lhs else [m_dim]
+                rhs_dims = [m_dim, p_dim] if not full_lhs else [m_dim]
+                result_dims = [n_dim] if full_lhs else [p_dim]
+
+            lhs_mat_dims = lhs_dims if len(lhs_dims) != 1 else [1, m_dim]
+            rhs_mat_dims = rhs_dims if len(rhs_dims) != 1 else [m_dim, 1]
+            full_mat_dims = lhs_mat_dims if full_lhs else rhs_mat_dims
+            dim0_dims = rhs_dims if full_lhs else lhs_dims
+            small_dims = batch_dims_small + (rhs_mat_dims if full_lhs else lhs_mat_dims)
+
+            small = torch.randn(*(small_dims), device=device).float()
+            dim0 = torch.randn(*(dim0_dims), device=device).float()
+            full = torch.randn(*(full_batch_dims + full_mat_dims), device=device).float()
+            if not one_dimensional:
+                (lhsTensors, rhsTensors) = ((full,), (small, dim0)) if full_lhs else ((small, dim0), (full,))
+            else:
+                (lhsTensors, rhsTensors) = ((full,), (dim0,)) if full_lhs else ((dim0,), (full,))
+
+            def maybe_squeeze_result(l, r, result):
+                if len(lhs_dims) == 1 and l.dim() != 1:
+                    return result.squeeze(-2)
+                elif len(rhs_dims) == 1 and r.dim() != 1:
+                    return result.squeeze(-1)
+                else:
+                    return result
+
+            for lhs in lhsTensors:
+                lhs_expanded = lhs.expand(*(torch.Size(full_batch_dims) + torch.Size(lhs_mat_dims)))
+                lhs_expanded_matmul_fn = lhs_expanded.matmul
+                for rhs in rhsTensors:
+                    rhs_expanded = ((rhs if len(rhs_dims) != 1 else rhs.unsqueeze(-1)).
+                                    expand(*(torch.Size(full_batch_dims) + torch.Size(rhs_mat_dims))))
+                    truth = maybe_squeeze_result(lhs_expanded, rhs_expanded, lhs_expanded_matmul_fn(rhs_expanded))
+                    for l in (lhs, lhs_expanded):
+                        for r in (rhs, rhs_expanded):
+                            l_matmul_fn = l.matmul
+                            result = maybe_squeeze_result(l, r, l_matmul_fn(r))
+                            self.assertEqual(truth, result)
+                            # test torch.matmul function as well
+                            torch_result = maybe_squeeze_result(l, r, torch.matmul(l, r))
+                            self.assertEqual(truth, torch_result)
+                            # test torch.matmul with out
+                            out = torch.zeros_like(torch_result)
+                            torch.matmul(l, r, out=out)
+                            self.assertEqual(truth, maybe_squeeze_result(l, r, out))
+
+                # compare to bmm
+                bmm_result = (torch.bmm(lhs_expanded.contiguous().view(-1, *lhs_mat_dims),
+                                        rhs_expanded.contiguous().view(-1, *rhs_mat_dims)))
+                self.assertEqual(truth.view(-1, *result_dims), bmm_result.view(-1, *result_dims))
+
+        for indices in itertools.product((True, False), repeat=2):
+            verify_batched_matmul(*indices)
 
 class MPSLeakyReluTest(TestCase):
     def _npLeakyRelu(self, np_features, negative_slope=0.1):
