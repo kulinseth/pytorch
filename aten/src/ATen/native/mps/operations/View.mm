@@ -209,7 +209,8 @@ static ViewCachedGraph* createViewGraph(const Tensor& self, IntArrayRef size, In
   }
 }
 
-static ViewCachedGraph* _getCachedGraph(const at::Tensor& src) {
+Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst)
+{
   ViewCachedGraph* cachedGraph = nullptr;
 
   const IntArrayRef& base_shape = get_buffer_shape(src.storage().data());
@@ -217,32 +218,18 @@ static ViewCachedGraph* _getCachedGraph(const at::Tensor& src) {
     string key = getStridedKey(src.scalar_type(), base_shape, src.sizes(), /*is_scatter*/ false);
     cachedGraph = static_cast<ViewCachedGraph *>(MPSGraphCache::getInstance()->LookUp(key));
   }
-
-  return cachedGraph;
-}
-
-Tensor gatherViewTensor(const at::Tensor& src)
-{
-  ViewCachedGraph* cachedGraph = _getCachedGraph(src);
   // there are cases where gatherViewTensor() is called without having as_strided() called beforehand.
   // this typically may come from copy_mps variants. In such cases, when the base_shape isn't found the
   // callers would resort to make the tensor contiguous in an alternative code path.
   if (!cachedGraph) {
     return Tensor();
   }
-  Tensor output = at::native::empty_mps(src.sizes(), src.scalar_type(), c10::nullopt, kMPS);
 
-  return runViewGraph(cachedGraph, src, output, /*needsScatter*/ false);
-}
+  Tensor output;
+  if (!dst.has_storage())
+    output = at::native::empty_mps(src.sizes(), src.scalar_type(), c10::nullopt, kMPS);
 
-Tensor gatherViewTensorWithOutput(const at::Tensor& src, at::Tensor& dst)
-{
-  ViewCachedGraph* cachedGraph = _getCachedGraph(src);
-  if (!cachedGraph) {
-    return Tensor();
-  }
-
-  return runViewGraph(cachedGraph, src, dst, /*needsScatter*/ false);
+  return runViewGraph(cachedGraph, src, dst.has_storage() ? dst : output, /*needsScatter*/ false);
 }
 
 Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output)

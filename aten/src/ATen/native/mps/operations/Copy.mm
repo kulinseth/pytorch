@@ -101,7 +101,8 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool
 
   auto storage_byte_offset = src_.storage_offset() * src_.itemsize();
   if (!src_.is_contiguous()) {
-    src = gatherViewTensor(src_);
+    Tensor emptyShell = Tensor();
+    src = gatherViewTensor(src_, emptyShell);
     if (src.has_storage()) {
       storage_byte_offset = 0;
     } else {
@@ -258,12 +259,10 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_, boo
   Tensor src;
 
   if (!src_.is_contiguous()) {
-    src = returnGatherOutput ?
-      gatherViewTensorWithOutput(src_, dst_) :
-      gatherViewTensor(src_);
+    Tensor emptyShell = Tensor();
+    src = gatherViewTensor(src_, returnGatherOutput ? dst_ : emptyShell);
 
     if (src.has_storage()) {
-
       if (returnGatherOutput)
         return dst_;
 
