@@ -166,7 +166,25 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor> _lstm_mps(const Tensor& input
                                                             dimension:0
                                                             name:nil];
 
-            std::vector<MPSGraphTensor*> outputTensors = {[outputs objectAtIndex:0], outputStates, outputCellStates, outputZStates, outputCellStatesFwd};
+
+            MPSGraphTensor* outputTensor = [outputs objectAtIndex:0];
+
+            if(batch_first) {
+                outputTensor = [mpsGraph transposeTensor:outputTensor
+                                               dimension:0
+                                           withDimension:1
+                                                    name:nil];
+                outputZStates = [mpsGraph transposeTensor:outputZStates
+                                                dimension:1
+                                            withDimension:2
+                                                     name:nil];
+                outputCellStatesFwd = [mpsGraph transposeTensor:outputCellStatesFwd
+                                                      dimension:1
+                                                  withDimension:2
+                                                           name:nil];
+            }
+
+            std::vector<MPSGraphTensor*> outputTensors = {outputTensor, outputStates, outputCellStates, outputZStates, outputCellStatesFwd};
             newCachedGraph->inputTensors_ = inputTensors;
             newCachedGraph->outputTensors_ = outputTensors;
             newCachedGraph->kernelWeightsList_ = kernelWeightsList;
