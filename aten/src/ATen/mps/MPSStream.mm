@@ -13,11 +13,16 @@ MPSStream::MPSStream(Stream stream) : _stream(stream) {
   _commandQueue = [MPSDevice::getInstance()->device() newCommandQueue];
   TORCH_CHECK(_stream.device_type() == DeviceType::MPS);
   _serialQueue = dispatch_queue_create("metal gpu stream", NULL);
+  _executionDescriptor = [MPSGraphExecutionDescriptor new];
+  _executionDescriptor.completionHandler = ^(NSDictionary<MPSGraphTensor *,
+                                             MPSGraphTensorData *> * resultsDictionary,
+                                             NSError * _Nullable error) { };
 }
 
 MPSStream::~MPSStream() {
-  [_commandQueue autorelease];
+  [_commandQueue release];
   _commandQueue = nil;
+  [_executionDescriptor release];
 
   assert(_commandBuffer == nil);
 }
@@ -71,6 +76,15 @@ void MPSStream::_flush(bool commitAndWait) const {
   [_commandBuffer release];
 }
 
+void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results) {
+ dispatch_sync(_serialQueue, ^() {
+   [mpsGraph encodeToCommandBuffer:commandBuffer()
+                             feeds:feeds
+                  targetOperations:nil
+                 resultsDictionary:results
+               executionDescriptor:_executionDescriptor];
+ });
+}
 //-----------------------------------------------------------------
 //  MPSStreamImpl
 //-----------------------------------------------------------------
