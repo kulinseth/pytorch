@@ -343,9 +343,7 @@ bool is2D)
     MPSGraphCache* cache_ = MPSGraphCache::getInstance();
 
     auto input = input_arg.dim() == 1 ? input_arg.view({1, input_arg.size(0)}) : input_arg;
-
-    auto target = target_arg.dim() == 1 ? target_arg.view({1}) : target_arg;
-
+    auto target = target_arg.dim() == 0 ? target_arg.view({1}) : target_arg;
     auto grad_input = grad_input_arg.dim() == 1 ? grad_input_arg.view({1, grad_input_arg.size(0)}) : grad_input_arg;
 
     @autoreleasepool {
@@ -523,8 +521,7 @@ void nllnd_loss_forward_impl
     MPSStream* stream = getCurrentMPSStream();
 
     auto input = input_arg.dim() == 1 ? input_arg.view({1, input_arg.size(0)}) : input_arg;
-
-    auto target = target_arg.dim() == 1 ? target_arg.view({1}) : target_arg;
+    auto target = target_arg.dim() == 0 ? target_arg.view({1}) : target_arg;
 
     @autoreleasepool {
 
