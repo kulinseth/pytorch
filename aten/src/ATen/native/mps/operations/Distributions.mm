@@ -15,11 +15,9 @@
 #include <ATen/NativeFunctions.h>
 #include <ATen/AccumulateType.h>
 #include <torch/library.h>
+
 namespace at {
 namespace native {
-namespace templates {
-
-}
 
 Tensor& uniform_mps_(Tensor& input, double from, double to, c10::optional<Generator> gen_)
 {
@@ -716,8 +714,6 @@ Tensor& multinomial_out_mps(const Tensor& self,
     bool with_replacement,
     c10::optional<Generator> gen,
     Tensor& result) {
-
-  std::cout<<"Multinomial MPS\n";
 
   TORCH_CHECK(
       result.device() == self.device(),
