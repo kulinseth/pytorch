@@ -76,15 +76,27 @@ void MPSStream::_flush(bool commitAndWait) const {
   [_commandBuffer release];
 }
 
+#define USE_MPSCOMMANDBUFFER 1
+
 void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results) {
- dispatch_sync(_serialQueue, ^() {
-   [mpsGraph encodeToCommandBuffer:commandBuffer()
-                             feeds:feeds
-                  targetOperations:nil
-                 resultsDictionary:results
-               executionDescriptor:_executionDescriptor];
+  dispatch_sync(_serialQueue, ^() {
+#if USE_MPSCOMMANDBUFFER
+    [mpsGraph encodeToCommandBuffer:commandBuffer()
+                              feeds:feeds
+                   targetOperations:nil
+                  resultsDictionary:results
+                executionDescriptor:_executionDescriptor];
+#else
+    commit(true);
+    [mpsGraph runAsyncWithMTLCommandQueue:_commandQueue
+                                    feeds:feeds
+                         targetOperations:nil
+                        resultsDictionary:results
+                      executionDescriptor:_executionDescriptor];
+#endif
  });
 }
+
 //-----------------------------------------------------------------
 //  MPSStreamImpl
 //-----------------------------------------------------------------
