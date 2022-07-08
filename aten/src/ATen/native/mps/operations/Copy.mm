@@ -233,7 +233,6 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_, boo
   id<MTLBuffer> destBuffer = getMTLBufferStorage(dst_);
   id<MTLBuffer> sourceBuffer = getMTLBufferStorage(src);
   const size_t src_size = src.nbytes();
-
   if (src.dtype() == dst_.dtype()) {
     MPSStream* stream = getCurrentMPSStream();
     // for GPU to GPU copies we only encode to stream's command buffer (no flushing)
