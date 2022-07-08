@@ -1,5 +1,4 @@
 //  Copyright © 2022 Apple Inc.
-
 #include <ATen/ATen.h>
 #include <ATen/Tensor.h>
 #include <ATen/Utils.h>
@@ -20,13 +19,199 @@
 #include <c10/util/irange.h>
 #include <c10/core/QScheme.h>
 #include <c10/util/SmallVector.h>
+#include <ATen/native/IndexKernel.h>
 
 #ifdef __OBJC__
 #include <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #endif
 
+extern const char * index_select_kernel_mps;
+
 namespace at {
 namespace native {
+
+static
+bool selectIndexFunctionName(ScalarType scalar_type, std::string& indexFunctionName) {
+    indexFunctionName = "index_select_";
+    switch (scalar_type) {
+      case ScalarType::Float:
+        indexFunctionName += "float"; return true;
+      case ScalarType::Half:
+        indexFunctionName += "half";  return true;
+      case ScalarType::Int:
+        indexFunctionName += "int32"; return true;
+      case ScalarType::Short:
+        indexFunctionName += "int16"; return true;
+      case ScalarType::Char:
+        indexFunctionName += "int8";  return true;
+      case ScalarType::Byte:
+        indexFunctionName += "uint8"; return true;
+      case ScalarType::Bool:
+        indexFunctionName += "bool";  return true;
+      default:
+        return false;
+    }
+}
+
+static
+void getDataOffsets(const TensorIteratorBase& iter, simd_uint3* data_offsets, uint32_t num_outputs) {
+  memset(&data_offsets[0], 0, sizeof(simd_uint3) * num_outputs);
+  // Collect offsets for Input, Output and Index tensors
+  const uint32_t nOffsets = 3;
+  const uint32_t nDim = iter.ndim();
+
+  std::vector<uint32_t> strides[nDim];
+  const IntArrayRef& iterShape = iter.shape();
+
+  for (uint32_t i=0; i < nDim; i++)
+    for (uint32_t offset = 0; offset < nOffsets; offset++)
+      strides[i].push_back(iter.strides(offset)[i]);
+
+  for (int32_t i = 0; i < num_outputs; i++) {
+    uint32_t idx = i;
+    for (int dim = 0; dim < nDim; dim++) {
+      uint32_t remainder = idx % iterShape[dim];
+      idx /= iterShape[dim];
+
+      for (int offset = 0; offset < nOffsets; offset++) {
+        data_offsets[i][offset] += remainder * strides[dim][offset];
+      }
+    }
+  }
+}
+
+static
+bool dispatchIndexSelectKernel(TensorIteratorBase& iter, IntArrayRef index_size, IntArrayRef index_stride) {
+  using namespace mps;
+
+  @autoreleasepool {
+    const Tensor& inputTensor = iter.tensor(1);
+    Tensor outputTensor = iter.tensor(0);
+
+    id<MTLBuffer> inputBuffer  = getMTLBufferStorage(inputTensor);
+    id<MTLBuffer> outputBuffer = getMTLBufferStorage(outputTensor);
+    MTLResourceOptions options = [inputBuffer resourceOptions];
+    int64_t iter_numel = iter.numel();
+    int64_t num_indices = index_size.size();
+
+    std::string indexFunction;
+    if (!selectIndexFunctionName(inputTensor.scalar_type(), indexFunction)) {
+        TORCH_CHECK(false, "Failed to create indexing library, error: ", inputTensor.scalar_type());
+        return false;
+    }
+
+    // Get a list of offsets to index the Input, Output and the Index tensors
+    simd_uint3 data_offsets[iter_numel];
+    getDataOffsets(iter, data_offsets, iter_numel);
+
+    NSError* error = nil;
+    MPSStream* mpsStream = getCurrentMPSStream();
+    id<MTLDevice> device = MPSDevice::getInstance()->device();
+    id<MTLCommandBuffer> commandBuffer = mpsStream->commandBuffer();
+    id<MTLComputeCommandEncoder> computeEncoder = [commandBuffer computeCommandEncoder];
+
+    // FIXME: Cache indexing liberary on the device
+    id<MTLLibrary> indexingLibrary = [device newLibraryWithSource: [NSString stringWithCString: index_select_kernel_mps encoding:NSASCIIStringEncoding]
+                                                          options: nil
+                                                            error: &error];
+    if (indexingLibrary == nil) {
+        TORCH_CHECK(false, "Failed to create indexing library, error: ", [[error description] UTF8String]);
+        return false;
+    }
+
+    MTLFunctionConstantValues* constantValues = [MTLFunctionConstantValues new];
+    int64_t storage_offset = inputTensor.storage_offset();
+    [constantValues setConstantValue: &storage_offset type:MTLDataTypeLong atIndex:0];
+    [constantValues setConstantValue: &num_indices type:MTLDataTypeUInt atIndex:1];
+    id<MTLFunction> indexSelectKernelFunction = [indexingLibrary newFunctionWithName: [NSString stringWithUTF8String:indexFunction.c_str()]
+                                                                      constantValues: constantValues error:&error];
+    if (indexSelectKernelFunction == nil) {
+        TORCH_CHECK(false, "Failed to create specialized function state object, error: ", [[error description] UTF8String]);
+        return false;
+    }
+
+    id <MTLArgumentEncoder> argumentEncoder = [indexSelectKernelFunction newArgumentEncoderWithBufferIndex:0];
+    NSUInteger argumentBufferLength = argumentEncoder.encodedLength;
+    id<MTLBuffer> indexAB = [device newBufferWithLength:argumentBufferLength options:0];
+    [argumentEncoder setArgumentBuffer:indexAB offset:0];
+
+    for (uint32_t idx = 0; idx < num_indices; idx++) {
+      const Tensor& indexTensor = iter.tensor(idx+2);
+      [argumentEncoder setBuffer: getMTLBufferStorage(indexTensor)
+                          offset: 0
+                         atIndex: idx];
+      TORCH_CHECK(indexTensor.scalar_type() == ScalarType::Long, "index(): Expected dtype int64 for index");
+    }
+
+    id<MTLBuffer> offsets = [device newBufferWithBytes: data_offsets
+                                                length: sizeof(data_offsets)
+                                               options: options];
+    id<MTLBuffer> indexSize = [device newBufferWithBytes: index_size.data()
+                                                  length: sizeof(index_size[0]) * index_size.size()
+                                                 options: options];
+    id<MTLBuffer> indexStride = [device newBufferWithBytes: index_stride.data()
+                                                    length: sizeof(index_stride[0]) * index_stride.size()
+                                                   options: options];
+
+    // FIXME: PSO needs to be cached
+    id<MTLComputePipelineState> indexSelectPSO = [device newComputePipelineStateWithFunction: indexSelectKernelFunction
+                                                                                       error: &error];
+    if (indexSelectPSO == nil) {
+      TORCH_CHECK(false, "Failed to created pipeline state object, error: ", [[error description] UTF8String]);
+      return false;
+    }
+
+    for (uint32_t idx = 0; idx < num_indices; idx++) {
+      const Tensor& indexTensor = iter.tensor(idx+2);
+      [computeEncoder useResource:getMTLBufferStorage(indexTensor) usage:MTLResourceUsageRead];
+    }
+
+    [computeEncoder setComputePipelineState: indexSelectPSO];
+    [computeEncoder setBuffer: indexAB offset:0 atIndex:0];
+    [computeEncoder setBuffer: indexSize offset:0 atIndex:1];
+    [computeEncoder setBuffer: indexStride offset:0 atIndex:2];
+    [computeEncoder setBuffer: offsets offset:0 atIndex:3];
+    [computeEncoder setBuffer: inputBuffer offset:0 atIndex:4];
+    [computeEncoder setBuffer: outputBuffer offset:0 atIndex:5];
+
+    MTLSize numOutputElems = MTLSizeMake(iter.numel(), 1, 1);
+    NSUInteger threadGroupSize = indexSelectPSO.maxTotalThreadsPerThreadgroup;
+    if (threadGroupSize > iter.numel()) {
+        threadGroupSize = iter.numel();
+    }
+
+    MTLSize threadgroupSize = MTLSizeMake(threadGroupSize, 1, 1);
+    [computeEncoder dispatchThreads: numOutputElems
+              threadsPerThreadgroup: threadgroupSize];
+
+    [computeEncoder endEncoding];
+    mpsStream->commit(true);
+  }
+
+  return true;
+}
+
+void index_kernel_mps(TensorIteratorBase& iter, IntArrayRef index_size, IntArrayRef index_stride) {
+  using namespace mps;
+
+  @autoreleasepool {
+    int64_t num_indices = index_size.size();
+
+    AT_ASSERT(num_indices == index_stride.size());
+    AT_ASSERT(num_indices == iter.ntensors() - 2);
+    const Tensor& inputTensor = iter.tensor(1);
+
+    TORCH_CHECK(inputTensor.scalar_type() == ScalarType::Float ||
+                inputTensor.scalar_type() == ScalarType::Half  ||
+                inputTensor.scalar_type() == ScalarType::Int   ||
+                inputTensor.scalar_type() == ScalarType::Short ||
+                inputTensor.scalar_type() == ScalarType::Char  ||
+                inputTensor.scalar_type() == ScalarType::Byte  ||
+                inputTensor.scalar_type() == ScalarType::Bool, getMPSTypeString(inputTensor.scalar_type()) + std::string(" not supported for index.Tensor_out"));
+
+    dispatchIndexSelectKernel(iter, index_size, index_stride);
+  }
+}
 
 Tensor flip_mps(const Tensor& self, IntArrayRef dims) {
   using namespace mps;
@@ -408,5 +593,7 @@ Tensor & masked_fill__mps(Tensor& self, const Tensor & mask, const Tensor & valu
   return masked_fill__mps(self, mask, value.item());
 }
 
-}
-}
+REGISTER_DISPATCH(index_stub, &index_kernel_mps);
+
+} // native
+} // at
