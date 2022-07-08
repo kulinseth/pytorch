@@ -205,7 +205,6 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_, boo
   bool returnGatherOutput = (dst_.is_contiguous() && !dst_byte_offset);
   Tensor src;
 
-
   if (!src_.is_contiguous()) {
     Tensor emptyShell = Tensor();
     src = gatherViewTensor(src_, returnGatherOutput ? dst_ : emptyShell);

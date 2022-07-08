@@ -59,16 +59,10 @@ void MPSStream::commit(bool doFlush) {
 
 void MPSStream::commitAndWait() {
   assert(_commandBuffer);
-#if USE_MPSCOMMANDBUFFER
-  id<MTLCommandBuffer> currentCommandBuffer = _commandBuffer.rootCommandBuffer;
-  [_commandBuffer commitAndContinue];
-  [currentCommandBuffer waitUntilCompleted];
-#else
   [_commandBuffer commit];
   [_commandBuffer waitUntilCompleted];
   [_commandBuffer release];
   _commandBuffer = nil;
-#endif
 }
 
 void MPSStream::commitAndContinue() {
