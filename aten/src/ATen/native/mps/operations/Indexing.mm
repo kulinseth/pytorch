@@ -38,6 +38,8 @@ bool selectIndexFunctionName(ScalarType scalar_type, std::string& indexFunctionN
         indexFunctionName += "float"; return true;
       case ScalarType::Half:
         indexFunctionName += "half";  return true;
+      case ScalarType::Long:
+        indexFunctionName += "int64";  return true;
       case ScalarType::Int:
         indexFunctionName += "int32"; return true;
       case ScalarType::Short:
@@ -203,6 +205,7 @@ void index_kernel_mps(TensorIteratorBase& iter, IntArrayRef index_size, IntArray
 
     TORCH_CHECK(inputTensor.scalar_type() == ScalarType::Float ||
                 inputTensor.scalar_type() == ScalarType::Half  ||
+                inputTensor.scalar_type() == ScalarType::Long  ||
                 inputTensor.scalar_type() == ScalarType::Int   ||
                 inputTensor.scalar_type() == ScalarType::Short ||
                 inputTensor.scalar_type() == ScalarType::Char  ||

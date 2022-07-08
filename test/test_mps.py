@@ -5723,7 +5723,7 @@ class TestViewOpsMPS(TestCase):
             self.assertEqual(x.view(6).shape, [6])
 
 class TestAdvancedIndexing(TestCase):
-    supported_dtypes = [torch.float32, torch.float16, torch.int32, torch.int16, torch.uint8]
+    supported_dtypes = [torch.float32, torch.float16, torch.int64, torch.int32, torch.int16, torch.uint8]
 
     # examples from https://www.tutorialspoint.com/numpy/numpy_advanced_indexing.htm
     def test_indexing_1(self):
