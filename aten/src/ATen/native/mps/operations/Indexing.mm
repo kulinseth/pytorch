@@ -57,7 +57,6 @@ bool selectIndexFunctionName(ScalarType scalar_type, std::string& indexFunctionN
 
 static
 void getDataOffsets(const TensorIteratorBase& iter, simd_uint3* data_offsets, uint32_t num_outputs) {
-  memset(&data_offsets[0], 0, sizeof(simd_uint3) * num_outputs);
   // Collect offsets for Input, Output and Index tensors
   const uint32_t nOffsets = 3;
   const uint32_t nDim = iter.ndim();
@@ -102,13 +101,16 @@ bool dispatchIndexSelectKernel(TensorIteratorBase& iter, IntArrayRef index_size,
         return false;
     }
 
-    // Get a list of offsets to index the Input, Output and the Index tensors
-    simd_uint3 data_offsets[iter_numel];
-    getDataOffsets(iter, data_offsets, iter_numel);
-
     NSError* error = nil;
     MPSStream* mpsStream = getCurrentMPSStream();
     id<MTLDevice> device = MPSDevice::getInstance()->device();
+
+    id<MTLBuffer> offsets = [device newBufferWithLength: iter_numel * sizeof(simd_uint3)
+                                                options: 0];
+    // Get a list of offsets to index the Input, Output and the Index tensors
+    simd_uint3* data_offsets = (simd_uint3*)[offsets contents];
+    getDataOffsets(iter, data_offsets, iter_numel);
+
     id<MTLCommandBuffer> commandBuffer = mpsStream->commandBuffer();
     id<MTLComputeCommandEncoder> computeEncoder = [commandBuffer computeCommandEncoder];
 
@@ -145,9 +147,6 @@ bool dispatchIndexSelectKernel(TensorIteratorBase& iter, IntArrayRef index_size,
       TORCH_CHECK(indexTensor.scalar_type() == ScalarType::Long, "index(): Expected dtype int64 for index");
     }
 
-    id<MTLBuffer> offsets = [device newBufferWithBytes: data_offsets
-                                                length: sizeof(data_offsets)
-                                               options: options];
     id<MTLBuffer> indexSize = [device newBufferWithBytes: index_size.data()
                                                   length: sizeof(index_size[0]) * index_size.size()
                                                  options: options];
