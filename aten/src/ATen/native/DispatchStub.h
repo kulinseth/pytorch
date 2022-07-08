@@ -284,7 +284,7 @@ struct RegisterHIPDispatch {
 // is HIP in the PyTorch HIPify build.
 #define REGISTER_DISPATCH(name, fn) REGISTER_CUDA_DISPATCH(name, fn)
 // #define REGISTER_DISPATCH(name, fn) REGISTER_HIP_DISPATCH(name, fn)
-#elif defined(__OBJC__)
+#elif defined(__OBJC__) && defined(USE_MPS)
 // NB: this macro must be used from a 'mm' file in order to dispatch a MPS kernel
 #define REGISTER_DISPATCH(name, fn) REGISTER_MPS_DISPATCH(name, fn)
 #elif defined(CPU_CAPABILITY)
