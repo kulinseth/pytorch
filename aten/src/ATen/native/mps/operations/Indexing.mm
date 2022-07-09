@@ -31,31 +31,6 @@ namespace at {
 namespace native {
 
 static
-bool selectIndexFunctionName(ScalarType scalar_type, std::string& indexFunctionName) {
-    indexFunctionName = "index_select_";
-    switch (scalar_type) {
-      case ScalarType::Float:
-        indexFunctionName += "float"; return true;
-      case ScalarType::Half:
-        indexFunctionName += "half";  return true;
-      case ScalarType::Long:
-        indexFunctionName += "int64";  return true;
-      case ScalarType::Int:
-        indexFunctionName += "int32"; return true;
-      case ScalarType::Short:
-        indexFunctionName += "int16"; return true;
-      case ScalarType::Char:
-        indexFunctionName += "int8";  return true;
-      case ScalarType::Byte:
-        indexFunctionName += "uint8"; return true;
-      case ScalarType::Bool:
-        indexFunctionName += "bool";  return true;
-      default:
-        return false;
-    }
-}
-
-static
 void getDataOffsets(const TensorIteratorBase& iter, simd_uint3* data_offsets, uint32_t num_outputs) {
   // Collect offsets for Input, Output and Index tensors
   const uint32_t nOffsets = 3;
