@@ -34,8 +34,6 @@ typedef void* MTLDevice_t;
 namespace at {
 namespace mps {
 
-#define USE_MPSCOMMANDBUFFER 1
-
 //-----------------------------------------------------------------
 //  MPSStream
 //-----------------------------------------------------------------
