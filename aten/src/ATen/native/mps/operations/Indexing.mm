@@ -25,8 +25,6 @@
 #include <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #endif
 
-extern const char * index_select_kernel_mps;
-
 namespace at {
 namespace native {
 
@@ -73,7 +71,6 @@ bool dispatchIndexSelectKernel(TensorIteratorBase& iter, IntArrayRef index_size,
     std::string indexFunction;
     if (!selectIndexFunctionName(inputTensor.scalar_type(), indexFunction)) {
         TORCH_CHECK(false, "Failed to create indexing library, error: ", inputTensor.scalar_type());
-        return false;
     }
 
     NSError* error = nil;
@@ -89,27 +86,13 @@ bool dispatchIndexSelectKernel(TensorIteratorBase& iter, IntArrayRef index_size,
     id<MTLCommandBuffer> commandBuffer = mpsStream->commandBuffer();
     id<MTLComputeCommandEncoder> computeEncoder = [commandBuffer computeCommandEncoder];
 
-    // FIXME: Cache indexing liberary on the device
-    id<MTLLibrary> indexingLibrary = [device newLibraryWithSource: [NSString stringWithCString: index_select_kernel_mps encoding:NSASCIIStringEncoding]
-                                                          options: nil
-                                                            error: &error];
-    if (indexingLibrary == nil) {
-        TORCH_CHECK(false, "Failed to create indexing library, error: ", [[error description] UTF8String]);
-        return false;
-    }
-
     MTLFunctionConstantValues* constantValues = [MTLFunctionConstantValues new];
     int64_t storage_offset = inputTensor.storage_offset();
     [constantValues setConstantValue: &storage_offset type:MTLDataTypeLong atIndex:0];
     [constantValues setConstantValue: &num_indices type:MTLDataTypeUInt atIndex:1];
-    id<MTLFunction> indexSelectKernelFunction = [indexingLibrary newFunctionWithName: [NSString stringWithUTF8String:indexFunction.c_str()]
-                                                                      constantValues: constantValues error:&error];
-    if (indexSelectKernelFunction == nil) {
-        TORCH_CHECK(false, "Failed to create specialized function state object, error: ", [[error description] UTF8String]);
-        return false;
-    }
 
-    id <MTLArgumentEncoder> argumentEncoder = [indexSelectKernelFunction newArgumentEncoderWithBufferIndex:0];
+    id<MTLFunction> indexKernelFunction = MPSDevice::getInstance()->metalFunction(indexFunction, constantValues);
+    id<MTLArgumentEncoder> argumentEncoder = [indexKernelFunction newArgumentEncoderWithBufferIndex:0];
     NSUInteger argumentBufferLength = argumentEncoder.encodedLength;
     id<MTLBuffer> indexAB = [device newBufferWithLength:argumentBufferLength options:0];
     [argumentEncoder setArgumentBuffer:indexAB offset:0];
@@ -130,12 +113,9 @@ bool dispatchIndexSelectKernel(TensorIteratorBase& iter, IntArrayRef index_size,
                                                    options: options];
 
     // FIXME: PSO needs to be cached
-    id<MTLComputePipelineState> indexSelectPSO = [device newComputePipelineStateWithFunction: indexSelectKernelFunction
+    id<MTLComputePipelineState> indexSelectPSO = [device newComputePipelineStateWithFunction: indexKernelFunction
                                                                                        error: &error];
-    if (indexSelectPSO == nil) {
-      TORCH_CHECK(false, "Failed to created pipeline state object, error: ", [[error description] UTF8String]);
-      return false;
-    }
+    TORCH_CHECK(indexSelectPSO, "Failed to created pipeline state object, error: ", [[error description] UTF8String]);
 
     for (uint32_t idx = 0; idx < num_indices; idx++) {
       const Tensor& indexTensor = iter.tensor(idx+2);
