@@ -385,8 +385,8 @@ string get_mem_format_string(c10::MemoryFormat memory_format) {
   return mem_format_key;
 }
 
-bool selectIndexFunctionName(ScalarType scalar_type, std::string& indexFunctionName) {
-    indexFunctionName = "index_select_";
+bool getIndexFunctionName(ScalarType scalar_type, std::string& indexFunctionName, bool index_select) {
+    indexFunctionName = index_select ? "index_select_" : "index_put_";
     switch (scalar_type) {
       case ScalarType::Float:
         indexFunctionName += "float"; return true;

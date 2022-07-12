@@ -5771,6 +5771,7 @@ class TestViewOpsMPS(TestCase):
 
 class TestAdvancedIndexing(TestCase):
     supported_dtypes = [torch.float32, torch.float16, torch.int64, torch.int32, torch.int16, torch.uint8]
+    supported_np_dtypes = [np.float32, np.float16, np.int64, np.int32, np.int16, np.uint8]
 
     # examples from https://www.tutorialspoint.com/numpy/numpy_advanced_indexing.htm
     def test_indexing_1(self):
@@ -5831,6 +5832,83 @@ class TestAdvancedIndexing(TestCase):
 
     #         self.assertEqual(res_cpu, res_mps, str(dtype))
     #     [helper(dtype) for dtype in self.supported_dtypes]
+
+
+    def test_advanced_indexing_3D_get(self):
+        def helper(x_cpu):
+            x_mps = x_cpu.detach().clone().to("mps")
+            self.assertEqual(x_cpu[[1, 2], 3, :], x_mps[[1, 2], 3, :])
+            self.assertEqual(x_cpu[[0, 2], :, :], x_mps[[0, 2], :, :])
+            self.assertEqual(x_cpu[:, [1, 0], [1]], x_mps[:, [1, 0], [1]])
+
+        x_cpu = torch.tensor([[[ 0.1,  0.2,  0.3,  0.4],  # 16
+                               [ 0.5,  0.6,  0.7,  0.8],  # 32
+                               [ 0.9,  1.0,  1.1,  1.2],  # 48
+                               [ 1.3,  1.4,  1.5,  1.6]], # 64
+
+                              [[ 2.0,  2.1,  2.2,  2.3],  # 80
+                               [ 2.4,  2.5,  2.6,  2.7],  # 96
+                               [ 2.8,  2.9,  3.0,  3.1],  # 112
+                               [ 3.2,  3.3,  3.4,  3.5]], # 128
+
+                              [[ 4.0,  4.1,  4.2,  4.3], # 144
+                               [ 4.4,  4.5,  4.6,  4.7], # 160
+                               [ 4.8,  4.9,  5.0,  5.1], # 176
+                               [ 5.1,  5.2,  5.3,  5.4]]], device="cpu", dtype=torch.float32)
+        helper(x_cpu)
+        for idx in range(len(self.supported_np_dtypes)):
+            # torch.randn / torch.rand don't work with all dtypes
+            # Generate input data for all dtypes on Numpy them move to torch
+            input_t = np.random.random_sample(size=[3, 4, 4]).astype(self.supported_np_dtypes[idx])
+            inputCPU = torch.tensor(input_t, device='cpu', dtype=self.supported_dtypes[idx])
+
+            helper(inputCPU)
+
+    def test_advanced_indexing_3D_put(self):
+        def helper(x_cpu):
+            dtype = x_cpu.dtype
+            x_mps = x_cpu.detach().clone().to("mps")
+
+            out_tensor_cpu = torch.tensor([88, 99] , dtype=dtype, device="cpu")
+            out_tensor_cpu_view = out_tensor_cpu[1:] # grab 99.0 from the list (Tensor with a storage offset of 1 on CPU)
+
+            out_tensor_mps = torch.tensor([88, 99] , dtype=dtype, device="mps")
+            out_tensor_mps_view = out_tensor_mps[1:] # grab 99.0 from the list (Tensor with a storage offset of 1 on MPS)
+
+            x_cpu[[1, 2], 3, :] = out_tensor_cpu_view
+            x_mps[[1, 2], 3, :] = out_tensor_mps_view
+            self.assertEqual(x_cpu, x_mps)
+
+            x_cpu[[0, 2], :, :] = out_tensor_cpu_view
+            x_mps[[0, 2], :, :] = out_tensor_mps_view
+            self.assertEqual(x_cpu, x_mps)
+
+            x_cpu[:, [1, 0], [1]] = out_tensor_cpu_view
+            x_mps[:, [1, 0], [1]] = out_tensor_mps_view
+            self.assertEqual(x_cpu, x_mps)
+
+        x_cpu = torch.tensor([[[ 0.1,  0.2,  0.3,  0.4],  # 16
+                               [ 0.5,  0.6,  0.7,  0.8],  # 32
+                               [ 0.9,  1.0,  1.1,  1.2],  # 48
+                               [ 1.3,  1.4,  1.5,  1.6]], # 64
+
+                              [[ 2.0,  2.1,  2.2,  2.3],  # 80
+                               [ 2.4,  2.5,  2.6,  2.7],  # 96
+                               [ 2.8,  2.9,  3.0,  3.1],  # 112
+                               [ 3.2,  3.3,  3.4,  3.5]], # 128
+
+                              [[ 4.0,  4.1,  4.2,  4.3], # 144
+                               [ 4.4,  4.5,  4.6,  4.7], # 160
+                               [ 4.8,  4.9,  5.0,  5.1], # 176
+                               [ 5.1,  5.2,  5.3,  5.4]]], device="cpu", dtype=torch.float32)
+        helper(x_cpu)
+        for idx in range(len(self.supported_np_dtypes)):
+            # torch.randn / torch.rand don't work with all dtypes
+            # Generate input data for all dtypes on Numpy them move to torch
+            input_t = np.random.random_sample(size=[3, 4, 4]).astype(self.supported_np_dtypes[idx])
+            inputCPU = torch.tensor(input_t, device='cpu', dtype=self.supported_dtypes[idx])
+
+            helper(inputCPU)
 
     # tests from test_indexing.py
     def test_bool_indices(self, device="mps"):
