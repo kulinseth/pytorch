@@ -5991,7 +5991,8 @@ class TestAdvancedIndexing(TestCase):
             self.assertEqual(len(w), 2)
 
     def test_bool_indices_accumulate(self, device="mps"):
-        mask = torch.zeros(size=(10, ), dtype=torch.bool, device=device)
+        mask = torch.zeros(size=(10, ), dtype=torch.uint8, device=device)
+        mask = mask > 0
         y = torch.ones(size=(10, 10), device=device)
         y.index_put_((mask, ), y[mask], accumulate=True)
         self.assertEqual(y, torch.ones(size=(10, 10), device=device))
@@ -6216,7 +6217,13 @@ class TestAdvancedIndexing(TestCase):
 
     def test_index_src_datatype(self):
         def helper(device, dtype):
+            orig_dtype = dtype
+            if dtype is torch.bool:
+                dtype = torch.uint8
+
             src = torch.ones(3, 2, 4, device=device, dtype=dtype)
+            if orig_dtype is torch.bool:
+                src = src == 1
             # test index
             res = src[[0, 2, 1], :, :]
             self.assertEqual(res.shape, src.shape)
