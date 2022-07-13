@@ -90,7 +90,7 @@ MPSGraphTensorData *getMPSGraphTensorData(MPSGraph* mpsGraph, MPSStream* mpsStre
 MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, const Scalar& scalar, MPSDataType dataType);
 
 // Helper function to choose the kernel name for advanced indexing
-bool getIndexFunctionName(ScalarType scalar_type, std::string& indexFunctionName, bool index_select);
+bool getIndexFunctionName(ScalarType scalar_type, std::string& indexFunctionName, bool index_select, bool accumulate);
 
 MPSGraph* make_mps_graph();
 void printTensorNDArray(const Tensor& t);
