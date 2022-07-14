@@ -545,6 +545,8 @@ TORCH_IMPL_FUNC(cat_out_mps)
 
   // Indices of tensors to be skipped because they're empty
   std::vector<int64_t> skipped_tensor_indices;
+  // Tensors to be read
+  std::vector<const Tensor*> input_tensors;
   int tensor_idx = 0;
   for(const Tensor& t : materialized_inputs) {
     if(t.numel() == 0 || should_skip(t)) {
@@ -552,6 +554,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
       tensor_idx++;
       continue;
     }
+    input_tensors.push_back(&t);
     nDims = t.dim();
     // TODO: Is this OK?
     notSkippedTensor = &t;
@@ -659,26 +662,22 @@ TORCH_IMPL_FUNC(cat_out_mps)
           MPSGraphTensor* castInputMPSGraphTensors[len_tensor_array];
 
           int graph_tensor_idx = 0;
-          int i = 0;
-          for(const Tensor& tensor : materialized_inputs) {
-            if(std::find(skipped_tensor_indices.begin(), skipped_tensor_indices.end(), i) == skipped_tensor_indices.end()) {
-              inputMPSGraphTensors[graph_tensor_idx] = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(tensor.scalar_type()) );
-              if(getMPSDataType(result_type(inputs)) == MPSDataTypeBool) {
-                castInputMPSGraphTensors[graph_tensor_idx] = [mpsGraph castTensor:inputMPSGraphTensors[graph_tensor_idx]
-                                                                             toType:MPSDataTypeFloat32
-                                                                               name:[NSString stringWithFormat:@"castInput%@", [NSNumber numberWithInt:graph_tensor_idx]]];
-              }
-              else {
-                if(tensor.scalar_type() != result_type(inputs))
-                  castInputMPSGraphTensors[graph_tensor_idx] = [mpsGraph castTensor:inputMPSGraphTensors[graph_tensor_idx]
-                                                                             toType:getMPSDataType(result_type(inputs))
-                                                                               name:[NSString stringWithFormat:@"castInput%@", [NSNumber numberWithInt:graph_tensor_idx]]];
-                else
-                  castInputMPSGraphTensors[graph_tensor_idx] = inputMPSGraphTensors[graph_tensor_idx];
-              }
-              graph_tensor_idx++;
+          for(const Tensor* tensor : input_tensors) {
+            inputMPSGraphTensors[graph_tensor_idx] = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(tensor->scalar_type()) );
+            if(getMPSDataType(result_type(inputs)) == MPSDataTypeBool) {
+              castInputMPSGraphTensors[graph_tensor_idx] = [mpsGraph castTensor:inputMPSGraphTensors[graph_tensor_idx]
+                                                                           toType:MPSDataTypeFloat32
+                                                                             name:[NSString stringWithFormat:@"castInput%@", [NSNumber numberWithInt:graph_tensor_idx]]];
             }
-            i++;
+            else {
+              if(tensor->scalar_type() != result_type(inputs))
+                castInputMPSGraphTensors[graph_tensor_idx] = [mpsGraph castTensor:inputMPSGraphTensors[graph_tensor_idx]
+                                                                           toType:getMPSDataType(result_type(inputs))
+                                                                             name:[NSString stringWithFormat:@"castInput%@", [NSNumber numberWithInt:graph_tensor_idx]]];
+              else
+                castInputMPSGraphTensors[graph_tensor_idx] = inputMPSGraphTensors[graph_tensor_idx];
+            }
+            graph_tensor_idx++;
           }
 
           auto inputTensorsArray = [NSArray arrayWithObjects:castInputMPSGraphTensors
