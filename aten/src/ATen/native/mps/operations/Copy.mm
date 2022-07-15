@@ -155,21 +155,23 @@ static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_, bool n
   id<MTLDevice> device = MPSDevice::getInstance()->device();
   auto dst_byte_offset = dst_.storage_offset() * dst_.itemsize();
   id<MTLBuffer> destBuffer = getMTLBufferStorage(dst_);
+  uint64_t size = 0;
 
   if (src_.is_view()) {
     src = src_.to(dst_.dtype()).expand_as(dst_).contiguous();
+    // Get the actual size of a View (takes into account the storage offset)
+    // For View tensors, the storage offset can be bigger than what's being reported by nbytes
+    size = at::detail::computeStorageNbytesContiguous(src.sizes(), src.element_size(), src.storage_offset());
   } else {
     src = src_;
     if (src.dtype() != dst_.dtype()) {
       // In case of dtype change, perform conversion on source device
       src = src.to(dst_.dtype());
     }
+    size = src.nbytes();
   }
 
   const void* host_src = src.storage().data();
-  // Get the actual size of a View (takes into account the storage offset)
-  // For View tensors, the storage offset can be bigger than what's being reported by nbytes
-  uint64_t size = at::detail::computeStorageNbytesContiguous(src.sizes(), src.element_size(), src.storage_offset());
 
   NSUInteger sourceOffset = 0;
   @autoreleasepool {
