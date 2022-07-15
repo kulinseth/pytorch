@@ -167,7 +167,9 @@ static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_, bool n
   }
 
   const void* host_src = src.storage().data();
-  uint64_t size = src.nbytes();
+  // Get the actual size of a View (takes into account the storage offset)
+  // For View tensors, the storage offset can be bigger than what's being reported by nbytes
+  uint64_t size = at::detail::computeStorageNbytesContiguous(src.sizes(), src.element_size(), src.storage_offset());
 
   NSUInteger sourceOffset = 0;
   @autoreleasepool {
