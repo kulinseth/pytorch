@@ -2,19 +2,9 @@
 
 #include <ATen/native/mps/OperationUtils.h>
 #include <ATen/native/Resize.h>
+#include <ATen/mps/MPSAllocator.h>
 
 namespace at {
-
-// these are from MPSAllocator
-namespace mps {
-  // to check the requested non-aligned size of an MTL buffer
-  ssize_t get_requested_buffer_size(void* ptr);
-  // to retrieve the shape of a base tensor from a view tensor
-  IntArrayRef get_buffer_shape(void* ptr);
-  // to set the shape of a base tensor from a view tensor
-  void set_buffer_shape(void* ptr, const IntArrayRef& shape);
-}
-
 namespace native {
 namespace mps {
 
