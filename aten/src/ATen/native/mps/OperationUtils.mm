@@ -293,45 +293,55 @@ MPSGraphTensorData *getMPSGraphTensorData(MPSGraph* mpsGraph,
 }
 
 MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, const Scalar& scalar, MPSDataType dataType) {
+  size_t scalar_size = 0;
   union {
     float f; // MPS doesn't support 'double'
     at::Half h;
     int64_t i;
     bool b;
   } v;
+
   switch (dataType) {
     case MPSDataTypeFloat32:
       v.f = scalar.to<float>();
+      scalar_size = sizeof(float);
       break;
     case MPSDataTypeFloat16:
       v.h = scalar.to<at::Half>();
+      scalar_size = sizeof(short);
       break;
     case MPSDataTypeInt64:
       v.i = scalar.to<int64_t>();
+      scalar_size = sizeof(int64_t);
       break;
     case MPSDataTypeInt32:
       v.i = scalar.to<int32_t>();
+      scalar_size = sizeof(int32_t);
       break;
     case MPSDataTypeInt16:
       v.i = scalar.to<int16_t>();
+      scalar_size = sizeof(int16_t);
       break;
     case MPSDataTypeInt8:
       v.i = scalar.to<int8_t>();
+      scalar_size = sizeof(int8_t);
       break;
     case MPSDataTypeUInt8:
       v.i = scalar.to<uint8_t>();
+      scalar_size = sizeof(uint8_t);
       break;
     case MPSDataTypeBool:
       v.b = scalar.to<bool>();
+      scalar_size = sizeof(bool);
       break;
     default:
       TORCH_INTERNAL_ASSERT(false, "Unsupported scalar type on MPS backend.")
   }
 
-  MPSNDArrayDescriptor *tensorDesc = [MPSNDArrayDescriptor descriptorWithDataType:dataType shape:@[@1]];
-  MPSNDArray *tensorNDArray = [[[MPSNDArray alloc] initWithDevice:mpsStream->device() descriptor:tensorDesc] autorelease];
-  [tensorNDArray writeBytes:&v strideBytes:nil];
-  MPSGraphTensorData* result = [[[MPSGraphTensorData alloc] initWithMPSNDArray:tensorNDArray] autorelease];
+  id<MTLBuffer> buffer = at::mps::get_scalar_buffer_with_value(&v, scalar_size, mpsStream);
+  MPSGraphTensorData* result = [[[MPSGraphTensorData alloc] initWithMTLBuffer: buffer
+                                                                        shape: @[@1]
+                                                                     dataType: dataType] autorelease];
   return result;
 }
 

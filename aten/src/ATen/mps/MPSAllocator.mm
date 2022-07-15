@@ -4,6 +4,8 @@
 #include <c10/core/Allocator.h>
 #include <c10/core/Storage.h>
 #include <ATen/CPUFunctions.h>
+#include <mach/kern_return.h>
+#include <iostream>
 
 namespace at {
 namespace mps {
@@ -20,19 +22,19 @@ HeapBlock* MPSHeapAllocatorImpl::get_free_heap(AllocParams& p)
 
   auto it = pool->heaps.lower_bound(&search_key);
   if (it == pool->heaps.end()) {
-    id<MTLHeap> heap = HeapBlock::createMTLHeap(pool->device, p.size(), pool->is_shared);
+    id<MTLHeap> heap = HeapBlock::createMTLHeap(pool->device, p.size(), pool->usage);
     if (heap) {
       size_t heap_size = HeapBlock::heapAvailableSize(heap);
       heapBlock = new HeapBlock(heap_size, heap, pool);
 
-      if (debug_info_enabled()) {
+      if (m_debug_verbosity & DebugVerbosity::ALLOCATIONS) {
         static unsigned int heap_counter = 0;
         std::cerr << "\nAllocated "
-                  << (pool->is_small ? "small " : "large ")
-                  << (pool->is_shared ? "shared " : "private ")
+                  << ((pool->usage & UsageFlags::SMALL) ? "small " : "large ")
+                  << ((pool->usage & UsageFlags::SHARED) ? "shared " : "private ")
                   << "heap of size " << format_size(heap_size)
                   << " (#heaps: " << (++heap_counter)
-                  << ", free memory: " << format_size(max_available_size()) << ")\n";
+                  << ", current allocated: " << format_size(current_allocated_size()) << ")\n";
       }
     }
   } else {
@@ -46,14 +48,14 @@ HeapBlock* MPSHeapAllocatorImpl::get_free_heap(AllocParams& p)
 
 bool MPSHeapAllocatorImpl::alloc_buffer(AllocParams& p)
 {
-  if (m_set_fraction && m_total_allocated_memory + p.size() > max_available_size())
+  if (m_fraction_limit > 0.0 && current_allocated_size() + p.size() > m_max_total_allowed_size)
     return false;
 
   HeapBlock *heap = get_free_heap(p);
   if (!heap)
     return false; // this will cause releasing pool buffers to free up memory
 
-  id<MTLBuffer> buffer = heap->newMTLBuffer(p.size(), p.pool->is_shared);
+  id<MTLBuffer> buffer = heap->newMTLBuffer(p.size(), p.pool->usage);
   // this should never happen as the backing memory (i.e., heap) was allocated successfully.
   TORCH_INTERNAL_ASSERT(buffer);
   // insert heap after a buffer was created on it to update the order of heap's set
@@ -61,53 +63,54 @@ bool MPSHeapAllocatorImpl::alloc_buffer(AllocParams& p)
   p.buffer_block = new BufferBlock(p.size(), p.requested_size, buffer, heap, m_allocated_buffers.size() + 1);
   m_allocated_buffers[p.buffer_block->buffer] = p.buffer_block;
   m_total_allocated_memory += p.size();
+  p.pool->n_buffers++;
 
-  if (debug_info_enabled()) {
+  if (m_debug_verbosity & DebugVerbosity::ALLOCATIONS) {
     std::cerr << "Allocated "
-              << (p.pool->is_shared ? "shared" : "private")
+              << ((p.pool->usage & UsageFlags::SHARED) ? "shared" : "private")
+              << ((p.pool->usage & UsageFlags::SCALAR) ? " scalar" : "")
               << " buffer #" << p.buffer_block->buf_id
               << " of size " << format_size(p.size())
               << " at " << p.buffer_block->buffer
-              << " (requested size: " << format_size(p.requested_size)
-              << ", heap size: " << format_size(heap->size.available)
-              << ", total allocated: " << format_size(m_total_allocated_memory) << ")\n";
+              << " (requested: " << format_size(p.requested_size)
+              << ", heap: " << format_size(heap->size.available)
+              << ", total: " << format_size(m_total_allocated_memory)
+              << ", pool: " << p.pool->n_buffers << ")\n";
   }
   return true;
 }
 
 bool MPSHeapAllocatorImpl::get_free_buffer(AllocParams& p)
 {
+  // this helps to monitor "implicit" allocations from MPS backend and to prevent OOM and system failure.
+  if (m_fraction_limit > 0.0 && current_allocated_size() + p.size() > m_max_total_allowed_size)
+    return false;
+
   BufferPool& pool = *p.pool;
   auto it = pool.buffers.lower_bound(&p.search_key);
   if (it == pool.buffers.end())
     return false;
-  // do not return an oversized buffer for a large request
-  // allow oversized buffer size to be rounded up but within a limit
-  if ((p.size() < max_split_size() && (*it)->size >= max_split_size()) ||
-     ((p.size() >= max_split_size()) && ((*it)->size >= p.size() + kLargeHeap)))
-    return false;
 
   p.buffer_block = *it;
   pool.buffers.erase(it);
-  if (debug_info_enabled()) {
+  if (m_debug_verbosity & DebugVerbosity::RECYCLES) {
     std::cerr << "Reusing "
-              << (p.pool->is_shared ? "shared" : "private")
+              << ((p.pool->usage & UsageFlags::SHARED) ? "shared" : "private")
+              << ((p.pool->usage & UsageFlags::SCALAR) ? " scalar" : "")
               << " buffer #" << p.buffer_block->buf_id
               << " of size " << format_size(p.buffer_block->size)
               << " at " << p.buffer_block->buffer
-              << " (requested size: " << format_size(p.requested_size) << ")\n";
+              << " (requested: " << format_size(p.requested_size) << ")\n";
   }
   return true;
 }
 
-id<MTLBuffer> MPSHeapAllocatorImpl::Malloc(size_t size, bool sharedStorage)
+BufferBlock* MPSHeapAllocatorImpl::alloc_buffer_block(size_t size, uint32_t usage)
 {
   TORCH_CHECK(size < m_max_buffer_size, "Invalid buffer size: ", format_size(size));
 
-  std::lock_guard<std::mutex> lock(m_mutex);
-
-  size_t alloc_size = get_allocation_size(size, sharedStorage);
-  auto& pool = get_pool(alloc_size, sharedStorage);
+  size_t alloc_size = get_allocation_size(size, usage);
+  auto& pool = get_pool(alloc_size, usage);
   AllocParams params(alloc_size, size, &pool);
 
   bool block_found =
@@ -117,13 +120,19 @@ id<MTLBuffer> MPSHeapAllocatorImpl::Malloc(size_t size, bool sharedStorage)
       alloc_buffer(params) ||
       // Free enough available cached blocks to satisfy alloc and retry alloc.
       (release_available_cached_buffers(params) && alloc_buffer(params)) ||
-      // Free all non-split cached buffers and retry alloc.
+      // Free all cached buffers and retry alloc.
       (release_cached_buffers() && alloc_buffer(params));
 
   BufferBlock* buffer_block = params.buffer_block;
-  TORCH_INTERNAL_ASSERT(block_found && buffer_block);
+
+  TORCH_CHECK(block_found && buffer_block, "MPS backend out of memory (currently allocated: ",
+              format_size(current_allocated_size()), ", max allowed: ", format_size(m_max_total_allowed_size),
+              "). Tried to allocate ", format_size(alloc_size), " on ", ((pool.usage & UsageFlags::SHARED) ? "shared" : "private"),
+              " pool. Use PYTORCH_MPS_ALLOCATOR_FRACTION=0.0 to disable upper limit for memory allocations (may cause system failure).");
+
   buffer_block->in_use = true;
-  return buffer_block->buffer;
+
+  return buffer_block;
 }
 
 void MPSHeapAllocatorImpl::free_buffer(BufferBlock* buffer_block)
@@ -146,10 +155,115 @@ BufferBlock* MPSHeapAllocatorImpl::get_allocated_buffer_block(void* ptr)
   return it->second;
 }
 
-void MPSHeapAllocatorImpl::trigger_memory_callbacks(BufferBlock* buffer_block, IMpsAllocatorCallback::EventType event) {
+void MPSHeapAllocatorImpl::trigger_memory_callbacks(BufferBlock* buffer_block, IMpsAllocatorCallback::EventType event)
+{
   for (const auto& name : MPSAllocatorCallbacksRegistry()->Keys()) {
     MPSAllocatorCallbacksRegistry()->Create(name)->executeMPSAllocatorCallback(buffer_block->buffer, event);
   }
+}
+
+void MPSHeapAllocatorImpl::release_buffer(BufferBlock* buffer_block, bool remove_empty_heap)
+{
+  trigger_memory_callbacks(buffer_block, IMpsAllocatorCallback::EventType::RELEASED);
+
+  HeapBlock *heap = buffer_block->heap;
+  BufferPool *pool = heap->pool;
+  m_total_allocated_memory -= buffer_block->size;
+  m_allocated_buffers.erase(buffer_block->buffer);
+  pool->buffers.erase(buffer_block);
+  pool->n_buffers--;
+  // will re-insert later to keep the heaps list sorted based on heap's new available size (if heap not empty)
+  pool->heaps.erase(heap);
+  heap->releaseMTLBuffer(buffer_block->buffer);
+
+  if (m_debug_verbosity & DebugVerbosity::RELEASES) {
+    std::cerr << "Released buffer #" << buffer_block->buf_id
+              << " of size " << format_size(buffer_block->size)
+              << " (heap size: " << format_size(heap->size.available)
+              << ", total allocated: " << format_size(m_total_allocated_memory) << ")\n";
+
+  }
+  delete buffer_block;
+
+  if (remove_empty_heap && heap->n_buffers == 0) {
+    heap->releaseMTLHeap();
+    if (m_debug_verbosity & DebugVerbosity::RELEASES) {
+      std::cerr << "Released heap of size " << format_size(heap->size.total)
+                << " (free memory: " << format_size(max_available_size()) << ")\n";
+    }
+    delete heap;
+  } else {
+    pool->heaps.insert(heap);
+  }
+}
+
+void MPSHeapAllocatorImpl::release_buffers(BufferPool& pool)
+{
+  if ((m_debug_verbosity & DebugVerbosity::ALLOCATIONS) && pool.n_buffers > 0) {
+    std::cerr << "Releasing " << pool.n_buffers
+              << " buffers from "
+              << ((pool.usage & UsageFlags::SHARED) ? "shared" : "private")
+              << ((pool.usage & UsageFlags::SCALAR) ? " scalar" : "")
+              << " pool (free buffers: " << pool.buffers.size()
+              << ", current allocated:" << format_size(current_allocated_size()) << ")\n";
+  }
+  auto it = pool.buffers.begin();
+  while (it != pool.buffers.end()) {
+    BufferBlock* buffer_block = *it;
+    ++it;
+    release_buffer(buffer_block);
+  }
+}
+
+bool MPSHeapAllocatorImpl::release_available_cached_buffers(const AllocParams& p)
+{
+  BufferPool& pool = *p.pool;
+
+  if (pool.buffers.empty())
+    return false;
+
+  BufferBlock key = p.search_key;
+  auto it = pool.buffers.lower_bound(&key);
+  if (it == pool.buffers.end()) {
+    size_t totalReleased = 0;
+    --it;
+    while (totalReleased < key.size) {
+      auto cur = it;
+      totalReleased += (*it)->size;
+      if (it != pool.buffers.begin()) {
+        --it;
+        release_buffer(*cur);
+      } else {
+        release_buffer(*cur);
+        break;
+      }
+    }
+    if (totalReleased < key.size)
+      return false;
+  } else {
+    release_buffer(*it);
+  }
+  return true;
+}
+
+bool MPSHeapAllocatorImpl::release_cached_buffers()
+{
+  // Free all cached blocks to system allocator
+  release_buffers(m_large_pool_private);
+  release_buffers(m_large_pool_shared);
+  release_buffers(m_small_pool_private);
+  release_buffers(m_small_pool_shared);
+  release_buffers(m_scalar_pool);
+  return true;
+}
+
+// public interface to MPSAllocator
+id<MTLBuffer> MPSHeapAllocatorImpl::Malloc(size_t size, uint32_t usage)
+{
+  std::lock_guard<std::mutex> lock(m_mutex);
+
+  BufferBlock* buffer_block = alloc_buffer_block(size, usage);
+  return buffer_block ? buffer_block->buffer : nullptr;
 }
 
 bool MPSHeapAllocatorImpl::isSharedBuffer(void* ptr)
@@ -158,7 +272,28 @@ bool MPSHeapAllocatorImpl::isSharedBuffer(void* ptr)
 
   BufferBlock *buffer_block = get_allocated_buffer_block(ptr);
   // it's OK for the buffer_block to not exist yet
-  return buffer_block && buffer_block->heap->pool->is_shared;
+  return buffer_block && (buffer_block->heap->pool->usage & UsageFlags::SHARED);
+}
+
+id<MTLBuffer> MPSHeapAllocatorImpl::getScalarBufferWithValue(void* value, size_t size, MPSStream* stream)
+{
+  BufferBlock* buffer_block = nullptr;
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+
+    buffer_block = alloc_buffer_block(size, UsageFlags::SCALAR);
+    if (!buffer_block)
+      return nullptr;
+    memcpy([buffer_block->buffer contents], value, size);
+  }
+  // this will return the buffer block back to the pool after
+  // command buffer finishes copying scalar from CPU to GPU
+  [stream->commandBuffer() addCompletedHandler:^(id <MTLCommandBuffer>) {
+    //Free(buffer_block->buffer);
+    std::lock_guard<std::mutex> lock(m_mutex);
+    free_buffer(buffer_block);
+  }];
+  return buffer_block->buffer;
 }
 
 ssize_t MPSHeapAllocatorImpl::getRequestedBufferSize(void* ptr)
@@ -210,91 +345,6 @@ void MPSHeapAllocatorImpl::EmptyCache()
   release_cached_buffers();
 }
 
-void MPSHeapAllocatorImpl::release_buffer(BufferBlock* buffer_block, bool remove_empty_heap)
-{
-  trigger_memory_callbacks(buffer_block, IMpsAllocatorCallback::EventType::RELEASED);
-
-  HeapBlock *heap = buffer_block->heap;
-  BufferPool *pool = heap->pool;
-  m_total_allocated_memory -= buffer_block->size;
-  m_allocated_buffers.erase(buffer_block->buffer);
-  pool->buffers.erase(buffer_block);
-  // will re-insert later to keep the heaps list sorted based on heap's new available size (if heap not empty)
-  pool->heaps.erase(heap);
-  heap->releaseMTLBuffer(buffer_block->buffer);
-  if (debug_info_enabled()) {
-    std::cerr << "Released buffer #" << buffer_block->buf_id
-              << " of size " << format_size(buffer_block->size)
-              << " (heap size: " << format_size(heap->size.available)
-              << ", total allocated: " << format_size(m_total_allocated_memory) << ")\n";
-
-  }
-  delete buffer_block;
-
-  if (remove_empty_heap && heap->n_buffers == 0) {
-    heap->releaseMTLHeap();
-    if (debug_info_enabled()) {
-      std::cerr << "Released heap of size " << format_size(heap->size.total)
-                << " (free memory: " << format_size(max_available_size()) << ")\n";
-    }
-    delete heap;
-  } else {
-    pool->heaps.insert(heap);
-  }
-}
-
-void MPSHeapAllocatorImpl::release_buffers(BufferPool& pool)
-{
-  auto it = pool.buffers.begin();
-  while (it != pool.buffers.end()) {
-    BufferBlock* buffer_block = *it;
-    ++it;
-    release_buffer(buffer_block);
-  }
-}
-
-bool MPSHeapAllocatorImpl::release_available_cached_buffers(const AllocParams& p)
-{
-  BufferPool& pool = *p.pool;
-
-  if (max_split_size() == std::numeric_limits<size_t>::max() || pool.buffers.empty())
-    return false;
-
-  BufferBlock key = p.search_key;
-  key.size = (key.size < max_split_size()) ? max_split_size() : key.size;
-  auto it = pool.buffers.lower_bound(&key);
-  if (it == pool.buffers.end()) {
-    size_t totalReleased = 0;
-    --it;
-    while ((totalReleased < key.size) && ((*it)->size >= max_split_size())) {
-      auto cur = it;
-      totalReleased += (*it)->size;
-      if (it != pool.buffers.begin()) {
-        --it;
-        release_buffer(*cur);
-      } else {
-        release_buffer(*cur);
-        break;
-      }
-    }
-    if (totalReleased < key.size)
-      return false;
-  } else {
-    release_buffer(*it);
-  }
-  return true;
-}
-
-bool MPSHeapAllocatorImpl::release_cached_buffers()
-{
-  // Free all cached blocks to system allocator
-  release_buffers(m_large_pool_private);
-  release_buffers(m_large_pool_shared);
-  release_buffers(m_small_pool_private);
-  release_buffers(m_small_pool_shared);
-  return true;
-}
-
 } // namespace HeapAllocator
 
 // Use "at::mps::GetMPSAllocator()" to acquire a handle to MPS Allocator
@@ -308,19 +358,21 @@ HeapAllocator::MPSHeapAllocatorImpl& _getAllocImpl() {
 // MPS allocator struct to be registered with Pytorch
 struct TORCH_API MPSAllocator final : public at::Allocator {
 public:
-  explicit MPSAllocator(bool useSharedStorage) :
-      m_has_unified_memory(_getAllocImpl().Device().hasUnifiedMemory), m_use_shared_storage(useSharedStorage)
+  explicit MPSAllocator(uint32_t Usage) :
+      m_has_unified_memory(_getAllocImpl().Device().hasUnifiedMemory), m_usage(Usage)
   {
-    const bool enable_debug_info = isEnvVarEnabled("PYTORCH_DEBUG_MPS_ALLOCATOR");
-    if (enable_debug_info) {
-      _getAllocImpl().enable_debug_info();
-      if (!m_use_shared_storage || m_has_unified_memory) {
+    if (_getAllocImpl().getDebugVerbosity()) {
+      if (!(m_usage & HeapAllocator::UsageFlags::SHARED) || m_has_unified_memory) {
+        const size_t max_total_allowed_size = _getAllocImpl().getMaxTotalAllowedSize();
         std::cerr << "Initializing "
-                  << (useSharedStorage ? "shared" : "private")
+                  << ((m_usage & HeapAllocator::UsageFlags::SHARED) ? "shared" : "private")
                   << " heap allocator on "
                   << (m_has_unified_memory ? "unified" : "discrete")
                   << " device memory of size "
-                  << _getAllocImpl().Device().recommendedMaxWorkingSetSize / 1048576UL << " MB\n";
+                  << _getAllocImpl().Device().recommendedMaxWorkingSetSize / 1048576UL << " MB"
+                  << " (max allowed: "
+                  << (max_total_allowed_size == std::numeric_limits<size_t>::max() ? "unlimited" :
+                     (to_string(max_total_allowed_size / 1048576UL) + " MB")) << ")\n";
       }
     }
   }
@@ -330,7 +382,7 @@ public:
   }
 
   DataPtr allocate(const size_t nbytes) const override {
-    __block id<MTLBuffer> buf = nbytes > 0 ? _getAllocImpl().Malloc(nbytes, m_use_shared_storage) : nullptr;
+    __block id<MTLBuffer> buf = nbytes > 0 ? _getAllocImpl().Malloc(nbytes, m_usage) : nullptr;
     return { buf, buf, &Delete, at::Device(at::DeviceType::MPS, 0)};
   }
 
@@ -340,34 +392,23 @@ public:
 
 private:
   bool m_has_unified_memory;
-  // use shared buffers on unified memory
-  bool m_use_shared_storage;
+  uint32_t m_usage;
 
   static void Delete(void* ptr) {
     if (ptr) {
       _getAllocImpl().Free(ptr);
     }
   }
-
-  static bool isEnvVarEnabled(const char *envvar) {
-    const char *e = getenv(envvar);
-    if (e) {
-      char *t = (char*) e;
-      long val = strtol(e, &t, 0);
-      return (t != e && val != 0);
-    }
-    return false;
-  }
 };
 
 namespace {
 MPSAllocator& _getSharedAllocator() {
-  static MPSAllocator s_mps_shared_alloc(true);
+  static MPSAllocator s_mps_shared_alloc(HeapAllocator::UsageFlags::SHARED);
   return s_mps_shared_alloc;
 }
 
 MPSAllocator& _getPrivateAllocator() {
-  static mps::MPSAllocator s_mps_private_alloc(false);
+  static MPSAllocator s_mps_private_alloc(HeapAllocator::UsageFlags::NONE);
   return s_mps_private_alloc;
 }
 } // anonymous namespace
@@ -397,6 +438,10 @@ void set_buffer_shape(void* ptr, const IntArrayRef& shape) {
 
 IntArrayRef get_buffer_shape(void* ptr) {
   return _getAllocImpl().getBufferShape(ptr);
+};
+
+id<MTLBuffer> get_scalar_buffer_with_value(void *value, size_t size, MPSStream* stream) {
+  return _getAllocImpl().getScalarBufferWithValue(value, size, stream);
 };
 
 } // namespace mps
