@@ -1509,6 +1509,7 @@ class TestMPS(TestCase):
         helper([9.0, 3.0, 5.0, 4.0], torch.ByteTensor)
 
     def test_to_casting(self):
+        # https://github.com/pytorch/pytorch/issues/81567
         def helper(data, to_dtype):
             a_cpu = torch.tensor(data)
             a_mps = a_cpu.to(torch.device('mps'))
@@ -1524,6 +1525,23 @@ class TestMPS(TestCase):
         helper([9.0, 3.0, 5.0, 4.0], torch.half)
         helper([9.0, 3.0, 5.0, 4.0], torch.int8)
         helper([9.0, 3.0, 5.0, 4.0], torch.uint8)
+
+    def test_storage_offset_greater_than_src_nbytes(self):
+        # https://github.com/pytorch/pytorch/issues/80844
+        n_tensors= 100
+        n_tensor_elems = 784
+        elems = torch.arange(n_tensors * n_tensor_elems, dtype=torch.float32)
+
+        tensor_list = []
+        for i in range(0, n_tensors - 1):
+            # create a list of contiguous view tensors (view tensor created by the slice op)
+            t = elems[n_tensor_elems * i : n_tensor_elems * (i + 1)]
+            tensor_list.append(t)
+
+        for i in range(0, n_tensors - 1):
+            t = tensor_list[i].view(1, 784)
+            t_mps = t.to("mps")
+            torch.testing.assert_allclose(t, t_mps.cpu())
 
 class TestLogical(TestCase):
     def _wrap_tensor(self, x, device="cpu", dtype=None, requires_grad=False):
