@@ -1541,7 +1541,7 @@ class TestMPS(TestCase):
         for i in range(0, n_tensors - 1):
             t = tensor_list[i].view(1, 784)
             t_mps = t.to("mps")
-            torch.testing.assert_allclose(t, t_mps.cpu())
+            self.assertEqual(t, t_mps.cpu())
 
 class TestLogical(TestCase):
     def _wrap_tensor(self, x, device="cpu", dtype=None, requires_grad=False):
