@@ -124,10 +124,10 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool
     size_to_copy = (size_to_copy / src.element_size()) * dst.element_size();
   }
 
-  // if there's anything wrong with source, we shouldn't return dst_ silently and must error out.
-  TORCH_CHECK(sourceBuffer && size_to_copy > 0);
-  TORCH_CHECK(src_total_size >= storage_byte_offset);
-  TORCH_CHECK(dst.nbytes() >= (dst.storage_offset() * dst.element_size()));
+  // If there's anything wrong with source, we shouldn't return dst_ silently and must error out.
+  TORCH_INTERNAL_ASSERT(sourceBuffer && size_to_copy > 0);
+  TORCH_INTERNAL_ASSERT(src_total_size >= storage_byte_offset);
+  TORCH_INTERNAL_ASSERT(dst.nbytes() >= (dst.storage_offset() * dst.element_size()));
 
   @autoreleasepool {
     MTLResourceOptions options = MTLResourceOptionCPUCacheModeDefault | MTLResourceStorageModeShared;
@@ -141,7 +141,7 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool
                                                     deallocator:nil];
      NSUInteger destOffset = uintptr_t(host_dst) - uintptr_t(alignedPtr);
     // 4 bytes alignment required on macos for blits.
-    TORCH_CHECK(destOffset % 4 == 0, "Unaligned blit request");
+    TORCH_INTERNAL_ASSERT(destOffset % 4 == 0, "Unaligned blit request");
 
     stream->copy_and_sync(sourceBuffer, destBuffer, size_to_copy, storage_byte_offset, destOffset, non_blocking);
     [destBuffer release];
@@ -180,8 +180,8 @@ static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_, bool n
 
   const size_t size_to_copy = src.nbytes();
   const void* host_src = src.storage().data();
-  TORCH_CHECK(src_total_size >= (src.storage_offset() * src.element_size()) &&
-              dst_.nbytes() >= dst_byte_offset);
+  TORCH_INTERNAL_ASSERT(src_total_size >= (src.storage_offset() * src.element_size()));
+  TORCH_INTERNAL_ASSERT(dst_.nbytes() >= dst_byte_offset);
 
   NSUInteger sourceOffset = 0;
   @autoreleasepool {
