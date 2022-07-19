@@ -111,6 +111,13 @@ jobs:
           ${CONDA_RUN} python3 -m tools.stats.monitor > usage_log.txt 2>&1 &
           echo "monitor-script-pid=${!}" >> "${GITHUB_OUTPUT}"
 
+      - name: Install macOS homebrew dependencies
+        if: ${{ runner.arch == 'X64' }}
+        run: |
+          # Install dependencies
+          brew install libomp
+          brew link --force libomp
+
       - name: Parse ref
         id: parse-ref
         run: .github/scripts/parse_ref.py

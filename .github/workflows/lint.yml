@@ -230,37 +230,63 @@ jobs:
         with:
           submodules: false
           fetch-depth: 1
-      - name: Setup Python 3.5
-        if: matrix.test_type == 'older_python_version'
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.5'
-          architecture: x64
-          check-latest: false
-          cache: pip
-          cache-dependency-path: |
-            **/requirements.txt
-      - name: Setup Python 3.8
-        if: matrix.test_type != 'older_python_version'
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.8'
-          architecture: x64
-          check-latest: false
-          cache: pip
-          cache-dependency-path: |
-            **/requirements.txt
-      - name: Install torch
-        if: matrix.test_type == 'with_torch'
-        run: |
-          pip install -r requirements.txt
-          # Doesn't really matter what torch version, we just need ANY torch installed
-          pip install 'torch==1.*'
-      - name: Run collect_env.py (nonretryable)
-        run: |
-          # All we need to see is that it passes
-          python3 torch/utils/collect_env.py
 
+      - name: Setup miniconda
+        uses: pytorch/test-infra/.github/actions/setup-miniconda@main
+        with:
+          python-version: 3.9
+          environment-file: .github/requirements/conda-env-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Install requirements
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          ${CONDA_RUN} python3 -m pip install --force-reinstall -r .github/requirements-gha-cache.txt
+
+      - name: Initialize lint dependencies
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          ${CONDA_RUN} lintrunner init
+
+      - name: Do build steps necessary for linters
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          ${CONDA_RUN} python3 -m tools.linter.clang_tidy.generate_build_files
+          ${CONDA_RUN} python3 -m tools.generate_torch_version --is_debug=false
+          ${CONDA_RUN} python3 -m tools.pyi.gen_pyi \
+            --native-functions-path aten/src/ATen/native/native_functions.yaml \
+            --tags-path aten/src/ATen/native/tags.yaml \
+            --deprecated-functions-path "tools/autograd/deprecated.yaml"
+
+      - name: Run lintrunner on all files (nonretryable)
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          set +e
+          if ! ${CONDA_RUN} lintrunner --force-color test/*.py aten/src/ATen/native/mps/*.h aten/src/ATen/native/mps/*.mm aten/src/ATen/native/mps/operations/*; then
+              echo ""
+              echo -e "\e[1m\e[36mYou can reproduce these results locally by using \`lintrunner\`.\e[0m"
+              echo -e "\e[1m\e[36mSee https://github.com/pytorch/pytorch/wiki/lintrunner for setup instructions.\e[0m"
+              exit 1
+          fi
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}-${{ github.event_name == 'workflow_dispatch' }}
   cancel-in-progress: true

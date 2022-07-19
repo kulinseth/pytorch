@@ -10,6 +10,7 @@
 #include <ATen/ops/linalg_vector_norm.h>
 #include <ATen/ops/mul.h>
 #include <ATen/ops/renorm_native.h>
+#include <ATen/ops/empty.h>
 #endif
 
 namespace at::native {

@@ -7,6 +7,10 @@
 #include <ATen/native/mps/OperationUtils.h>
 #include <ATen/ops/_lstm_mps_native.h>
 #include <ATen/ops/lstm_mps_backward_native.h>
+#include <ATen/ops/empty.h>
+#include <ATen/ops/empty_like.h>
+#include <ATen/ops/zeros.h>
+#include <ATen/ops/zeros_like.h>
 #import <MetalPerformanceShadersGraph/MPSGraphRNNOps.h>
 
 namespace at::native {

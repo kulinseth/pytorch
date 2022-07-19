@@ -4,8 +4,9 @@
 
 namespace at::mps {
 
-MPSEvent::MPSEvent(id_t ID, MPSStream* stream, bool enable_timing)
-    : m_id(ID), m_enable_timing(enable_timing), m_stream(stream), m_event([stream->device() newSharedEvent]) {}
+MPSEvent::MPSEvent(id_t ID, MPSStream* stream, bool enable_timing) :
+    m_id(ID), m_enable_timing(enable_timing), m_stream(stream),
+    m_event([stream->device() newSharedEvent]) { }
 
 MPSEvent::~MPSEvent() {
   if (m_event) {
@@ -23,10 +24,7 @@ void MPSEvent::recordLocked(bool syncEvent) {
   m_stream->endKernelCoalescing();
   ++m_signalCounter;
   if (m_enable_timing) {
-    notifyLocked(^(id<MTLSharedEvent>, uint64_t) {
-      m_completion_time = getTime();
-      notifyCpuSync();
-    });
+    notifyLocked(^(id<MTLSharedEvent>, uint64_t) { m_completion_time = getTime(); });
   }
   id<MTLCommandBuffer> commandBuffer = m_stream->commandBuffer();
   [commandBuffer encodeSignalEvent:m_event value:m_signalCounter];
@@ -100,26 +98,18 @@ bool MPSEvent::notify(bool needsLock, MTLSharedEventNotificationBlock block) {
   return scheduledNotify;
 }
 
-void MPSEvent::notifyCpuSync() {
-  std::lock_guard<std::mutex> lock(m_cpu_sync_mutex);
-  m_cpu_sync_completed = true;
-  m_cpu_sync_cv.notify_one();
-}
-
-void MPSEvent::waitForCpuSync() {
-  std::unique_lock<std::mutex> lock(m_cpu_sync_mutex);
-  m_cpu_sync_cv.wait(lock, [&] { return m_cpu_sync_completed; });
-  m_cpu_sync_completed = false;
-}
-
 bool MPSEvent::synchronize() {
-  bool scheduledNotify = notifyLocked(^(id<MTLSharedEvent>, uint64_t) {
-    m_completion_time = getTime();
-    notifyCpuSync();
-  });
-
+  bool scheduledNotify = notifyLocked(
+                             ^(id<MTLSharedEvent>, uint64_t) {
+                               m_completion_time = getTime();
+                               std::lock_guard<std::mutex> lock(m_cpu_sync_mutex);
+                               m_cpu_sync_completed = true;
+                               m_cpu_sync_cv.notify_one();
+                             });
   if (scheduledNotify) {
-    waitForCpuSync();
+    std::unique_lock<std::mutex> lock(m_cpu_sync_mutex);
+    m_cpu_sync_cv.wait(lock, [&]{ return m_cpu_sync_completed; });
+    m_cpu_sync_completed = false;
     return true;
   }
   return false;
@@ -139,7 +129,6 @@ void MPSEvent::reset(MPSStream* stream, bool enable_timing) {
   // reset record time
   m_completion_time = 0;
   m_enable_timing = enable_timing;
-  m_cpu_sync_completed = false;
 };
 
 //-----------------------------------------------------------------
@@ -147,7 +136,6 @@ void MPSEvent::reset(MPSStream* stream, bool enable_timing) {
 //-----------------------------------------------------------------
 
 MPSEventPool::MPSEventPool(MPSStream* default_stream) : m_default_stream(default_stream) {
-  // default deleter to return the event back to pool after it gets released
   m_default_deleter = [&](MPSEvent* event) {
     std::lock_guard<std::recursive_mutex> lock(m_mutex);
     m_pool.push(std::unique_ptr<MPSEvent>(event));
@@ -177,7 +165,7 @@ MPSEventPtr MPSEventPool::acquireEvent(bool enable_timing, MPSStream* stream) {
 
 void MPSEventPool::emptyCache() {
   std::lock_guard<std::recursive_mutex> lock(m_mutex);
-  while (!m_pool.empty()) {
+  while(!m_pool.empty()) {
     m_pool.pop();
   }
 }
@@ -191,7 +179,7 @@ id_t MPSEventPool::acquireEvent(bool enable_timing) {
   return event_id;
 }
 
-void MPSEventPool::releaseEvent(id_t event_id) {
+void MPSEventPool::releaseEvent(id_t event_id)  {
   std::lock_guard<std::recursive_mutex> lock(m_mutex);
   TORCH_CHECK(m_in_use_events.count(event_id) > 0, "Invalid Event ID: ", event_id);
   // returns the event back to the MPSEventPool
@@ -226,14 +214,11 @@ double MPSEventPool::elapsedTime(id_t start_event_id, id_t end_event_id) {
   std::lock_guard<std::recursive_mutex> lock(m_mutex);
   MPSEvent* start_event = getInUseEvent(start_event_id, false);
   MPSEvent* end_event = getInUseEvent(end_event_id, false);
-  // the notify is called on a separate thread, so this waits for that
-  end_event->waitForCpuSync();
+
   const uint64_t start_time = start_event->getCompletionTime();
   const uint64_t end_time = end_event->getCompletionTime();
-
   TORCH_CHECK(start_time > 0 && end_time > 0, "Events were not created with argument 'enable_timing=True'");
-  TORCH_CHECK(
-      end_time > start_time, "End event ", end_event_id, " was not recorded after start event ", start_event_id);
+  TORCH_CHECK(end_time > start_time, "End event ", end_event_id, " was not recorded after start event ", start_event_id);
   return double(end_time - start_time) * 1e-6;
 }
 
@@ -250,7 +235,8 @@ MPSEvent* MPSEventPool::getInUseEvent(id_t event_id, bool locked) {
 }
 
 std::shared_ptr<MPSEventPool> getMPSEventPool() {
-  static std::shared_ptr<MPSEventPool> event_pool = std::make_shared<MPSEventPool>(getDefaultMPSStream());
+  static std::shared_ptr<MPSEventPool> event_pool =
+                 std::make_shared<MPSEventPool>(getDefaultMPSStream());
   return event_pool;
 }
 

@@ -12,6 +12,7 @@
 
 namespace at {
 
+
 struct TORCH_API MPSHooksInterface : AcceleratorHooksInterface {
   // this fails the implementation if MPSHooks functions are called, but
   // MPS backend is not present.
@@ -19,7 +20,6 @@ struct TORCH_API MPSHooksInterface : AcceleratorHooksInterface {
     TORCH_CHECK(false, "Cannot execute ", func, "() without MPS backend.");
 
   virtual ~MPSHooksInterface() override = default;
-
   // Initialize the MPS library state
   virtual void initMPS() const {
     FAIL_MPSHOOKS_FUNC(__func__);
@@ -36,7 +36,7 @@ struct TORCH_API MPSHooksInterface : AcceleratorHooksInterface {
   virtual Allocator* getMPSDeviceAllocator() const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
-  virtual void deviceSynchronize() const {
+  virtual void synchronizeStream() const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
   virtual void commitStream() const {
@@ -60,31 +60,34 @@ struct TORCH_API MPSHooksInterface : AcceleratorHooksInterface {
   virtual void setMemoryFraction(double /*ratio*/) const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
+  virtual void setAllocatorSettings(const std::string& configStr) const {
+    FAIL_MPSHOOKS_FUNC(__func__);
+  }
   virtual void profilerStartTrace(const std::string& mode, bool waitUntilCompleted) const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
   virtual void profilerStopTrace() const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
-  virtual uint32_t acquireEvent(bool enable_timing) const {
+  virtual id_t acquireEvent(bool enable_timing) const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
-  virtual void releaseEvent(uint32_t event_id) const {
+  virtual void releaseEvent(id_t event_id) const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
-  virtual void recordEvent(uint32_t event_id) const {
+  virtual void recordEvent(id_t event_id) const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
-  virtual void waitForEvent(uint32_t event_id) const {
+  virtual void waitForEvent(id_t event_id) const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
-  virtual void synchronizeEvent(uint32_t event_id) const {
+  virtual void synchronizeEvent(id_t event_id) const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
-  virtual bool queryEvent(uint32_t event_id) const {
+  virtual bool queryEvent(id_t event_id) const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
-  virtual double elapsedTimeOfEvents(uint32_t start_event_id, uint32_t end_event_id) const {
+  virtual double elapsedTimeOfEvents(id_t start_event_id, id_t end_event_id) const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
   virtual bool hasPrimaryContext(DeviceIndex device_index) const override {

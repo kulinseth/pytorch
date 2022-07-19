@@ -57,6 +57,8 @@
 #include <ATen/ops/tanh_native.h>
 #include <ATen/ops/trunc_native.h>
 #include <ATen/ops/view_as_real.h>
+#include <ATen/ops/empty.h>
+#include <ATen/ops/empty_like.h>
 #endif
 
 namespace at::native {

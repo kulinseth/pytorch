@@ -237,6 +237,8 @@ class autocast:
                 )
 
             self.fast_dtype = self.custom_device_mod.get_autocast_dtype()
+        elif self.device == 'mps':
+            self.fast_dtype = torch.get_autocast_mps_dtype()  # type: ignore[attr-defined]
         else:
             raise RuntimeError(
                 f"User specified an unsupported autocast device_type '{self.device}'"
@@ -358,6 +360,11 @@ class autocast:
             self.prev_fastdtype = self.custom_device_mod.get_autocast_dtype()
             self.custom_device_mod.set_autocast_enabled(self._enabled)
             self.custom_device_mod.set_autocast_dtype(self.fast_dtype)
+        elif self.device == 'mps':
+            self.prev = torch.is_autocast_mps_enabled()
+            self.prev_fastdtype = torch.get_autocast_mps_dtype()
+            torch.set_autocast_mps_enabled(self._enabled)
+            torch.set_autocast_mps_dtype(self.fast_dtype)
             torch.autocast_increment_nesting()
         else:
             self.prev = torch.is_autocast_enabled()
@@ -402,6 +409,11 @@ class autocast:
                 torch.clear_autocast_cache()
             self.custom_device_mod.set_autocast_enabled(self.prev)
             self.custom_device_mod.set_autocast_dtype(self.prev_fastdtype)
+        elif self.device == 'mps':
+            if torch.autocast_decrement_nesting() == 0:
+                torch.clear_autocast_cache()
+            torch.set_autocast_mps_enabled(self.prev)
+            torch.set_autocast_mps_dtype(self.prev_fastdtype)
         else:
             if torch.autocast_decrement_nesting() == 0:
                 torch.clear_autocast_cache()

@@ -41,6 +41,10 @@ TORCH_API bool is_privateuseone_enabled();
 TORCH_API void set_privateuseone_enabled(bool enabled);
 TORCH_API at::ScalarType get_autocast_privateuseone_dtype();
 TORCH_API void set_autocast_privateuseone_dtype(at::ScalarType dtype);
+TORCH_API bool is_mps_enabled();
+TORCH_API void set_mps_enabled(bool enabled);
+TORCH_API at::ScalarType get_autocast_mps_dtype();
+TORCH_API void set_autocast_mps_dtype(at::ScalarType dtype);
 TORCH_API bool is_autocast_cache_enabled();
 TORCH_API void set_autocast_cache_enabled(bool enabled);
 
@@ -65,6 +69,8 @@ inline bool is_autocast_eligible(
       return tensor.is_xla() && tensor.is_floating_point();
     case c10::DeviceType::PrivateUse1:
       return tensor.is_privateuseone() && tensor.is_floating_point();
+    case DeviceType::MPS:
+      return tensor.is_mps() && tensor.is_floating_point();
     default:
       return false;
   }
@@ -88,6 +94,8 @@ inline DispatchKey get_autocast_dispatch_key_from_device_type(
       return DispatchKey::AutocastXLA;
     case c10::DeviceType::PrivateUse1:
       return DispatchKey::AutocastPrivateUse1;
+    case DeviceType::MPS:
+      return DispatchKey::AutocastMPS;
     default:
       throw std::runtime_error(
           "unknown device type for autocast in get_autocast_dispatch_key_from_device_type");
@@ -111,6 +119,8 @@ inline at::ScalarType get_lower_precision_fp_from_device_type(
       return get_autocast_xla_dtype();
     case c10::DeviceType::PrivateUse1:
       return get_autocast_privateuseone_dtype();
+    case DeviceType::MPS:
+      return get_autocast_mps_dtype();
     default:
       throw std::runtime_error(
           "unknown device type for autocast in get_lower_precision_fp_from_device_type");

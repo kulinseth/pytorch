@@ -32,6 +32,7 @@
 #include <ATen/ops/upsample_nearest2d_backward.h>
 #include <ATen/ops/upsample_nearest2d_backward_native.h>
 #include <ATen/ops/upsample_nearest2d_native.h>
+#include <ATen/ops/empty_like.h>
 #endif
 namespace at::native {
 namespace mps {

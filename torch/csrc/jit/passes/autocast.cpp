@@ -107,7 +107,7 @@ c10::optional<AutocastScope> parseAutocast(
         dtype != c10::ScalarType::Undefined,
         "Autocast missing fast_dtype attribute");
     TORCH_CHECK(!device.empty(), "Autocast missing device attribute");
-    if (device == "cuda") {
+    if (device == "cuda" || device == "mps") {
       scope.context.gpu_enabled = enabled.value();
       scope.context.gpu_scalar_type = dtype;
     } else if (device == "cpu") {

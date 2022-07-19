@@ -79,7 +79,7 @@ static PyObject* MPSModule_deviceSynchronize(
     PyObject* _unused,
     PyObject* noargs) {
   HANDLE_TH_ERRORS
-  at::detail::getMPSHooks().deviceSynchronize();
+  at::detail::getMPSHooks().synchronizeStream();
   Py_RETURN_NONE;
   END_HANDLE_TH_ERRORS
 }
@@ -99,6 +99,18 @@ static PyObject* MPSModule_setMemoryFraction(
       THPUtils_checkDouble(args), "invalid argument to setMemoryFraction()");
   double fraction = THPUtils_unpackDouble(args);
   at::detail::getMPSHooks().setMemoryFraction(fraction);
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_setAllocatorSettings(
+    PyObject* _unused,
+    PyObject* args) {
+  HANDLE_TH_ERRORS
+  TORCH_CHECK(
+      THPUtils_checkString(args), "invalid argument to setAllocatorSettings()");
+  const std::string config_str = THPUtils_unpackString(args);
+  at::detail::getMPSHooks().setAllocatorSettings(config_str);
   Py_RETURN_NONE;
   END_HANDLE_TH_ERRORS
 }
@@ -151,7 +163,7 @@ static PyObject* MPSModule_profilerStopTrace(
 static PyObject* MPSModule_acquireEvent(PyObject* _unused, PyObject* args) {
   HANDLE_TH_ERRORS
   const bool enable_timing = THPUtils_unpackBool(args);
-  return THPUtils_packUInt32(
+  return PyLong_FromUnsignedLong(
       at::detail::getMPSHooks().acquireEvent(enable_timing));
   END_HANDLE_TH_ERRORS
 }
@@ -236,6 +248,7 @@ static struct PyMethodDef _MPSModule_methods[] = {
      nullptr},
     {"_mps_emptyCache", MPSModule_emptyCache, METH_NOARGS, nullptr},
     {"_mps_setMemoryFraction", MPSModule_setMemoryFraction, METH_O, nullptr},
+    {"_mps_setAllocatorSettings", MPSModule_setAllocatorSettings, METH_O, nullptr},
     {"_mps_currentAllocatedMemory",
      MPSModule_currentAllocatedMemory,
      METH_NOARGS,

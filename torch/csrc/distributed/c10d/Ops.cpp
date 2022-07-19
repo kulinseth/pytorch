@@ -259,6 +259,45 @@ IMPL__ALLGATHER_BASE(PrivateUse1)
 IMPL_ALLGATHER_COALESCED(CPU)
 IMPL_ALLGATHER_COALESCED(CUDA)
 IMPL_ALLGATHER_COALESCED(PrivateUse1)
+std::tuple<std::vector<std::vector<at::Tensor>>, c10::intrusive_ptr<Work>>
+allgather_cpu_(
+    const std::vector<std::vector<at::Tensor>>& output_tensors,
+    at::TensorList input_tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    int64_t timeout) {
+  auto input_tensors_vec = input_tensors.vec();
+  auto work =
+      process_group->getBackend(c10::DeviceType::CPU)
+          ->allgather(
+              const_cast<std::vector<std::vector<at::Tensor>>&>(output_tensors),
+              input_tensors_vec,
+              AllgatherOptions{std::chrono::milliseconds(timeout)});
+  // Copy output tensors (not storage) so that this can be used in a functional
+  // manner
+  return std::
+      tuple<std::vector<std::vector<at::Tensor>>, c10::intrusive_ptr<Work>>(
+          output_tensors, work);
+}
+
+std::tuple<std::vector<std::vector<at::Tensor>>, c10::intrusive_ptr<Work>>
+allgather_mps_(
+    const std::vector<std::vector<at::Tensor>>& output_tensors,
+    at::TensorList input_tensors,
+    const c10::intrusive_ptr<ProcessGroup>& process_group,
+    int64_t timeout) {
+  auto input_tensors_vec = input_tensors.vec();
+  auto work =
+      process_group->getBackend(c10::DeviceType::CPU)
+          ->allgather(
+              const_cast<std::vector<std::vector<at::Tensor>>&>(output_tensors),
+              input_tensors_vec,
+              AllgatherOptions{std::chrono::milliseconds(timeout)});
+  // Copy output tensors (not storage) so that this can be used in a functional
+  // manner
+  return std::
+      tuple<std::vector<std::vector<at::Tensor>>, c10::intrusive_ptr<Work>>(
+          output_tensors, work);
+}
 
 #define IMPL_ALLGATHER_INTO_TENSOR_COALESCED(DEV)                       \
   c10::intrusive_ptr<c10d::Work> allgather_into_tensor_coalesced_##DEV( \

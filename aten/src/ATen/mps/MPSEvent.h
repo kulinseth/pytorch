@@ -32,8 +32,6 @@ public:
   id_t getID() const { return m_id; }
   // returns the completion timestamp of the event
   uint64_t getCompletionTime() const { return m_completion_time; }
-  // if already recorded, waits for cpu_sync_cv to be signaled
-  void waitForCpuSync();
 
 private:
   id_t m_id;
@@ -54,8 +52,7 @@ private:
   void recordLocked(bool syncEvent);
   bool waitLocked(bool syncEvent);
   bool notifyLocked(MTLSharedEventNotificationBlock block);
-  void notifyCpuSync();
-  static uint64_t getTime() {
+  static double getTime() {
     return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
   }
 };

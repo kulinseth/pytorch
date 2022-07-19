@@ -356,7 +356,7 @@ Tensor mps_max_pool2d(const Tensor& input,
                       IntArrayRef padding,
                       IntArrayRef dilation,
                       bool ceil_mode) {
-  Tensor output = at::empty({0}, input.options(), MemoryFormat::Contiguous);
+  Tensor output = at::detail::empty_mps({0}, input.options());
   mps::PoolingOpBlock pooling_op_block = ^PoolingOpFn(cachedGraph, desc) {
     MPSGraph* mpsGraph = cachedGraph.graph();
     return [mpsGraph maxPooling2DWithSourceTensor:cachedGraph.inputTensor descriptor:desc name:nil];
@@ -385,7 +385,7 @@ Tensor mps_max_pool2d_backward(const Tensor& grad_output,
                                IntArrayRef padding,
                                IntArrayRef dilation,
                                bool ceil_mode) {
-  Tensor grad_input = at::empty(input.sizes(), input.options(), MemoryFormat::Contiguous);
+  Tensor grad_input = at::detail::empty_mps(input.sizes(), input.options());
   mps::PoolingOpBlock pooling_op_block = ^PoolingOpFn(cachedGraph, desc) {
     MPSGraph* mpsGraph = cachedGraph.graph();
     return [mpsGraph maxPooling2DGradientWithGradientTensor:cachedGraph.gradOutputTensor

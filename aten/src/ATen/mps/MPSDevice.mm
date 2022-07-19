@@ -47,7 +47,7 @@ id<MTLLibrary> MPSDevice::getMetalIndexingLibrary() {
   return _mtl_indexing_library;
 }
 
-id<MTLComputePipelineState> MPSDevice::metalIndexingPSO(const std::string& kernel) {
+id<MTLComputePipelineState> MPSDevice::metalIndexingFunction(const std::string& kernel) {
   TORCH_INTERNAL_ASSERT_DEBUG_ONLY(_mtl_device);
   NSError* error = nil;
   static std::unordered_map<std::string, id<MTLComputePipelineState>> psoCache;
@@ -57,9 +57,8 @@ id<MTLComputePipelineState> MPSDevice::metalIndexingPSO(const std::string& kerne
     return state;
   }
 
-  id<MTLFunction> indexFunction =
-      [[indexing_lib newFunctionWithName:[NSString stringWithUTF8String:kernel.c_str()]] autorelease];
-  TORCH_CHECK(indexFunction, "Can't find function ", kernel);
+  id<MTLFunction> indexFunction = [[indexing_lib newFunctionWithName: [NSString stringWithUTF8String: kernel.c_str()]] autorelease];
+  TORCH_CHECK(indexFunction, "Failed to load the Metal Shader function: ", kernel, ", error: ", [[error description] UTF8String]);
 
   state = [_mtl_device newComputePipelineStateWithFunction:indexFunction error:&error];
   TORCH_CHECK(state, error.localizedDescription.UTF8String);
@@ -106,15 +105,11 @@ MPSDevice::MPSDevice() : _mtl_device(nil), _mtl_indexing_library(nil) {
 bool MPSDevice::isMacOS13Plus(MacOSVersion version) const {
   id mpsCD = NSClassFromString(@"MPSGraph");
   static auto compileOptions = [[[MTLCompileOptions alloc] init] autorelease];
-  static bool _macos_13_0_plus = [mpsCD instancesRespondToSelector:@selector(cumulativeSumWithTensor:
-                                                                                                axis:name:)] == YES;
-  static bool _macos_13_1_plus =
-      [mpsCD instancesRespondToSelector:@selector
-             (sampleGridWithSourceTensor:
-                        coordinateTensor:layout:normalizeCoordinates:relativeCoordinates:alignCorners:paddingMode
-                                        :samplingMode:constantValue:name:)] == YES;
-  static bool _macos_13_2_plus =
-      [mpsCD instancesRespondToSelector:@selector(convolution3DWithSourceTensor:weightsTensor:descriptor:name:)] == YES;
+
+  static bool _macos_13_0_plus = [mpsCD instancesRespondToSelector:@selector(cumulativeSumWithTensor:axis:name:)] == YES;
+  static bool _macos_13_1_plus = [mpsCD instancesRespondToSelector:@selector(
+    sampleGridWithSourceTensor:coordinateTensor:layout:normalizeCoordinates:relativeCoordinates:alignCorners:paddingMode:samplingMode:constantValue:name:)] == YES;
+  static bool _macos_13_2_plus = [mpsCD instancesRespondToSelector:@selector(convolution3DWithSourceTensor:weightsTensor:descriptor:name:)] == YES;
   static bool _macos_13_3_plus = [compileOptions respondsToSelector:@selector(maxTotalThreadsPerThreadgroup)] == YES;
 
   static bool _macos_14_0_plus = [mpsCD instancesRespondToSelector:@selector(conjugateWithTensor:name:)] == YES;

@@ -37,7 +37,7 @@ static Tensor pixel_shuffle_helper(const Tensor& self, int64_t factor, bool upsc
   std::vector<int64_t> out_shape(self.sizes().begin(), self_sizes_batch_end);
   out_shape.insert(out_shape.end(), {oc, oh, ow});
 
-  Tensor output = at::empty(out_shape, self.options());
+  Tensor output = at::detail::empty_mps(out_shape, self.options());
 
   if (output.numel() == 0) {
     return output;

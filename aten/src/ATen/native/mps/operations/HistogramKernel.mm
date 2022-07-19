@@ -10,6 +10,7 @@
 #else
 #include <ATen/ops/aminmax.h>
 #include <ATen/ops/sum.h>
+#include <ATen/ops/zeros.h>
 #endif
 
 namespace at::native {

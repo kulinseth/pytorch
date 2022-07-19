@@ -2,36 +2,26 @@
 
 #pragma once
 
-#define TORCH_ASSERT_ONLY_METHOD_OPERATORS
 #include <ATen/Tensor.h>
+#include <ATen/TensorMeta.h>
 #include <ATen/Utils.h>
 #include <ATen/mps/MPSStream.h>
 #include <ATen/native/mps/TensorFactory.h>
-#include <c10/util/Optional.h>
+#include <ATen/mps/EmptyTensor.h>
 #include <c10/core/ScalarType.h>
 #include <torch/library.h>
-#include <exception>
 #include <unordered_map>
+#include <ATen/ops/scalar_tensor.h>
 
-#ifndef AT_PER_OPERATOR_HEADERS
-#include <ATen/Functions.h>
-#include <ATen/NativeFunctions.h>
-#else
-#include <ATen/ops/empty.h>
-#include <ATen/ops/empty_like.h>
-#include <ATen/ops/zeros.h>
-#include <ATen/ops/zeros_like.h>
+#ifdef __OBJC__
+#include <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #endif
 
-#include <MetalPerformanceShaders/MetalPerformanceShaders.h>
-
-// Fwd declarations
-namespace at {
-  struct TensorIteratorBase;
-}
 using namespace at::mps;
 
-namespace at::native::mps {
+namespace at {
+namespace native {
+namespace mps {
 
 void dispatch_sync_with_rethrow(dispatch_queue_t queue, void (^block)());
 
@@ -46,16 +36,25 @@ struct MPSScalar {
     at::Half h;
     int64_t i;
     bool b;
-    c10::complex<float> cf;
-    c10::complex<at::Half> ch;
-    at::BFloat16 bf16;
   } value {};
 };
 
-void runMPSGraph(MPSStream* mpsStream,
+void runMPSGraph(
+    MPSStream* mpsStream,
     MPSGraph* mpsGraph,
     NSDictionary* feeds,
     NSDictionary* results);
+
+struct MPSCachedGraph;
+
+void runMPSGraph(
+  MPSStream *mpsStream,
+  MPSCachedGraph* cachedGraph,
+  NSDictionary *feeds,
+  NSDictionary *results,
+  bool disableTypeInference = false,
+  SyncType syncType = SyncType::COMMIT_ADAPTIVE);
+
 
 MPSDataType getMPSDataType(ScalarType scalar_type);
 static inline MPSDataType getMPSDataType(const Tensor& t) {
@@ -74,8 +73,10 @@ std::string scalarToMetalTypeString(const c10::ScalarType& scalar_type);
 NSArray<NSNumber*>* getTensorAxes(const Tensor& t);
 NSArray<NSNumber*>* getTensorAxes(const IntArrayRef& sizes, at::OptionalIntArrayRef dim);
 std::string getMPSShapeString(MPSShape* shape);
-std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype = true);
+std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype = true, bool exclude_shape = false);
 std::string getArrayRefString(const IntArrayRef s);
+const std::string& getMetalScalarType(const Tensor& t);
+const std::string& getMetalScalarType(const c10::ScalarType& scalar_type);
 // use has_storage() on the returned tensor to determine if src actually is a view
 Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst);
 Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output);
@@ -114,14 +115,67 @@ class Placeholder {
   Tensor _tensor;
 };
 
+inline NSDictionary* dictionaryFromPlaceholders(Placeholder& p1) {
+        return @{ p1.getMPSGraphTensor(): p1.getMPSGraphTensorData() };
+}
+
+inline NSDictionary* dictionaryFromPlaceholders(Placeholder& p1, Placeholder& p2) {
+        return @{
+                p1.getMPSGraphTensor(): p1.getMPSGraphTensorData(),
+                p2.getMPSGraphTensor(): p2.getMPSGraphTensorData(),
+         };
+}
+
+inline NSDictionary* dictionaryFromPlaceholders(Placeholder& p1, Placeholder& p2, Placeholder& p3) {
+        return @{
+                p1.getMPSGraphTensor(): p1.getMPSGraphTensorData(),
+                p2.getMPSGraphTensor(): p2.getMPSGraphTensorData(),
+                p3.getMPSGraphTensor(): p3.getMPSGraphTensorData(),
+         };
+}
+
+inline NSDictionary* dictionaryFromPlaceholders(Placeholder& p1, Placeholder& p2, Placeholder& p3, Placeholder& p4) {
+        return @{
+                p1.getMPSGraphTensor(): p1.getMPSGraphTensorData(),
+                p2.getMPSGraphTensor(): p2.getMPSGraphTensorData(),
+                p3.getMPSGraphTensor(): p3.getMPSGraphTensorData(),
+                p4.getMPSGraphTensor(): p4.getMPSGraphTensorData(),
+         };
+}
+
+inline void runMPSGraph(MPSStream* stream, MPSGraph* graph, NSDictionary* feeds, Placeholder& result) {
+        runMPSGraph(stream, graph, feeds, dictionaryFromPlaceholders(result));
+}
+
+inline bool supportsComplex() {
+  return is_macos_13_or_newer(MacOSVersion::MACOS_VER_14_0_PLUS);
+}
+
+static inline void mtl_setBuffer(id<MTLComputeCommandEncoder> encoder, const Tensor& t, unsigned idx) {
+  [encoder setBuffer:getMTLBufferStorage(t)
+              offset:t.storage_offset() * t.element_size()
+             atIndex:idx];
+}
+
+static inline void mtl_dispatch1DJob(id<MTLComputeCommandEncoder> encoder,
+                                     id<MTLComputePipelineState> cplState,
+                                     uint32_t length) {
+  const uint32_t maxThreadsPerGroup = [cplState maxTotalThreadsPerThreadgroup];
+  auto size = MTLSizeMake(length, 1, 1);
+  auto threadGroupSize = MTLSizeMake(std::min(maxThreadsPerGroup, length), 1, 1);
+  [encoder dispatchThreads:size threadsPerThreadgroup:threadGroupSize];
+}
+
 void resize_tensor(Tensor* output);
 Tensor wrapped_scalar_tensor_mps(const Scalar& scalar, const Device device);
 MPSGraphTensor* trunc_tensor(MPSGraph* mpsGraph, MPSGraphTensor* inputTensor);
 MPSGraphTensor* convertNHWCtoNCHW(MPSGraph *mpsGraph, MPSGraphTensor* tensor);
 MPSGraphTensor* castMPSTensor(MPSGraph *mpsGraph, MPSGraphTensor* tensor, ScalarType toType);
 MPSGraphTensor* castMPSTensor(MPSGraph *mpsGraph, MPSGraphTensor* tensor, MPSDataType toType);
+MPSGraphTensorData* allocMPSGraphTensorData(id<MTLBuffer> buffer, MPSShape *mpsShape, MPSDataType mpsDataType);
 MPSGraphTensorData *getMPSGraphTensorData(MPSGraph* mpsGraph, MPSStream* mpsStream, const Tensor& tensor);
 MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, MPSScalar& scalar);
+id<MTLBuffer> getMTLBufferFromScalar(MPSStream* mpsStream, MPSScalar& scalar);
 
 MPSGraph* make_mps_graph();
 void printTensorNDArray(const Tensor& t);
@@ -154,8 +208,11 @@ struct MPSCachedGraph
 
   MPSGraph *graph() const { return (MPSGraph *)_object; }
   NSObject *object() const { return _object; }
+  MPSGraphExecutable *getExecultable() const { return _executable; }
+  void setExecultable(MPSGraphExecutable *executable) { _executable = executable; }
 private:
   NSObject *_object = nullptr;
+  MPSGraphExecutable* _executable = nullptr;
 };
 
 struct MPSUnaryCachedGraph : public MPSCachedGraph
@@ -231,7 +288,8 @@ struct MPSGraphCache
 
     MPSCacheKey hash = std::hash<std::string>{}(key);
 
-    dispatch_sync_with_rethrow(serialQueue_, ^() {
+    dispatch_sync(serialQueue_, ^() {
+
       // verify the cached entry doesn't already exist
       if (cache_.count(hash) != 0) {
         auto& entry = cache_.at(hash);
@@ -253,7 +311,6 @@ struct MPSGraphCache
   }
 
   MPSCachedGraph* LookUp(const std::string& key) const {
-
     __block MPSCachedGraph* cachedGraph = nullptr;
 
     MPSCacheKey hash = std::hash<std::string>{}(key);
@@ -289,6 +346,7 @@ struct MPSGraphCache
 
 };
 
+
 // Common template for creating graph with a specified cache if missing
 template<typename T>
 inline T* LookUpOrCreateCachedGraph(const std::string& key, std::function<void(MPSGraph*, T*)> instantiate) {
@@ -308,14 +366,14 @@ inline T* LookUpOrCreateCachedGraph(const std::string& key, std::function<void(M
   });
 }
 
-// Common math operations
-MPSGraphTensor* log1p(MPSGraph* mpsGraph, MPSGraphTensor* inputTensor);
+// MPS yet to support double types, but starting from MacOS 14, supports bfloat16
+inline bool supportedFloatingType(ScalarType dtype) {
+  return dtype == kFloat || dtype == kHalf || dtype == kBFloat16;
+}
 
-#define MPS_CHECK_INT64_OP_SUPPORTED(input_tensor, mac_os_13_3_plus, op_name)                                           \
-  if (!mac_os_13_3_plus && input_tensor.scalar_type() == kLong) {                                                       \
-     TORCH_WARN_ONCE("MPS: no support for int64 for ", op_name,                                                         \
-     ", downcasting to a smaller data type (int32/float32). Native support for int64 has been added in macOS 13.3.");   \
-  }
+inline bool supportedFloatingType(const Tensor& t) {
+  return supportedFloatingType(t.scalar_type());
+}
 
 /**
  * Returns distance from lowest to highest element offset in given tensor.
@@ -329,66 +387,15 @@ inline bool is_dense_in_storage(const at::Tensor& t) {
   return compute_storage_numel_distance(t) == static_cast<size_t>(t.numel());
 }
 
-static inline void mtl_setBuffer(id<MTLComputeCommandEncoder> encoder, const Tensor& t, unsigned idx) {
-  [encoder setBuffer:getMTLBufferStorage(t)
-              offset:t.storage_offset() * t.element_size()
-             atIndex:idx];
-}
+// Common math operations
+MPSGraphTensor* log1p(MPSGraph* mpsGraph, MPSGraphTensor* inputTensor);
 
-static inline void mtl_dispatch1DJob(id<MTLComputeCommandEncoder> encoder,
-                                     id<MTLComputePipelineState> cplState,
-                                     uint32_t length) {
-  const uint32_t maxThreadsPerGroup = [cplState maxTotalThreadsPerThreadgroup];
-  auto size = MTLSizeMake(length, 1, 1);
-  auto threadGroupSize = MTLSizeMake(std::min(maxThreadsPerGroup, length), 1, 1);
-  [encoder dispatchThreads:size threadsPerThreadgroup:threadGroupSize];
-}
+#define MPS_CHECK_INT64_OP_SUPPORTED(input_tensor, mac_os_13_3_plus, op_name)                                           \
+  if (!mac_os_13_3_plus && input_tensor.scalar_type() == kLong) {                                                       \
+     TORCH_WARN_ONCE("MPS: no support for int64 for ", op_name,                                                         \
+     ", downcasting to a smaller data type (int32/float32). Native support for int64 has been added in macOS 13.3.");   \
+  }
 
-id<MTLBuffer> generateKernelDataOffsets(id<MTLComputeCommandEncoder> commandEncoder, const TensorIteratorBase& iter, bool use_64bit_index = false);
-
-inline NSDictionary* dictionaryFromPlaceholders(Placeholder& p1) {
-        return @{ p1.getMPSGraphTensor(): p1.getMPSGraphTensorData() };
-}
-
-inline NSDictionary* dictionaryFromPlaceholders(Placeholder& p1, Placeholder& p2) {
-        return @{
-                p1.getMPSGraphTensor(): p1.getMPSGraphTensorData(),
-                p2.getMPSGraphTensor(): p2.getMPSGraphTensorData(),
-         };
-}
-
-inline NSDictionary* dictionaryFromPlaceholders(Placeholder& p1, Placeholder& p2, Placeholder& p3) {
-        return @{
-                p1.getMPSGraphTensor(): p1.getMPSGraphTensorData(),
-                p2.getMPSGraphTensor(): p2.getMPSGraphTensorData(),
-                p3.getMPSGraphTensor(): p3.getMPSGraphTensorData(),
-         };
-}
-
-inline NSDictionary* dictionaryFromPlaceholders(Placeholder& p1, Placeholder& p2, Placeholder& p3, Placeholder& p4) {
-        return @{
-                p1.getMPSGraphTensor(): p1.getMPSGraphTensorData(),
-                p2.getMPSGraphTensor(): p2.getMPSGraphTensorData(),
-                p3.getMPSGraphTensor(): p3.getMPSGraphTensorData(),
-                p4.getMPSGraphTensor(): p4.getMPSGraphTensorData(),
-         };
-}
-
-inline void runMPSGraph(MPSStream* stream, MPSGraph* graph, NSDictionary* feeds, Placeholder& result) {
-        runMPSGraph(stream, graph, feeds, dictionaryFromPlaceholders(result));
-}
-
-inline bool supportsComplex() {
-  return is_macos_13_or_newer(MacOSVersion::MACOS_VER_14_0_PLUS);
-}
-
-// MPS yet to support double types, but starting from MacOS 14, supports bfloat16
-inline bool supportedFloatingType(ScalarType dtype) {
-  return dtype == kFloat || dtype == kHalf || dtype == kBFloat16;
-}
-
-inline bool supportedFloatingType(const Tensor& t) {
-  return supportedFloatingType(t.scalar_type());
-}
-
-} // namespace at::native::mps
+} // namespace mps
+} // namespace native
+} // namespace at

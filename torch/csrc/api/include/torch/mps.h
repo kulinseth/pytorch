@@ -8,11 +8,11 @@
 #ifdef __OBJC__
 #include <Foundation/Foundation.h>
 #include <Metal/Metal.h>
-using MTLCommandBuffer_t = id<MTLCommandBuffer>;
-using DispatchQueue_t = dispatch_queue_t;
+typedef id<MTLCommandBuffer> MTLCommandBuffer_t;
 #else
-using MTLCommandBuffer_t = void*;
-using DispatchQueue_t = void*;
+typedef void* MTLCommandBuffer_t;
+typedef void* MTLCommandBuffer;
+typedef void* dispatch_queue_t;
 #endif
 
 namespace torch {
@@ -24,21 +24,18 @@ bool TORCH_API is_available();
 /// Sets the RNG seed for the MPS device.
 void TORCH_API manual_seed(uint64_t seed);
 
-/// Waits for all streams on the MPS device to complete.
-/// This blocks the calling CPU thread by using the 'waitUntilCompleted()'
-/// method to wait for Metal command buffers finish executing all the
-/// encoded GPU operations before returning.
+/// Waits for all streams on a MPS device to complete.
 void TORCH_API synchronize();
 
-/// Submits the currently active command buffer to run on the MPS device.
+/// Submits the command buffer to run on the GPU
 void TORCH_API commit();
 
-/// Get the current command buffer to encode the Metal commands.
+/// Get the current command buffer to encode the Metal commands
 MTLCommandBuffer_t TORCH_API get_command_buffer();
 
 /// Get the dispatch_queue_t to synchronize encoding the custom kernels
-/// with the PyTorch MPS backend.
-DispatchQueue_t TORCH_API get_dispatch_queue();
+/// with the PyTorch MPS backend
+dispatch_queue_t TORCH_API get_dispatch_queue();
 
 } // namespace mps
 } // namespace torch

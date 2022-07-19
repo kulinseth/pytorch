@@ -19,6 +19,8 @@
 #include <ATen/ops/replication_pad2d_native.h>
 #include <ATen/ops/replication_pad3d_backward_native.h>
 #include <ATen/ops/replication_pad3d_native.h>
+#include <ATen/ops/zeros_like.h>
+#include <ATen/ops/empty.h>
 #endif
 
 namespace at::native {

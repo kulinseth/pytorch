@@ -1,3 +1,4 @@
+
 //  Copyright © 2022 Apple Inc.
 
 #define TORCH_ASSERT_ONLY_METHOD_OPERATORS
@@ -20,6 +21,7 @@
 #include <ATen/ops/linalg_solve_triangular_native.h>
 #include <ATen/ops/mm_native.h>
 #include <ATen/ops/triangular_solve_native.h>
+#include <ATen/ops/copy_native.h>
 #endif
 
 namespace at::native {
@@ -203,6 +205,35 @@ static Tensor& mm_out_mps_impl(const Tensor& self, const Tensor& other, Tensor& 
   }
 
   return output;
+}
+
+void prepare_matrices_for_broadcasting(
+  const Tensor * bias,
+  const Tensor & self,
+  const Tensor & other,
+  const Scalar * beta,
+  bool * transpose_mat1_times_mat2,
+  bool & transpose_mat1,
+  bool & transpose_mat2) {
+  TORCH_CHECK(self.dim() == 2 && other.dim() == 2, "tensors must be 2-D");
+  if (bias && beta->toDouble() != 0.0f) {
+    TORCH_CHECK(bias->dim() == 2, "tensors must be 2-D");
+  }
+
+  std::pair<int64_t, int64_t> mat1_sizes;
+  std::pair<int64_t, int64_t> mat2_sizes;
+
+  mat1_sizes = std::make_pair(self.sizes()[0], self.sizes()[1]);
+  mat2_sizes = std::make_pair(other.sizes()[0], other.sizes()[1]);
+
+  if (mat1_sizes == mat2_sizes) {
+    transpose_mat2 = true;
+    std::swap(mat2_sizes.first, mat2_sizes.second);
+  }
+  if (bias && beta && transpose_mat1_times_mat2) {
+    if (beta->toDouble() != 0.0f && mat1_sizes.first == bias->sizes()[1] && mat2_sizes.second == bias->sizes()[0])
+      *transpose_mat1_times_mat2 = true;
+  }
 }
 
 enum LinearAlgebraOpType { ADDBMM_OP_TYPE, BADDBMM_OP_TYPE };
@@ -672,8 +703,422 @@ Tensor& addr_out_mps(const Tensor& self,
     Placeholder selfPlaceholder = Placeholder(cachedGraph->selfTensor_, *self_);
     Placeholder resultPlaceholder = Placeholder(cachedGraph->resultTensor_, result);
 
-    auto feeds = dictionaryFromPlaceholders(vec1Placeholder, vec2Placeholder, selfPlaceholder);
-    runMPSGraph(stream, cachedGraph->graph(), feeds, resultPlaceholder);
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
+      vec1Placeholder.getMPSGraphTensor() : vec1Placeholder.getMPSGraphTensorData(),
+      vec2Placeholder.getMPSGraphTensor() : vec2Placeholder.getMPSGraphTensorData(),
+      selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData()
+    };
+
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
+      resultPlaceholder.getMPSGraphTensor() : resultPlaceholder.getMPSGraphTensorData()
+    };
+
+    mps::runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+  }
+
+  return result;
+}
+
+Tensor& addmm_out_mps_impl(
+    const Tensor& bias,
+    const Tensor& self,  // input
+    const Tensor& other, // weight
+    const Scalar& beta,
+    const Scalar& alpha,
+    Tensor& output) {
+  using namespace mps;
+
+  TORCH_CHECK(output.is_mps());
+  TORCH_CHECK(self.dim() == 2 && other.dim() == 2, "tensors must be 2-D");
+  TORCH_CHECK(self.scalar_type() == ScalarType::Double
+              || self.scalar_type() == ScalarType::Float
+              || self.scalar_type() == ScalarType::Half, "MPS device does not support addmm for non-float input");
+
+  TensorArg args[]{{output, "out", 0}, {bias, "self", 1}, {self, "mat1", 2}, {other, "mat2", 3}};
+  checkAllSameGPU(__func__, args);
+
+  IntArrayRef mat1_sizes = self.sizes();
+  IntArrayRef mat2_sizes = other.sizes();
+  IntArrayRef bias_sizes;
+  c10::MaybeOwned<Tensor> bias_;
+  if (&output != &bias) {
+    bias_ = expand_size(bias, {mat1_sizes[0], mat2_sizes[1]}, "addmm");
+    bias_sizes = bias_->sizes();
+  } else {
+    bias_ = c10::MaybeOwned<Tensor>::borrowed(bias);
+    bias_sizes = bias_->sizes();
+    TORCH_CHECK(output.dim() == 2, "tensors must be 2-D");
+    TORCH_CHECK(bias_sizes[0] == mat1_sizes[0], "self_ dim 0 must match mat1 dim 0");
+    TORCH_CHECK(bias_sizes[1] == mat2_sizes[1], "self_ dim 1 must match mat2 dim 1");
+  }
+
+  if (&output != &self) {
+    output.resize_(bias_sizes);
+    if (beta.toComplexDouble() != 0.0) {
+      at::native::copy_(output, *bias_);
+    }
+  }
+  IntArrayRef output_sizes = output.sizes();
+  if ((output_sizes[0] == 0) || (output_sizes[1] == 0)) {
+    return output;
+  }
+
+  MPSStream* stream = getCurrentMPSStream();
+
+  bool transpose_mat1_times_mat2 = false;
+  bool transpose_mat1            = false;
+  bool transpose_mat2            = false;
+  bool is_beta_non_zero          = beta.toDouble() != 0.0;
+
+  prepare_matrices_for_broadcasting(&(*bias_), self, other, &beta, &transpose_mat1_times_mat2, transpose_mat1, transpose_mat2);
+
+  struct CachedGraph : public mps::MPSCachedGraph
+  {
+    CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
+    MPSGraphTensor *selfTensor_ = nil;
+    MPSGraphTensor *otherTensor_ = nil;
+    MPSGraphTensor *biasTensor_ = nil;
+    MPSGraphTensor *outputTensor_ = nil;
+  };
+
+  mps::MPSGraphCache *cache_ = mps::MPSGraphCache::getInstance();
+
+  @autoreleasepool {
+    string key = "addmm_out_mps_impl" + getTensorsStringKey({self, other, *bias_})
+                                       + ":" + to_string(transpose_mat1) + ":" + to_string(transpose_mat2)
+                                       + ":" + to_string(beta.toDouble())
+                                       + ":" + to_string(alpha.toDouble());
+    CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
+    if(!cachedGraph) {
+
+      mps::MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ mps::MPSCachedGraph * () {
+        CachedGraph *newCachedGraph = nil;
+
+        @autoreleasepool{
+          MPSGraph *mpsGraph = mps::make_mps_graph();
+          newCachedGraph = new CachedGraph(mpsGraph);
+
+          MPSGraphTensor *selfTensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, self);
+          MPSGraphTensor *otherTensor =  mps::mpsGraphRankedPlaceHolder(mpsGraph, other);
+          MPSGraphTensor *biasTensor =  mps::mpsGraphRankedPlaceHolder(mpsGraph, *bias_);
+
+          MPSGraphTensor* t1 = nil;
+          MPSGraphTensor* t2 = nil;
+
+          if(transpose_mat1)
+            t1 = [mpsGraph transposeTensor:selfTensor
+                                 dimension:-1
+                             withDimension:-2
+                                      name:nil];
+          else
+            t1 = selfTensor;
+
+          if(transpose_mat2)
+            t2 = [mpsGraph transposeTensor:otherTensor
+                                 dimension:-1
+                             withDimension:-2
+                                      name:nil];
+          else
+            t2 = otherTensor;
+
+
+          // TODO: Use alpha and beta here with fill_.Scalar and mul
+          // Intermediate as placeholder
+          MPSGraphTensor* productTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:t1
+                                                                          secondaryTensor:t2
+                                                                                     name:@"MM/(mat1@mat2)"];
+
+          // Intermediates for beta and alpha
+          MPSGraphTensor* betaTensor = [mpsGraph constantWithScalar:beta.toDouble()
+                                                           dataType:getMPSScalarType((*bias_).scalar_type())];
+          MPSGraphTensor* alphaTensor = [mpsGraph constantWithScalar:alpha.toDouble()
+                                                           dataType:getMPSScalarType(self.scalar_type())];
+
+          // Intermediates for multiplying by beta and alpha
+          MPSGraphTensor* productTimesAlphaTensor = [mpsGraph multiplicationWithPrimaryTensor:productTensor
+                                                                              secondaryTensor:alphaTensor
+                                                                                         name:@"MM/alpha*(mat1@mat2)"];
+          MPSGraphTensor* biasTimesBetaTensor = biasTensor;
+          if (is_beta_non_zero) {
+            biasTimesBetaTensor = [mpsGraph multiplicationWithPrimaryTensor:biasTensor
+                                                            secondaryTensor:betaTensor
+                                                                       name:@"MM/beta*input"];
+          }
+
+          if (transpose_mat1_times_mat2)
+            biasTimesBetaTensor = [mpsGraph transposeTensor: biasTimesBetaTensor
+                                                  dimension: -1
+                                              withDimension: -2
+                                                       name: nil];
+
+          MPSGraphTensor* outputTensor = productTimesAlphaTensor;
+          if (is_beta_non_zero) {
+            outputTensor = [mpsGraph additionWithPrimaryTensor:productTimesAlphaTensor
+                                               secondaryTensor:biasTimesBetaTensor
+                                                          name:@"MM/beta*input + alpha*(mat1@mat2)"];
+           }
+
+          newCachedGraph->selfTensor_ = selfTensor;
+          newCachedGraph->otherTensor_ = otherTensor;
+          newCachedGraph->biasTensor_ = biasTensor;
+          newCachedGraph->outputTensor_ = outputTensor;
+        }
+        return newCachedGraph;
+      });
+      cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
+    }
+
+    Placeholder selfPlaceholder = Placeholder(cachedGraph->selfTensor_, self);
+    Placeholder otherPlaceholder = Placeholder(cachedGraph->otherTensor_, other);
+    Placeholder biasPlaceholder = Placeholder(cachedGraph->biasTensor_, *bias_);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output);
+
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
+      selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData(),
+      otherPlaceholder.getMPSGraphTensor() : otherPlaceholder.getMPSGraphTensorData(),
+      biasPlaceholder.getMPSGraphTensor() : biasPlaceholder.getMPSGraphTensorData()
+    };
+
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
+      outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
+    };
+
+    mps::runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+  }
+
+  return output;
+}
+
+
+Tensor& bmm_out_mps_impl(
+  const Tensor & batch1,
+  const Tensor & batch2,
+  Tensor & result) {
+  using namespace mps;
+
+  TORCH_CHECK(batch1.scalar_type() == ScalarType::Double
+              || batch1.scalar_type() == ScalarType::Float
+              || batch1.scalar_type() == ScalarType::Half, "MPS device does not support bmm for non-float inputs");
+
+  if (batch1.numel() == 0 || batch2.numel() == 0) {
+    result.zero_();
+    return result;
+  }
+
+  MPSStream* stream = getCurrentMPSStream();
+
+  struct CachedGraph : public mps::MPSCachedGraph
+  {
+    CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
+    MPSGraphTensor *batch1Tensor_ = nil;
+    MPSGraphTensor *batch2Tensor_ = nil;
+    MPSGraphTensor *outputTensor_ = nil;
+  };
+
+  mps::MPSGraphCache *cache_ = mps::MPSGraphCache::getInstance();
+
+  MPSShape* shape = nil;
+  bool doTranspose = false;
+
+  // Handle transposes for the second batch of matrices.
+  if (batch2.is_view() && !batch2.is_contiguous()) {
+    if (batch2.numel() == batch2._base().numel()) {
+      const IntArrayRef& viewSizes = batch2.sizes();
+
+      // Handle 3D and 4D tensors.
+      // For 4D tensors, first it must have been reshaped from 4D to 3D and then transposed.
+      int32_t baseTransposeStrideDim = batch2._base().dim() == 4 ? -3 : -2;
+      if (batch2.size(0) == batch2.size(0) &&
+          batch2._base().stride(0) == batch2.stride(0) &&
+          batch2._base().stride(baseTransposeStrideDim) == batch2.stride(-1)) {
+        shape = @[@(viewSizes[0]), @(viewSizes[2]), @(viewSizes[1])];
+        doTranspose = true;
+      }
+    }
+  }
+
+  @autoreleasepool {
+    string key = "bmm_out_mps_impl" + getTensorsStringKey({batch1, batch2}, true, /*exclude_shape*/true) + std::to_string(doTranspose);
+
+    CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
+    if(!cachedGraph) {
+
+      mps::MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ mps::MPSCachedGraph * () {
+        CachedGraph *newCachedGraph = nil;
+
+        @autoreleasepool{
+          MPSGraph *mpsGraph = mps::make_mps_graph();
+          newCachedGraph = new CachedGraph(mpsGraph);
+
+          MPSGraphTensor *batch1Tensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(batch1.scalar_type()));
+          MPSGraphTensor *batch2Tensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(batch2.scalar_type()));
+          MPSGraphTensor *batch2TensorTranspose = batch2Tensor;
+
+          if (doTranspose) {
+            batch2TensorTranspose = [mpsGraph transposeTensor:batch2Tensor
+                                                    dimension:-1
+                                                withDimension:-2
+                                                         name:nil];
+          }
+          MPSGraphTensor* productTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:batch1Tensor
+                                                                          secondaryTensor:batch2TensorTranspose
+                                                                                     name:@"MM/(batch1@batch2)"];
+
+          newCachedGraph->batch1Tensor_ = batch1Tensor;
+          newCachedGraph->batch2Tensor_ = batch2Tensor;
+          newCachedGraph->outputTensor_ = productTensor;
+        }
+        return newCachedGraph;
+      });
+      cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
+    }
+    Placeholder batch1Placeholder = Placeholder(cachedGraph->batch1Tensor_, batch1);
+    Placeholder batch2Placeholder = Placeholder(cachedGraph->batch2Tensor_, batch2, shape, !doTranspose);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result);
+
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
+      batch1Placeholder.getMPSGraphTensor() : batch1Placeholder.getMPSGraphTensorData(),
+      batch2Placeholder.getMPSGraphTensor() : batch2Placeholder.getMPSGraphTensorData(),
+    };
+
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
+      outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
+    };
+
+    mps::runMPSGraph(stream, cachedGraph, feeds, results, /*disable_type_inference*/ true);
+  }
+
+  return result;
+}
+
+Tensor& addbmm_or_baddbmm_out_mps_impl(
+  const Tensor       & input,
+  const Tensor       & batch1,
+  const Tensor       & batch2,
+  const Scalar       & beta,
+  const Scalar       & alpha,
+  Tensor             & result,
+  mps::LinearAlgebraOpType  opType) {
+  using namespace mps;
+
+  TORCH_CHECK(input.is_mps());
+  TORCH_CHECK(batch1.is_mps());
+  TORCH_CHECK(batch2.is_mps());
+  TORCH_CHECK(result.is_mps());
+
+  TORCH_CHECK(batch1.scalar_type() == ScalarType::Double
+              || batch1.scalar_type() == ScalarType::Float
+              || batch1.scalar_type() == ScalarType::Half, "MPS device does not support addbmm or baddbmm for non-float inputs");
+
+  TORCH_CHECK(batch1.dim() == 3, "batch1 must be a 3D tensor");
+  TORCH_CHECK(batch2.dim() == 3, "batch2 must be a 3D tensor");
+  TORCH_CHECK(batch1.size(0) == batch2.size(0),
+      "batch1 and batch2 must have same number of batches, got ",
+      batch1.size(0), " and ", batch2.size(0));
+  TORCH_CHECK(batch1.size(2) == batch2.size(1),
+      "Incompatible matrix sizes for bmm (",
+      batch1.size(1), "x", batch1.size(2), " and ",
+      batch2.size(1), "x", batch2.size(2), ")");
+
+  if (opType == ADDBMM_OP_TYPE)
+  {
+    result.resize_as_(input);
+
+    const int64_t num_batches = batch1.size(0);
+
+    if (num_batches == 0) {
+      result.zero_();
+      return result;
+    }
+  }
+
+  MPSStream* stream = getCurrentMPSStream();
+
+  struct CachedGraph : public mps::MPSCachedGraph
+  {
+    CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
+    MPSGraphTensor *inputTensor_ = nil;
+    MPSGraphTensor *batch1Tensor_ = nil;
+    MPSGraphTensor *batch2Tensor_ = nil;
+    MPSGraphTensor *outputTensor_ = nil;
+  };
+
+  mps::MPSGraphCache *cache_ = mps::MPSGraphCache::getInstance();
+
+  @autoreleasepool {
+    string key = (opType == ADDBMM_OP_TYPE) ? ("addbmm_out_mps_impl") : ("baddbmm_out_mps_impl");
+    key += getTensorsStringKey({batch1, batch2, input})
+               + ":" + to_string(beta.toDouble())
+               + ":" + to_string(alpha.toDouble());
+
+    CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
+    if(!cachedGraph) {
+
+      mps::MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ mps::MPSCachedGraph * () {
+        CachedGraph *newCachedGraph = nil;
+
+        @autoreleasepool{
+          MPSGraph *mpsGraph = mps::make_mps_graph();
+          newCachedGraph = new CachedGraph(mpsGraph);
+
+          MPSGraphTensor *inputTensor  = mps::mpsGraphRankedPlaceHolder(mpsGraph, input);
+          MPSGraphTensor *batch1Tensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, batch1);
+          MPSGraphTensor *batch2Tensor =  mps::mpsGraphRankedPlaceHolder(mpsGraph, batch2);
+
+          // Intermediates for beta and alpha
+          MPSGraphTensor* betaTensor = [mpsGraph constantWithScalar: beta.toDouble()
+                                                           dataType: getMPSScalarType(input.scalar_type())];
+          MPSGraphTensor* alphaTensor = [mpsGraph constantWithScalar: alpha.toDouble()
+                                                            dataType: getMPSScalarType(batch1.scalar_type())];
+
+          MPSGraphTensor* productTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:batch1Tensor
+                                                                          secondaryTensor:batch2Tensor
+                                                                                     name:@"(batch1@batch2)"];
+
+          MPSGraphTensor* reductionSumTensor = productTensor;
+          if (opType == ADDBMM_OP_TYPE) {
+            reductionSumTensor = [mpsGraph reductionSumWithTensor: productTensor
+                                                             axis: 0
+                                                             name: @"reductionSum(batch1@batch2)"];
+          }
+
+          // Intermediates for multiplying by beta and alpha
+          MPSGraphTensor* reductionSumTimesAlphaTensor = [mpsGraph multiplicationWithPrimaryTensor: reductionSumTensor
+                                                                              secondaryTensor: alphaTensor
+                                                                                         name: @"alpha*(batch1@batch2)"];
+          MPSGraphTensor* biasTimesBetaTensor = [mpsGraph multiplicationWithPrimaryTensor: inputTensor
+                                                                          secondaryTensor: betaTensor
+                                                                                     name: @"beta*input"];
+
+          MPSGraphTensor* outputTensor = [mpsGraph additionWithPrimaryTensor:reductionSumTimesAlphaTensor
+                                                             secondaryTensor:biasTimesBetaTensor
+                                                                        name:@"beta*input + alpha*(batch1@batch2)"];
+
+          newCachedGraph->inputTensor_  = inputTensor;
+          newCachedGraph->batch1Tensor_ = batch1Tensor;
+          newCachedGraph->batch2Tensor_ = batch2Tensor;
+          newCachedGraph->outputTensor_ = outputTensor;
+        }
+        return newCachedGraph;
+      });
+      cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
+    }
+    Placeholder inputPlaceholder  = Placeholder(cachedGraph->inputTensor_,  input);
+    Placeholder batch1Placeholder = Placeholder(cachedGraph->batch1Tensor_, batch1);
+    Placeholder batch2Placeholder = Placeholder(cachedGraph->batch2Tensor_, batch2);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result);
+
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
+      inputPlaceholder.getMPSGraphTensor()  : inputPlaceholder.getMPSGraphTensorData(),
+      batch1Placeholder.getMPSGraphTensor() : batch1Placeholder.getMPSGraphTensorData(),
+      batch2Placeholder.getMPSGraphTensor() : batch2Placeholder.getMPSGraphTensorData(),
+    };
+
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
+      outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
+    };
+
+    mps::runMPSGraph(stream, cachedGraph->graph(), feeds, results);
   }
 
   return result;
@@ -733,13 +1178,95 @@ Tensor& addbmm_mps_(Tensor& self, const Tensor& batch1, const Tensor& batch2, co
   return addbmm_out_mps(self, batch1, batch2, beta, alpha, self);
 }
 
-Tensor& linalg_solve_triangular_mps_out(const Tensor& A,
-                                        const Tensor& B,
-                                        bool upper,
-                                        bool left,
-                                        bool unitriangular,
-                                        Tensor& out) {
-  return mps::linalg_solve_triangular_mps_impl(A, B, upper, /*transpose=*/false, left, unitriangular, out);
+Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool upper, bool transpose, bool left, bool unitriangular, Tensor& out) {
+  using namespace mps;
+
+  checkInputsSolver(A, B, left, "linalg.solve_triangular");
+  Tensor A_t, B_t;
+  std::tie(B_t, A_t) = _linalg_broadcast_batch_dims(B, A, /*don't check errors*/nullptr);
+  at::native::resize_output(out, B_t.sizes());
+
+  if (A.numel() == 0 || B.numel() == 0 || out.numel() == 0) {
+    out.zero_();
+    return out;
+  }
+
+  Tensor A_ = A_t;
+  Tensor B_ = B_t;
+  if (!A_t.is_contiguous()) {
+    A_ = A_t.clone(at::MemoryFormat::Contiguous);
+  }
+  if (!B_t.is_contiguous()) {
+    B_ = B_t.clone(at::MemoryFormat::Contiguous);
+  }
+  id<MTLBuffer> aBuffer = getMTLBufferStorage(A_);
+  id<MTLBuffer> bBuffer = getMTLBufferStorage(B_);
+  id<MTLBuffer> outBuffer = getMTLBufferStorage(out);
+  MPSStream* mpsStream = getCurrentMPSStream();
+  id<MTLDevice> device = MPSDevice::getInstance()->device();
+
+  dispatch_sync(mpsStream->queue(), ^(){
+    @autoreleasepool {
+      mpsStream->endKernelCoalescing();
+      id<MTLCommandBuffer> commandBuffer = mpsStream->commandBuffer();
+      uint64_t batchSize = A_.sizes().size() > 2 ? A_.size(0) : 1;
+      uint64_t aRows = A_.size(-2);
+      uint64_t bRows = B_.size(-2);
+      uint64_t aCols = A_.size(-1);
+      uint64_t bCols = B_.size(-1);
+      uint64_t aElemSize = A_.element_size();
+      uint64_t bElemSize = B_.element_size();
+
+      // TODO: cache this filter to not recreate it on each run
+      MPSMatrixSolveTriangular *filter = [[[MPSMatrixSolveTriangular alloc] initWithDevice:device
+                                                                                     right:!left
+                                                                                     upper:upper
+                                                                                 transpose:transpose
+                                                                                      unit:unitriangular
+                                                                                     order:left ? bRows : bCols
+                                                                    numberOfRightHandSides:left ? bCols : bRows
+                                                                                     alpha:1.0f] autorelease];
+      // this function call is a no-op if MPS Profiler is not enabled
+      getMPSProfiler().beginProfileKernel(filter, " solve_triangular_mps", {A_, B_});
+
+      MPSMatrixDescriptor* sourceMatrixDesc = [MPSMatrixDescriptor matrixDescriptorWithRows:aRows
+                                                                                    columns:aCols
+                                                                                   matrices:batchSize
+                                                                                   rowBytes:aCols * aElemSize
+                                                                                matrixBytes:aRows * aCols * aElemSize
+                                                                                   dataType:getMPSDataType(A_.scalar_type())];
+      MPSMatrixDescriptor* rightHandSideMatrixDesc = [MPSMatrixDescriptor matrixDescriptorWithRows:bRows
+                                                                                           columns:bCols
+                                                                                          matrices:batchSize
+                                                                                          rowBytes:bCols * bElemSize
+                                                                                       matrixBytes:bRows * bCols * bElemSize
+                                                                                          dataType:getMPSDataType(B_.scalar_type())];
+      for (const auto i: c10::irange(batchSize)) {
+        const uint64_t aBatchOffset = i * aRows * aCols;
+        const uint64_t bBatchOffset = i * bRows * bCols;
+        MPSMatrix* sourceMatrix = [[[MPSMatrix alloc] initWithBuffer:aBuffer
+                                                              offset:(A_t.storage_offset() + aBatchOffset) * aElemSize
+                                                          descriptor:sourceMatrixDesc] autorelease];
+        MPSMatrix* rightHandSideMatrix = [[[MPSMatrix alloc] initWithBuffer:bBuffer
+                                                                     offset:(B_t.storage_offset() + bBatchOffset) * bElemSize
+                                                                 descriptor:rightHandSideMatrixDesc] autorelease];
+        MPSMatrix *solutionMatrix = [[[MPSMatrix alloc] initWithBuffer:outBuffer
+                                                                offset:(out.storage_offset() + bBatchOffset) * bElemSize
+                                                            descriptor:rightHandSideMatrixDesc] autorelease];
+
+        [filter encodeToCommandBuffer:commandBuffer
+                         sourceMatrix:sourceMatrix
+                  rightHandSideMatrix:rightHandSideMatrix
+                       solutionMatrix:solutionMatrix];
+      }
+      mpsStream->commitAdaptive({A_, B_}, out, filter);
+    }
+  });
+  return out;
+}
+
+Tensor& linalg_solve_triangular_mps_out( const Tensor& A, const Tensor& B, bool upper, bool left, bool unitriangular, Tensor& out) {
+  return linalg_solve_triangular_mps_impl(A, B, upper, /*transpose=*/false, left, unitriangular, out);
 }
 
 Tensor linalg_solve_triangular_mps(const Tensor& A, const Tensor& B, bool upper, bool left, bool unitriangular) {

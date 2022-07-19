@@ -1,18 +1,8 @@
 //  Copyright © 2022 Apple Inc.
-#define TORCH_ASSERT_ONLY_METHOD_OPERATORS
-#include <ATen/TensorIterator.h>
+
+#include <ATen/native/mps/OperationUtils.h>
 #include <ATen/mps/MPSAllocatorInterface.h>
 #include <ATen/mps/MPSProfiler.h>
-#include <ATen/native/mps/MPSGraphSonomaOps.h>
-#include <ATen/native/mps/MPSGraphVenturaOps.h>
-#include <ATen/native/mps/OperationUtils.h>
-
-#ifndef AT_PER_OPERATOR_HEADERS
-#include <ATen/Functions.h>
-#include <ATen/NativeFunctions.h>
-#else
-#include <ATen/ops/scalar_tensor.h>
-#endif
 
 namespace at::native::mps {
 
@@ -30,32 +20,39 @@ void dispatch_sync_with_rethrow(dispatch_queue_t queue, void (^block)()) {
   }
 }
 
-/**
- * Computes distance from lowest to highest element offset in given tensor.
- */
-size_t compute_storage_numel_distance(const at::Tensor& t) {
-  size_t rc = 1;
-  if (t.numel() == 0) {
-    return 0;
-  }
-  for (const auto i : c10::irange(t.dim())) {
-    assert(t.size(i) > 0);
-    rc += (t.size(i) - 1) * t.stride(i);
-  }
-  return rc;
-}
-
-void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results) {
+void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds,
+                 NSDictionary* results) {
   mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE);
 }
 
-static inline void checkSupportsComplex() {
-  TORCH_CHECK_TYPE(supportsComplex(), "MPS complex types are only supported on MacOS 14.0 or newer.");
-}
+// this should be merged into runMPSGraph() with new arg "disableTypeInference" for executables
+void runMPSGraph(MPSStream* mpsStream, MPSCachedGraph *cachedGraph, NSDictionary* feeds,
+                 NSDictionary* results, bool disableTypeInference, SyncType syncType) {
+  MPSGraphExecutable* executable = nil;
+  if (disableTypeInference) {
+    @autoreleasepool {
+      MPSGraph *mpsGraph = cachedGraph->graph();
+      executable = cachedGraph->getExecultable();
+      if (!executable) {
+        NSMutableDictionary* shapes = [[NSMutableDictionary new] autorelease];
+        for (MPSGraphTensor* graphTensor in feeds) {
+          MPSGraphTensorData* graphTensorData = [feeds objectForKey:graphTensor];
+          shapes[graphTensor] = [[[MPSGraphShapedType alloc] initWithShape:nil dataType:graphTensorData.dataType] autorelease];
+        }
+        MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
+        [compilationDescriptor disableTypeInference];
+        executable = [[mpsGraph compileWithDevice:nil
+                                            feeds:shapes
+                                    targetTensors:[results allKeys]
+                                 targetOperations:nil
+                            compilationDescriptor:compilationDescriptor] retain];
+        // store the executable within the cachedGraph to reuse next time
+        cachedGraph->setExecultable(executable);
+      }
+    }
+  }
 
-static inline void checkSupportsBFloat16() {
-  TORCH_CHECK_TYPE(is_macos_13_or_newer(MacOSVersion::MACOS_VER_14_0_PLUS),
-                   "MPS bfloat16 type is supported on MacOS 14.0 or newer.");
+  mpsStream->executeMPSGraph(cachedGraph->graph(), feeds, results, syncType, executable);
 }
 
 MPSDataType getMPSDataType(ScalarType scalar_type) {
@@ -64,9 +61,6 @@ MPSDataType getMPSDataType(ScalarType scalar_type) {
       return MPSDataTypeFloat32;
     case ScalarType::Half:
       return MPSDataTypeFloat16;
-    case ScalarType::BFloat16:
-      checkSupportsBFloat16();
-      return MPSDataTypeBFloat16;
     case ScalarType::Int:
       return MPSDataTypeInt32;
     case ScalarType::Long:
@@ -80,37 +74,27 @@ MPSDataType getMPSDataType(ScalarType scalar_type) {
     case ScalarType::Bool:
       return MPSDataTypeBool;
     case ScalarType::Double:
-      TORCH_CHECK_TYPE(false,
-                       "Cannot convert a float64 Tensor to MPS as the MPS framework doesn't support float64. "
+      TORCH_CHECK_TYPE(false, "Cannot convert a float64 Tensor to MPS as the MPS framework doesn't support float64. "
                        "Please use float32 instead.")
-    case ScalarType::ComplexHalf:
-      checkSupportsComplex();
-      return MPSDataTypeComplexFloat16;
-    case ScalarType::ComplexFloat:
-      checkSupportsComplex();
-      return MPSDataTypeComplexFloat32;
     default:
-      TORCH_CHECK_TYPE(
-          false, "Trying to convert ", scalar_type, " to the MPS backend but it does not have support for that dtype.")
+      TORCH_CHECK_TYPE(false, "Trying to convert ", scalar_type, " to the MPS backend but it does not have support for that dtype.")
   }
 }
 
 // #issue 104398441 sortWithTensor and argsortWithTensor has support of
 // Int32, Half and Float32 types. These utilities are to help cast to these
 // types.
-MPSGraphTensor* castToIHFTypes(MPSGraph* mpsGraph,
-                               MPSGraphTensor* inputTensor,
-                               const Tensor& input,
-                               bool includesInt64) {
+MPSGraphTensor* castToIHFTypes(MPSGraph* mpsGraph, MPSGraphTensor* inputTensor, const Tensor& input, bool includesInt64) {
   MPSDataType dataType = getMPSDataType(input.scalar_type());
-  bool condition =
-      (dataType != MPSDataTypeInt32) && (dataType != MPSDataTypeFloat32) && (dataType != MPSDataTypeFloat16);
+  bool condition = (dataType != MPSDataTypeInt32) && (dataType != MPSDataTypeFloat32) && (dataType != MPSDataTypeFloat16);
   if (includesInt64) {
     condition = condition && (dataType != MPSDataTypeInt64);
   }
   if (condition) {
     dataType = (dataType & MPSDataTypeFloatBit) ? MPSDataTypeFloat32 : MPSDataTypeInt32;
-    return [mpsGraph castTensor:inputTensor toType:dataType name:@"castInputTensor"];
+    return [mpsGraph castTensor:inputTensor
+                         toType:dataType
+                           name:@"castInputTensor"];
   }
   return inputTensor;
 }
@@ -118,18 +102,16 @@ MPSGraphTensor* castToIHFTypes(MPSGraph* mpsGraph,
 // #issue 104398441 sortWithTensor and argsortWithTensor has support of
 // Int32, Half and Float32 types. These utilities are to help cast from these
 // types.
-MPSGraphTensor* castFromIHFTypes(MPSGraph* mpsGraph,
-                                 MPSGraphTensor* inputTensor,
-                                 const Tensor& input,
-                                 bool includesInt64) {
+MPSGraphTensor* castFromIHFTypes(MPSGraph* mpsGraph, MPSGraphTensor* inputTensor, const Tensor& input, bool includesInt64) {
   MPSDataType dataType = getMPSDataType(input.scalar_type());
-  bool condition =
-      (dataType != MPSDataTypeInt32) && (dataType != MPSDataTypeFloat32) && (dataType != MPSDataTypeFloat16);
+  bool condition = (dataType != MPSDataTypeInt32) && (dataType != MPSDataTypeFloat32) && (dataType != MPSDataTypeFloat16);
   if (includesInt64) {
     condition = condition && (dataType != MPSDataTypeInt64);
   }
   if (condition) {
-    inputTensor = [mpsGraph castTensor:inputTensor toType:dataType name:@"castInputTensor"];
+    inputTensor = [mpsGraph castTensor:inputTensor
+                                toType:dataType
+                                  name:@"castInputTensor"];
   }
   return inputTensor;
 }
@@ -143,9 +125,6 @@ MPSDataType getMPSScalarType(ScalarType scalar_type) {
       return MPSDataTypeFloat32;
     case ScalarType::Half:
       return MPSDataTypeFloat16;
-    case ScalarType::BFloat16:
-      checkSupportsBFloat16();
-      return MPSDataTypeBFloat16;
     case ScalarType::Int:
       return MPSDataTypeInt32;
     case ScalarType::Long:
@@ -158,18 +137,8 @@ MPSDataType getMPSScalarType(ScalarType scalar_type) {
       return MPSDataTypeUInt8;
     case ScalarType::Bool:
       return MPSDataTypeBool;
-    case ScalarType::ComplexHalf:
-      checkSupportsComplex();
-      return MPSDataTypeComplexFloat16;
-    // This is an intentional fallthrough supporting ComplexDouble for Scalar
-    // types as they are casted to Complex64 currently.
-    case ScalarType::ComplexDouble:
-    case ScalarType::ComplexFloat:
-      checkSupportsComplex();
-      return MPSDataTypeComplexFloat32;
     default:
-      TORCH_CHECK_TYPE(
-          false, "Trying to convert ", scalar_type, " to the MPS backend but it does not have support for that dtype.")
+      TORCH_CHECK_TYPE(false, "Trying to convert ", scalar_type, " to the MPS backend but it does not have support for that dtype.")
   }
 }
 
@@ -181,8 +150,6 @@ std::string getMPSTypeString(ScalarType scalar_type, bool short_name) {
       return short_name ? "f32" : "Float32";
     case ScalarType::Half:
       return short_name ? "f16" : "Float16";
-    case ScalarType::BFloat16:
-      return short_name ? "bf16" : "BFloat16";
     case ScalarType::Int:
       return short_name ? "i32" : "Int32";
     case ScalarType::Long:
@@ -195,10 +162,6 @@ std::string getMPSTypeString(ScalarType scalar_type, bool short_name) {
       return short_name ? "u8" : "UInt8";
     case ScalarType::Bool:
       return short_name ? "b8" : "Bool";
-    case ScalarType::ComplexHalf:
-      return short_name ? "c16" : "ComplexFloat16";
-    case ScalarType::ComplexFloat:
-      return short_name ? "c32" : "ComplexFloat32";
     default:
       return "Undefined";
   }
@@ -210,9 +173,6 @@ std::string scalarToMetalTypeString(const c10::ScalarType& scalar_type) {
       return "float";
     case ScalarType::Half:
       return "half";
-    case ScalarType::BFloat16:
-      checkSupportsBFloat16();
-      return "bfloat";
     case ScalarType::Int:
       return "int";
     case ScalarType::Long:
@@ -231,9 +191,9 @@ std::string scalarToMetalTypeString(const c10::ScalarType& scalar_type) {
   }
 }
 
-static NSArray<NSNumber*>* getTensorAxes(int64_t ndim) {
+NSArray<NSNumber*>* getTensorAxes(int64_t ndim) {
   auto axes = [NSMutableArray<NSNumber*> arrayWithCapacity:ndim];
-  for (const auto i : c10::irange(ndim)) {
+  for (const auto i: c10::irange(ndim)) {
     axes[i] = [NSNumber numberWithInteger:i];
   }
   return axes;
@@ -243,7 +203,7 @@ NSArray<NSNumber*>* getTensorAxes(const Tensor& t) {
   return getTensorAxes(t.dim());
 }
 
-static NSArray<NSNumber*>* getTensorAxes(const IntArrayRef& sizes) {
+NSArray<NSNumber*>* getTensorAxes(const IntArrayRef& sizes) {
   return getTensorAxes(sizes.size());
 }
 
@@ -252,7 +212,7 @@ NSArray<NSNumber*>* getTensorAxes(const IntArrayRef& sizes, at::OptionalIntArray
     IntArrayRef dimValues = dim.value();
     int ndim = dimValues.size();
     auto axes = [NSMutableArray<NSNumber*> arrayWithCapacity:ndim];
-    for (const auto i : c10::irange(ndim)) {
+    for (const auto i: c10::irange(ndim)) {
       axes[i] = [NSNumber numberWithInteger:dimValues[i]];
     }
 
@@ -263,11 +223,11 @@ NSArray<NSNumber*>* getTensorAxes(const IntArrayRef& sizes, at::OptionalIntArray
 }
 
 std::string getMPSShapeString(MPSShape* shape) {
-  std::string str;
-  for (NSNumber* elem in shape) {
-    str += std::to_string(elem.unsignedLongValue) + ",";
-  }
-  return str;
+    std::string str;
+    for(NSNumber *elem in shape) {
+        str += std::to_string(elem.unsignedLongValue) + ",";
+    }
+    return str;
 }
 
 std::string getArrayRefString(const IntArrayRef s) {
@@ -276,26 +236,50 @@ std::string getArrayRefString(const IntArrayRef s) {
   return ss.str();
 }
 
-std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype) {
-  std::string str;
-  // The key format per tensor would look like ":Float32[1,1,1,10]:"
-  for (const Tensor& tensor : tensors) {
-    str += ":";
-    if (tensor.defined()) {
-      str += getMPSTypeString(tensor.scalar_type(), short_dtype) + "[";
-      // if tensor is a scalar
-      if (tensor.dim() == 0) {
-        str += "Scalar";
+const std::string& getMetalScalarType(const c10::ScalarType& scalar_type) {
+  static std::unordered_map<c10::ScalarType, std::string> scalarToMetalType = {
+    {c10::ScalarType::Float, "float"},
+    {c10::ScalarType::Half,  "half"},
+    {c10::ScalarType::Long,  "long"},
+    {c10::ScalarType::Int,   "int"},
+    {c10::ScalarType::Short, "short"},
+    {c10::ScalarType::Char,  "char"},
+    {c10::ScalarType::Byte,  "uchar"},
+    {c10::ScalarType::Bool,  "bool"},
+  };
+
+  auto it = scalarToMetalType.find(scalar_type);
+  TORCH_CHECK(it != scalarToMetalType.end(), "Unsupported type byte size: ", scalar_type);
+  return it->second;
+}
+
+const std::string& getMetalScalarType(const Tensor& t) {
+  return getMetalScalarType(t.scalar_type());
+}
+
+std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype, bool exclude_shape) {
+    std::string str;
+    // The key format per tensor would look like ":Float32[1,1,1,10]:"
+    for (const Tensor& tensor: tensors) {
+      str += ":";
+      if (tensor.defined()) {
+        str += getMPSTypeString(tensor.scalar_type(), short_dtype) + "[";
+        // if tensor is a scalar
+        if (tensor.dim() == 0) {
+          str += "Scalar";
+        } else {
+          if (exclude_shape) {
+            str += "[-1]";
+          } else {
+            str += std::string([[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","].UTF8String);
+          }
+        }
+        str += "]";
       } else {
-        const NSString* ns_shape_key = [[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","];
-        str += std::string(ns_shape_key.UTF8String);
+        str += "Undefined";
       }
-      str += "]";
-    } else {
-      str += "Undefined";
     }
-  }
-  return str;
+    return str;
 }
 
 MPSShape* getMPSShape(const Tensor& t, c10::MemoryFormat memory_format) {
@@ -309,7 +293,7 @@ MPSShape* getMPSShape(IntArrayRef sizes, c10::MemoryFormat memory_format) {
     const NSUInteger C = sizes[1];
     const NSUInteger H = sizes[2];
     const NSUInteger W = sizes[3];
-    return @[ @(N), @(H), @(W), @(C) ];
+    return @[@(N), @(H), @(W), @(C)];
   }
   const int sz = sizes.size();
   const int sz_ = (sz > 0) ? sz : 1;
@@ -325,48 +309,40 @@ MPSShape* getMPSShape(IntArrayRef sizes, c10::MemoryFormat memory_format) {
 }
 
 void printTensorNDArray(const Tensor& t) {
-  if (!t.is_mps())
-    return;
-  if (t.numel() == 0)
-    return;
+  if (!t.is_mps()) return;
+  if(t.numel() == 0) return;
   // Get shape and data type
   auto selfShape = getMPSShape(t);
   auto selfDType = getMPSDataType(t.scalar_type());
 
   // Initialize data
   id<MTLBuffer> selfBuf = getMTLBufferStorage(t);
-  MPSGraphTensorData* tdata = [[[MPSGraphTensorData alloc] initWithMTLBuffer:selfBuf shape:selfShape
-                                                                    dataType:selfDType] autorelease];
+  MPSGraphTensorData* tdata = allocMPSGraphTensorData(selfBuf, selfShape, selfDType);
   C10_CLANG_DIAGNOSTIC_PUSH()
-#if C10_CLANG_HAS_WARNING("-Wobjc-method-access")
+  #if C10_CLANG_HAS_WARNING("-Wobjc-method-access")
   C10_CLANG_DIAGNOSTIC_IGNORE("-Wobjc-method-access")
-#endif
+  #endif
   [tdata printNDArray];
   C10_CLANG_DIAGNOSTIC_POP()
 }
 
-MPSNDArray* ndArrayFromTensor(const Tensor& tensor, MPSShape* shape, MPSDataType mpsType) {
+MPSNDArray* ndArrayFromTensor(const Tensor& tensor, MPSShape *shape, MPSDataType mpsType)
+{
   id<MTLBuffer> buffer = getMTLBufferStorage(tensor);
-  MPSGraphTensorData* tmpGraphTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer:buffer
-                                                                                    shape:shape
-                                                                                 dataType:mpsType] autorelease];
-
+  MPSGraphTensorData* tmpGraphTensorData = allocMPSGraphTensorData(buffer, shape, mpsType);
   return [tmpGraphTensorData mpsndarray];
 }
 
-Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor,
-                         const Tensor& src,
-                         MPSShape* mpsShape,
-                         bool gatherTensorData,
-                         MPSDataType dataType)
-    : _tensor(src) {
+Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src, MPSShape *mpsShape,
+                         bool gatherTensorData, MPSDataType dataType) : _tensor(src)
+{
   TORCH_CHECK(src.is_mps(), "Placeholder storage has not been allocated on MPS device!");
   // extract the pointer to MTLBuffer from the Tensor's storage
   id<MTLBuffer> srcBuf = getMTLBufferStorage(src);
   bool sliceViewTensor = canSliceViewTensor(src, mpsShape);
   // a view tensor could be contiguous (e.g., slice ops) or non-contiguous (e.g., transpose())
   if ((!src.is_contiguous() || (src.storage_offset() && !sliceViewTensor)) && gatherTensorData) {
-    Tensor emptyShell = Tensor();
+     Tensor emptyShell = Tensor();
     // use "_tensor" from Placeholder to retain view's output during its usage in other ops
     _tensor = gatherViewTensor(src, emptyShell);
     if (!_tensor.has_storage()) {
@@ -381,88 +357,101 @@ Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor,
   // if buffer size is zero in here, it's not a user error. It could be a missing check for
   // tensor.numel() == 0 in our internal implementations of ops.
   TORCH_INTERNAL_ASSERT([srcBuf length] > 0, "Placeholder tensor is empty!");
-  if (dataType == MPSDataTypeInvalid) {
-    const auto scalar_type = _tensor.scalar_type();
-    dataType = _tensor.dim() == 0 ? getMPSScalarType(scalar_type) : getMPSDataType(scalar_type);
-  }
-  if (src.is_contiguous() && src.storage_offset() && sliceViewTensor) {
-    _value = getMPSGraphTensorDataForView(src, mpsShape, dataType);
-  } else {
-    _value = [[[MPSGraphTensorData alloc] initWithMTLBuffer:srcBuf
-                                                      shape:mpsShape ? mpsShape : getMPSShape(_tensor)
-                                                   dataType:dataType] autorelease];
-  }
+  const MPSDataType mpsDataType = dataType != MPSDataTypeInvalid ? dataType :
+                      _tensor.dim() == 0 ? getMPSScalarType(_tensor.scalar_type()) : getMPSDataType(_tensor.scalar_type());
 
+  if (src.is_contiguous() && src.storage_offset() && sliceViewTensor) {
+    _value = getMPSGraphTensorDataForView(src, mpsShape, mpsDataType);
+  } else {
+    if (!mpsShape) {
+      mpsShape = getMPSShape(_tensor);
+    }
+
+    _value = allocMPSGraphTensorData(srcBuf, mpsShape, mpsDataType);
+  }
   TORCH_INTERNAL_ASSERT(_value);
+
   _placeholder = mpsGraphTensor;
 }
 
-MPSGraphTensorData* getMPSGraphTensorData(MPSGraph* mpsGraph, MPSStream* mpsStream, const Tensor& tensor) {
+MPSGraphTensorData* allocMPSGraphTensorData(id<MTLBuffer> buffer,
+                                            MPSShape *mpsShape,
+                                            MPSDataType mpsDataType) {
+  MPSGraphTensorData *tensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer: buffer
+                                                                            shape: mpsShape
+                                                                         dataType: mpsDataType] autorelease];
+  TORCH_INTERNAL_ASSERT(tensorData);
+  // there's no way to get the underlying buffer from an
+  // MPSGraphTensorData or from its internal MPSNDArray.
+  // So we have to keep a mapping of them here.
+  getDefaultMPSStream()->addActiveResource(tensorData, buffer);
+  return tensorData;
+}
+
+MPSGraphTensorData *getMPSGraphTensorData(MPSGraph* mpsGraph,
+                                          MPSStream* mpsStream,
+                                          const Tensor& tensor) {
   auto mpsShape = getMPSShape(tensor);
   auto dataType = getMPSDataType(tensor.scalar_type());
 
-  MPSGraphTensorData* result = nil;
+  MPSGraphTensorData *result = nil;
   if (tensor.numel() > 0) {
     id<MTLBuffer> buf = getMTLBufferStorage(tensor);
-    result = [[[MPSGraphTensorData alloc] initWithMTLBuffer:buf shape:mpsShape dataType:dataType] autorelease];
+    result = allocMPSGraphTensorData(buf, mpsShape, dataType);
   } else {
     // create empty NDArray
-    MPSNDArrayDescriptor* desc = [MPSNDArrayDescriptor descriptorWithDataType:dataType shape:mpsShape];
-    MPSNDArray* emptyArray = [[[MPSNDArray alloc] initWithDevice:mpsStream->device() descriptor:desc] autorelease];
+    MPSNDArrayDescriptor *desc = [MPSNDArrayDescriptor descriptorWithDataType:dataType
+                                                                        shape:mpsShape];
+    MPSNDArray *emptyArray = [[[MPSNDArray alloc]
+                              initWithDevice:mpsStream->device() descriptor:desc] autorelease];
     result = [[[MPSGraphTensorData alloc] initWithMPSNDArray:emptyArray] autorelease];
   }
-  TORCH_INTERNAL_ASSERT(result);
+  assert(result);
   return result;
 }
 
 MPSScalar getMPSScalar(const Scalar& scalar, ScalarType type) {
   switch (type) {
     case ScalarType::Double:
-    case ScalarType::Float:
-      return {.value.f = scalar.to<float>(), .size = sizeof(float), .type = type};
-    case ScalarType::Half:
-      return {.value.h = scalar.to<at::Half>(), .size = sizeof(short), .type = type};
-    case ScalarType::BFloat16:
-      return {.value.bf16 = scalar.to<at::BFloat16>(), .size = sizeof(short), .type = type};
-    case ScalarType::Long:
-      return {.value.i = scalar.to<int64_t>(), .size = sizeof(int64_t), .type = type};
-    case ScalarType::Int:
-      return {.value.i = scalar.to<int32_t>(), .size = sizeof(int32_t), .type = type};
-    case ScalarType::Short:
-      return {.value.i = scalar.to<int16_t>(), .size = sizeof(int16_t), .type = type};
-    case ScalarType::Char:
-      return {.value.i = scalar.to<int8_t>(), .size = sizeof(int8_t), .type = type};
-    case ScalarType::Byte:
-      return {.value.i = scalar.to<uint8_t>(), .size = sizeof(uint8_t), .type = type};
-    case ScalarType::Bool:
-      return {.value.b = scalar.to<bool>(), .size = sizeof(bool), .type = type};
-    case ScalarType::ComplexHalf:
-      return {.value.ch = scalar.to<c10::complex<at::Half>>(), .size = sizeof(int32_t), .type = type};
-    case ScalarType::ComplexFloat:
-    case ScalarType::ComplexDouble:
-      return {.value.cf = scalar.to<c10::complex<float>>(), .size = sizeof(int64_t), .type = type};
+    case ScalarType::Float: return {.value.f = scalar.to<float>()   , .size = sizeof(float)  , .type = type};
+    case ScalarType::Half:  return {.value.h = scalar.to<at::Half>(), .size = sizeof(short)  , .type = type};
+    case ScalarType::Long:  return {.value.i = scalar.to<int64_t>() , .size = sizeof(int64_t), .type = type};
+    case ScalarType::Int:   return {.value.i = scalar.to<int32_t>() , .size = sizeof(int32_t), .type = type};
+    case ScalarType::Short: return {.value.i = scalar.to<int16_t>() , .size = sizeof(int16_t), .type = type};
+    case ScalarType::Char:  return {.value.i = scalar.to<int8_t>()  , .size = sizeof(int8_t) , .type = type};
+    case ScalarType::Byte:  return {.value.i = scalar.to<uint8_t>() , .size = sizeof(uint8_t), .type = type};
+    case ScalarType::Bool:  return {.value.b = scalar.to<bool>()    , .size = sizeof(bool)   , .type = type};
     default:
       TORCH_INTERNAL_ASSERT(false, "Unsupported scalar type '", type, "' on MPS backend.");
   }
 }
 
 MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, MPSScalar& scalar) {
-  MPSGraphTensorData* result = nullptr;
+  MPSGraphTensorData *result = nullptr;
   // Scalar pools are only supported on devices with unified memory
   if (mpsStream->device().hasUnifiedMemory) {
     scalar.buffer = getIMPSAllocator()->allocScalarBufferWithValue(&scalar.value, scalar.size);
-    result = [[[MPSGraphTensorData alloc] initWithMTLBuffer:scalar.getMTLBuffer()
-                                                      shape:@[ @1 ]
-                                                   dataType:getMPSScalarType(scalar.type)] autorelease];
+    result = allocMPSGraphTensorData(scalar.getMTLBuffer(), @[@1], getMPSScalarType(scalar.type));
   } else {
-    MPSNDArrayDescriptor* tensorDesc = [MPSNDArrayDescriptor descriptorWithDataType:getMPSScalarType(scalar.type)
-                                                                              shape:@[ @1 ]];
-    MPSNDArray* tensorNDArray = [[[MPSNDArray alloc] initWithDevice:mpsStream->device()
-                                                         descriptor:tensorDesc] autorelease];
+    MPSNDArrayDescriptor *tensorDesc = [MPSNDArrayDescriptor descriptorWithDataType:getMPSScalarType(scalar.type) shape:@[@1]];
+    MPSNDArray *tensorNDArray = [[[MPSNDArray alloc] initWithDevice:mpsStream->device() descriptor:tensorDesc] autorelease];
     [tensorNDArray writeBytes:&scalar.value strideBytes:nil];
     result = [[[MPSGraphTensorData alloc] initWithMPSNDArray:tensorNDArray] autorelease];
   }
   return result;
+}
+
+id<MTLBuffer> getMTLBufferFromScalar(MPSStream* mpsStream, MPSScalar& scalar) {
+  id<MTLBuffer> buffer = nullptr;
+  auto device = mpsStream->device();
+  // Scalar pools are only supported on devices with unified memory
+  if (device.hasUnifiedMemory) {
+    scalar.buffer = getIMPSAllocator()->allocScalarBufferWithValue(&scalar.value, scalar.size);
+    buffer = scalar.getMTLBuffer();
+  } else {
+    buffer = [[device newBufferWithBytes:&scalar.value length:scalar.size options:0] autorelease];
+  }
+  return buffer;
 }
 
 void resize_tensor(Tensor* output) {
@@ -492,50 +481,55 @@ MPSGraph* make_mps_graph() {
   return mpsGraph;
 }
 
-MPSGraphTensor* mpsGraphUnrankedPlaceHolder(MPSGraph* mpsGraph, MPSDataType dataType) {
-  return [mpsGraph placeholderWithShape:nil dataType:dataType name:nil];
+MPSGraphTensor* mpsGraphUnrankedPlaceHolder(MPSGraph *mpsGraph, MPSDataType dataType) {
+  return [mpsGraph placeholderWithShape:nil
+                               dataType:dataType
+                                   name:nil];
 }
 
-MPSGraphTensor* mpsGraphRankedPlaceHolder(MPSGraph* mpsGraph, MPSDataType dataType, MPSShape* mpsShape) {
-  return [mpsGraph placeholderWithShape:mpsShape dataType:dataType name:nil];
+MPSGraphTensor* mpsGraphRankedPlaceHolder(MPSGraph *mpsGraph, MPSDataType dataType, MPSShape* mpsShape) {
+  return [mpsGraph placeholderWithShape:mpsShape
+                               dataType:dataType
+                                   name:nil];
 }
 
-MPSGraphTensor* mpsGraphRankedPlaceHolder(MPSGraph* mpsGraph, const Tensor& tensor) {
-  return [mpsGraph placeholderWithShape:getMPSShape(tensor) dataType:getMPSScalarType(tensor.scalar_type()) name:nil];
+MPSGraphTensor* mpsGraphRankedPlaceHolder(MPSGraph *mpsGraph, const Tensor& tensor) {
+    return [mpsGraph placeholderWithShape:getMPSShape(tensor)
+                                 dataType:getMPSScalarType(tensor.scalar_type())
+                                     name:nil];
 }
 
-MPSGraphTensor* mpsGraphScalarPlaceHolder(MPSGraph* mpsGraph, MPSDataType dataType) {
-  return [mpsGraph placeholderWithShape:@[ @1 ] dataType:dataType name:nil];
+MPSGraphTensor* mpsGraphScalarPlaceHolder(MPSGraph *mpsGraph, MPSDataType dataType) {
+    return [mpsGraph placeholderWithShape:@[@1]
+                                 dataType:dataType
+                                     name:nil];
 }
 
-MPSGraphTensor* mpsGraphScalarPlaceHolder(MPSGraph* mpsGraph, const Scalar& scalar) {
-  return [mpsGraph placeholderWithShape:@[ @1 ] dataType:getMPSScalarType(scalar.type()) name:nil];
+MPSGraphTensor* mpsGraphScalarPlaceHolder(MPSGraph *mpsGraph, const Scalar& scalar) {
+    return [mpsGraph placeholderWithShape:@[@1]
+                                 dataType:getMPSScalarType(scalar.type())
+                                     name:nil];
 }
 
 // this is meant to suppress the availability warning on castTensor
 // we pass ScalarType instead of MPSDataType to handle MPSDataTypeBoolean's availability too
-MPSGraphTensor* castMPSTensor(MPSGraph* mpsGraph, MPSGraphTensor* tensor, MPSDataType toType) {
-  if ([tensor dataType] == toType) {
-    return tensor;
-  }
+MPSGraphTensor* castMPSTensor(MPSGraph *mpsGraph, MPSGraphTensor* tensor, MPSDataType toType) {
   return [mpsGraph castTensor:tensor toType:toType name:@"castTensor"];
 }
 
-MPSGraphTensor* castMPSTensor(MPSGraph* mpsGraph, MPSGraphTensor* tensor, ScalarType toType) {
+MPSGraphTensor* castMPSTensor(MPSGraph *mpsGraph, MPSGraphTensor* tensor, ScalarType toType) {
   return [mpsGraph castTensor:tensor toType:getMPSScalarType(toType) name:@"castTensor"];
 }
 
-MPSGraphTensor* convertNHWCtoNCHW(MPSGraph* mpsGraph, MPSGraphTensor* tensor) {
+MPSGraphTensor* convertNHWCtoNCHW(MPSGraph *mpsGraph, MPSGraphTensor* tensor) {
   TORCH_INTERNAL_ASSERT(tensor.shape.count == 4, "Tensor must have 4 dimensions!");
   return [mpsGraph transposeTensor:[mpsGraph transposeTensor:tensor dimension:3 withDimension:2 name:nil]
-                         dimension:2
-                     withDimension:1
-                              name:nil];
+                         dimension:2 withDimension:1 name: nil];
 }
 
 string get_mem_format_string(c10::MemoryFormat memory_format) {
   string mem_format_key;
-  switch (memory_format) {
+  switch(memory_format) {
     case at::MemoryFormat::Contiguous:
       mem_format_key = "Contiguous";
       break;
@@ -543,7 +537,7 @@ string get_mem_format_string(c10::MemoryFormat memory_format) {
       mem_format_key = "ChannelsLast";
       break;
     default:
-      TORCH_CHECK(false, "Invalid memory format", memory_format);
+      assert(0 && "Invalid memory format\n");
   }
 
   return mem_format_key;
@@ -563,53 +557,14 @@ void MPSGraphCache::profileCachedGraph(const CacheEntry& cacheEntry) const {
 }
 
 class MPSGraphCacheCallback : public IMpsAllocatorCallback {
- public:
-  MPSGraphCacheCallback() : graph_cache(MPSGraphCache::getInstance()) {}
+public:
+  MPSGraphCacheCallback() : graph_cache(MPSGraphCache::getInstance()) { }
 
-  void executeMPSAllocatorCallback(void* ptr, EventType event) override {}
-
- private:
+  void executeMPSAllocatorCallback(void* ptr, EventType event) override { }
+private:
   MPSGraphCache* graph_cache;
 };
 
 REGISTER_MPS_ALLOCATOR_CALLBACK("mps_graph_cache_callback", MPSGraphCacheCallback);
-
-id<MTLBuffer> generateKernelDataOffsets(id<MTLComputeCommandEncoder> commandEncoder,
-                                        const TensorIteratorBase& iter,
-                                        bool use_64bit_index) {
-  constexpr uint32_t nOffsets = 3;
-  uint32_t numThreads = iter.numel();
-  const uint32_t nDim = iter.ndim();
-  const IntArrayRef& iterShape = iter.shape();
-  std::vector<uint32_t> iterShapeData(iterShape.size());
-  std::vector<std::array<uint32_t, nOffsets>> strides(nDim);
-  TORCH_INTERNAL_ASSERT(iter.ntensors() >= nOffsets);
-  TORCH_CHECK(use_64bit_index || iter.can_use_32bit_indexing(), "Can't be indexed using 32-bit iterator");
-
-  for (const auto i : c10::irange(iterShape.size())) {
-    iterShapeData[i] = static_cast<uint32_t>(iterShape[i]);
-  }
-
-  for (const auto i : c10::irange(nDim)) {
-    for (const auto offset : c10::irange(nOffsets)) {
-      strides[i][offset] = static_cast<uint32_t>(iter.strides(offset)[i]);
-    }
-  }
-
-  id<MTLComputePipelineState> kernelDataOffsetsPSO = MPSDevice::getInstance()->metalIndexingPSO(
-      use_64bit_index ? "kernel_index_offsets_64" : "kernel_index_offsets_32");
-  const auto elementSize = use_64bit_index ? sizeof(simd_ulong3) : sizeof(simd_uint3);
-  id<MTLBuffer> kernelDataOffsets = (id<MTLBuffer>)getIMPSAllocator()->allocate(numThreads * elementSize).get();
-
-  [commandEncoder setComputePipelineState:kernelDataOffsetsPSO];
-  [commandEncoder setBytes:strides.data() length:sizeof(uint32_t) * nDim * nOffsets atIndex:0];
-  [commandEncoder setBuffer:kernelDataOffsets offset:0 atIndex:1];
-  [commandEncoder setBytes:iterShapeData.data() length:sizeof(uint32_t) * iterShape.size() atIndex:2];
-  [commandEncoder setBytes:&nDim length:sizeof(uint32_t) atIndex:3];
-
-  mtl_dispatch1DJob(commandEncoder, kernelDataOffsetsPSO, numThreads);
-
-  return kernelDataOffsets;
-}
 
 } // namespace at::native::mps

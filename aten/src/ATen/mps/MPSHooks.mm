@@ -1,14 +1,14 @@
 //  Copyright © 2022 Apple Inc.
 
-#include <ATen/mps/MPSAllocatorInterface.h>
+#include <ATen/mps/MPSHooks.h>
 #include <ATen/mps/MPSDevice.h>
 #include <ATen/mps/MPSGeneratorImpl.h>
-#include <ATen/mps/MPSHooks.h>
+#include <ATen/mps/MPSAllocatorInterface.h>
 #include <ATen/mps/MPSProfiler.h>
-#include <ATen/mps/MPSStream.h>
 #include <c10/util/Logging.h>
 
-namespace at::mps {
+namespace at {
+namespace mps {
 
 void MPSHooks::initMPS() const {
   C10_LOG_API_USAGE_ONCE("aten.init.mps");
@@ -52,7 +52,7 @@ const Generator& MPSHooks::getDefaultMPSGenerator() const {
   return at::mps::detail::getDefaultMPSGenerator();
 }
 
-void MPSHooks::deviceSynchronize() const {
+void MPSHooks::synchronizeStream() const {
   at::mps::getDefaultMPSStream()->synchronize(SyncType::COMMIT_AND_WAIT);
 }
 
@@ -84,7 +84,11 @@ void MPSHooks::setMemoryFraction(double ratio) const {
   at::mps::getIMPSAllocator()->setHighWatermarkRatio(ratio);
 }
 
-void MPSHooks::profilerStartTrace(const std::string& mode, bool waitUntilCompleted) const {
+void MPSHooks::setAllocatorSettings(const std::string& configStr) const {
+  at::mps::getIMPSAllocator()->setAllocatorSettings(configStr);
+}
+
+void MPSHooks::profilerStartTrace(const string& mode, bool waitUntilCompleted) const {
   at::mps::getMPSProfiler().StartTrace(mode, waitUntilCompleted);
 }
 
@@ -92,32 +96,32 @@ void MPSHooks::profilerStopTrace() const {
   at::mps::getMPSProfiler().StopTrace();
 }
 
-uint32_t MPSHooks::acquireEvent(bool enable_timing) const {
-  return at::mps::getMPSEventPool()->acquireEvent(enable_timing);
+id_t MPSHooks::acquireEvent(bool enable_timing) const {
+  return m_event_pool->acquireEvent(enable_timing);
 }
 
-void MPSHooks::releaseEvent(uint32_t event_id) const {
-  at::mps::getMPSEventPool()->releaseEvent(event_id);
+void MPSHooks::releaseEvent(id_t event_id) const {
+  m_event_pool->releaseEvent(event_id);
 }
 
-void MPSHooks::recordEvent(uint32_t event_id) const {
-  at::mps::getMPSEventPool()->recordEvent(event_id, /* syncEvent*/ true);
+void MPSHooks::recordEvent(id_t event_id) const {
+  m_event_pool->recordEvent(event_id, /* syncEvent*/ true);
 }
 
-void MPSHooks::waitForEvent(uint32_t event_id) const {
-  at::mps::getMPSEventPool()->waitForEvent(event_id, /* syncEvent*/ true);
+void MPSHooks::waitForEvent(id_t event_id) const {
+  m_event_pool->waitForEvent(event_id, /* syncEvent*/ true);
 }
 
-void MPSHooks::synchronizeEvent(uint32_t event_id) const {
-  at::mps::getMPSEventPool()->synchronizeEvent(event_id);
+void MPSHooks::synchronizeEvent(id_t event_id) const {
+  m_event_pool->synchronizeEvent(event_id);
 }
 
-bool MPSHooks::queryEvent(uint32_t event_id) const {
-  return at::mps::getMPSEventPool()->queryEvent(event_id);
+bool MPSHooks::queryEvent(id_t event_id) const {
+  return m_event_pool->queryEvent(event_id);
 }
 
-double MPSHooks::elapsedTimeOfEvents(uint32_t start_event_id, uint32_t end_event_id) const {
-  return at::mps::getMPSEventPool()->elapsedTime(start_event_id, end_event_id);
+double MPSHooks::elapsedTimeOfEvents(id_t start_event_id, id_t end_event_id) const {
+  return m_event_pool->elapsedTime(start_event_id, end_event_id);
 }
 
 using at::MPSHooksRegistry;
@@ -125,4 +129,5 @@ using at::RegistererMPSHooksRegistry;
 
 REGISTER_MPS_HOOKS(MPSHooks);
 
-} // namespace at::mps
+} // namespace mps
+} // namespace at

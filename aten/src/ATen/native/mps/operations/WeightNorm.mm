@@ -7,6 +7,7 @@
 #else
 #include <ATen/ops/_weight_norm_interface_backward_native.h>
 #include <ATen/ops/_weight_norm_interface_native.h>
+#include <ATen/ops/empty_like.h>
 #endif
 
 namespace at::native {

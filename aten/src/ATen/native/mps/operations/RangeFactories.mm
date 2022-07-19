@@ -7,6 +7,7 @@
 #include <ATen/ops/arange_native.h>
 #include <ATen/ops/linspace_native.h>
 #include <ATen/ops/range_native.h>
+#include <ATen/ops/empty_like.h>
 #include <cmath>
 #include <limits>
 
@@ -100,7 +101,7 @@ Tensor& arange_mps_out(const Scalar& start, const Scalar& end, const Scalar& ste
     }
 
     bool is_contiguous = result.is_contiguous();
-    Tensor r = !is_contiguous ? at::empty_like(result, LEGACY_CONTIGUOUS_MEMORY_FORMAT) : result;
+    Tensor r = !is_contiguous ? empty_like(result, LEGACY_CONTIGUOUS_MEMORY_FORMAT) : result;
     using namespace mps;
     auto cache_ = MPSGraphCache::getInstance();
     auto stream = getCurrentMPSStream();
@@ -167,7 +168,7 @@ Tensor& range_mps_out(const Scalar& start, const Scalar& end, const Scalar& step
       result.resize_({size});
     }
     bool is_contiguous = result.is_contiguous();
-    Tensor r = !is_contiguous ? at::empty_like(result, LEGACY_CONTIGUOUS_MEMORY_FORMAT) : result;
+    Tensor r = !is_contiguous ? empty_like(result, LEGACY_CONTIGUOUS_MEMORY_FORMAT) : result;
     using namespace mps;
     auto cache_ = MPSGraphCache::getInstance();
     auto stream = getCurrentMPSStream();

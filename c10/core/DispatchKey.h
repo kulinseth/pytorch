@@ -361,6 +361,9 @@ enum class DispatchKey : uint16_t {
   AutocastXLA,
   // AutocastXLA is only being used for TPUs. XLA GPUs continue to use
   // AutocastCUDA.
+  AutocastMPS,
+  // Naughtily, AutocastCUDA is also being used for XLA.  In the terminal state,
+  // it probably should get its own Autocast key
   AutocastCUDA,
   AutocastPrivateUse1,
 
