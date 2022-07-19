@@ -55,9 +55,9 @@ void set_apparent_shapes(NSMutableArray<NSNumber*> * input_shape,
 
   for(int i = 0; i < num_repeat_dims; i++) {
     if(repeat_empty)
-      repeats_shape[i] = [NSNumber numberWithInt:1];
+      repeats_shape[i] = [NSNumber numberWithInteger:1];
     else
-      repeats_shape[i] = [NSNumber numberWithInt:repeats[i]];
+      repeats_shape[i] = [NSNumber numberWithInteger:repeats[i]];
   }
 
   // If no extension of the shape is needed
