@@ -530,9 +530,33 @@ Tensor& addbmm_or_baddbmm_out_mps_impl(
           MPSGraphTensor* alphaTensor = [mpsGraph constantWithScalar: alpha.toDouble()
                                                             dataType: getMPSScalarType(batch1.scalar_type())];
 
-          MPSGraphTensor* productTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:batch1Tensor
-                                                                          secondaryTensor:batch2Tensor
+          MPSGraphTensor* batch1Tensor_cast = nil;
+          MPSGraphTensor* batch2Tensor_cast = nil;
+          if(!(batch1.scalar_type() == ScalarType::Double || batch1.scalar_type() == ScalarType::Float
+                                                          || batch1.scalar_type() == ScalarType::Half)) {
+            batch1Tensor_cast = [mpsGraph castTensor:batch1Tensor
+                                              toType:MPSDataTypeFloat32
+                                                name:@"batch1_cast"];
+            batch2Tensor_cast = [mpsGraph castTensor:batch2Tensor
+                                              toType:MPSDataTypeFloat32
+                                                name:@"batch2_cast"];
+          }
+          else {
+            batch1Tensor_cast = batch1Tensor;
+            batch2Tensor_cast = batch2Tensor;
+          }
+
+          MPSGraphTensor* productTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:batch1Tensor_cast
+                                                                          secondaryTensor:batch2Tensor_cast
                                                                                      name:@"(batch1@batch2)"];
+
+          if(!(batch1.scalar_type() == ScalarType::Double || batch1.scalar_type() == ScalarType::Float
+                                                          || batch1.scalar_type() == ScalarType::Half)) {
+            productTensor = [mpsGraph castTensor:productTensor
+                                          toType:getMPSScalarType(batch1.scalar_type())
+                                            name:@"(batch1@batch2)_cast"];
+          }
+
 
           MPSGraphTensor* reductionSumTensor = productTensor;
           if (opType == ADDBMM_OP_TYPE) {
