@@ -55,15 +55,22 @@ bool MPSHeapAllocatorImpl::alloc_buffer(AllocParams& p)
   if (!heap)
     return false; // this will cause releasing pool buffers to free up memory
 
-  id<MTLBuffer> buffer = heap->newMTLBuffer(p.size(), p.pool->usage);
+  BufferPool& pool = *p.pool;
+
+  id<MTLBuffer> buffer = heap->newMTLBuffer(p.size(), pool.usage);
   // this should never happen as the backing memory (i.e., heap) was allocated successfully.
   TORCH_INTERNAL_ASSERT(buffer);
   // insert heap after a buffer was created on it to update the order of heap's set
-  p.pool->heaps.insert(heap);
+  pool.heaps.insert(heap);
   p.buffer_block = new BufferBlock(p.size(), p.requested_size, buffer, heap, m_allocated_buffers.size() + 1);
   m_allocated_buffers[p.buffer_block->buffer] = p.buffer_block;
   m_total_allocated_memory += p.size();
-  p.pool->n_buffers++;
+  pool.n_buffers++;
+
+  if (pool.usage & UsageFlags::SCALAR) {
+    // for scalar buffers we only insert once into the pool
+    pool.buffers.insert(p.buffer_block);
+  }
 
   if (m_debug_verbosity & DebugVerbosity::ALLOCATIONS) {
     std::cerr << "Allocated "
@@ -87,12 +94,26 @@ bool MPSHeapAllocatorImpl::get_free_buffer(AllocParams& p)
     return false;
 
   BufferPool& pool = *p.pool;
-  auto it = pool.buffers.lower_bound(&p.search_key);
-  if (it == pool.buffers.end())
-    return false;
+  // buffers in a scalar pool have the same size. So we'll search for one that's just not in use.
+  if (pool.usage & UsageFlags::SCALAR) {
+    for (const auto buffer_block : pool.buffers) {
+      if (!buffer_block->in_use) {
+        p.buffer_block = buffer_block;
+        // no need to erase/re-insert buffer in scalar pool
+        break;
+      }
+    }
+  } else {
+    auto it = pool.buffers.lower_bound(&p.search_key);
+    if (it != pool.buffers.end()) {
+      p.buffer_block = *it;
+      pool.buffers.erase(it);
+    }
+  }
 
-  p.buffer_block = *it;
-  pool.buffers.erase(it);
+  if (!p.buffer_block)
+    return false; // this will make allocator to allocate a new buffer
+
   if (m_debug_verbosity & DebugVerbosity::RECYCLES) {
     std::cerr << "Reusing "
               << ((p.pool->usage & UsageFlags::SHARED) ? "shared" : "private")
@@ -138,12 +159,16 @@ BufferBlock* MPSHeapAllocatorImpl::alloc_buffer_block(size_t size, uint32_t usag
 void MPSHeapAllocatorImpl::free_buffer(BufferBlock* buffer_block)
 {
   TORCH_INTERNAL_ASSERT(buffer_block->in_use);
-  trigger_memory_callbacks(buffer_block, IMpsAllocatorCallback::EventType::FREED);
+
+  BufferPool& pool = *buffer_block->heap->pool;
+  // no need to erase/re-insert buffer in scalar pool (all buffers have same size)
+  if (!(pool.usage & UsageFlags::SCALAR)) {
+    // Makes sure the BufferBlock* isn't already present in the pool we're freeing it back into.
+    TORCH_INTERNAL_ASSERT(pool.buffers.insert(buffer_block).second);
+    buffer_block->shape.clear(); // reset shape
+    trigger_memory_callbacks(buffer_block, IMpsAllocatorCallback::EventType::FREED);
+  }
   buffer_block->in_use = false;
-  buffer_block->shape.clear(); // reset shape
-  BufferPool *pool = buffer_block->heap->pool;
-  // Makes sure the BufferBlock* isn't already present in the pool we're freeing it back into.
-  TORCH_INTERNAL_ASSERT(pool->buffers.insert(buffer_block).second);
 }
 
 BufferBlock* MPSHeapAllocatorImpl::get_allocated_buffer_block(void* ptr)
@@ -189,7 +214,7 @@ void MPSHeapAllocatorImpl::release_buffer(BufferBlock* buffer_block, bool remove
     heap->releaseMTLHeap();
     if (m_debug_verbosity & DebugVerbosity::RELEASES) {
       std::cerr << "Released heap of size " << format_size(heap->size.total)
-                << " (free memory: " << format_size(max_available_size()) << ")\n";
+                << " (current allocated: " << format_size(current_allocated_size()) << ")\n";
     }
     delete heap;
   } else {
@@ -205,7 +230,8 @@ void MPSHeapAllocatorImpl::release_buffers(BufferPool& pool)
               << ((pool.usage & UsageFlags::SHARED) ? "shared" : "private")
               << ((pool.usage & UsageFlags::SCALAR) ? " scalar" : "")
               << " pool (free buffers: " << pool.buffers.size()
-              << ", current allocated:" << format_size(current_allocated_size()) << ")\n";
+              << ", MPS allocated:" << format_size(m_total_allocated_memory)
+              << ", process allocated:" << format_size(current_allocated_size()) << ")\n";
   }
   auto it = pool.buffers.begin();
   while (it != pool.buffers.end()) {
@@ -215,19 +241,18 @@ void MPSHeapAllocatorImpl::release_buffers(BufferPool& pool)
   }
 }
 
-bool MPSHeapAllocatorImpl::release_available_cached_buffers(const AllocParams& p)
+bool MPSHeapAllocatorImpl::release_available_cached_buffers(AllocParams& p)
 {
   BufferPool& pool = *p.pool;
 
   if (pool.buffers.empty())
     return false;
 
-  BufferBlock key = p.search_key;
-  auto it = pool.buffers.lower_bound(&key);
+  auto it = pool.buffers.lower_bound(&p.search_key);
   if (it == pool.buffers.end()) {
     size_t totalReleased = 0;
     --it;
-    while (totalReleased < key.size) {
+    while (totalReleased < p.search_key.size) {
       auto cur = it;
       totalReleased += (*it)->size;
       if (it != pool.buffers.begin()) {
@@ -238,7 +263,7 @@ bool MPSHeapAllocatorImpl::release_available_cached_buffers(const AllocParams& p
         break;
       }
     }
-    if (totalReleased < key.size)
+    if (totalReleased < p.search_key.size)
       return false;
   } else {
     release_buffer(*it);
@@ -248,6 +273,8 @@ bool MPSHeapAllocatorImpl::release_available_cached_buffers(const AllocParams& p
 
 bool MPSHeapAllocatorImpl::release_cached_buffers()
 {
+  // before releasing the buffers make sure the command buffer has finished.
+  getCurrentMPSStream()->synchronize(SyncType::COMMIT_AND_WAIT);
   // Free all cached blocks to system allocator
   release_buffers(m_large_pool_private);
   release_buffers(m_large_pool_shared);
@@ -286,13 +313,12 @@ id<MTLBuffer> MPSHeapAllocatorImpl::getScalarBufferWithValue(void* value, size_t
       return nullptr;
     memcpy([buffer_block->buffer contents], value, size);
   }
-  // this will return the buffer block back to the pool after
+  // this will mark the buffer as reusable after
   // command buffer finishes copying scalar from CPU to GPU
   [stream->commandBuffer() addCompletedHandler:^(id <MTLCommandBuffer>) {
-    //Free(buffer_block->buffer);
-    std::lock_guard<std::mutex> lock(m_mutex);
-    free_buffer(buffer_block);
+    buffer_block->in_use = false;
   }];
+
   return buffer_block->buffer;
 }
 
@@ -303,7 +329,7 @@ ssize_t MPSHeapAllocatorImpl::getRequestedBufferSize(void* ptr)
   BufferBlock *buffer_block = get_allocated_buffer_block(ptr);
   if (buffer_block)
     return (ssize_t) buffer_block->requested_size;
-  // this indicates the passed buffer pointer wasn't found
+  // -1 indicates the passed buffer pointer wasn't found
   return -1;
 }
 

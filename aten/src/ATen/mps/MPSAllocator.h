@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <mutex>
 #include <set>
+#include <atomic>
 #include <mach/vm_page_size.h>
 #include <c10/util/flat_hash_map.h>
 
@@ -66,7 +67,7 @@ struct BufferBlock
   size_t requested_size; // requested size (before alignment)
   // buffer shape is used for retrieving base of views in cached graphs
   std::vector<int64_t> shape;
-  bool in_use;
+  std::atomic_bool in_use{false};
   HeapBlock* heap;
   id_t buf_id;
 
@@ -201,7 +202,8 @@ class MPSHeapAllocatorImpl
 {
 public:
   // by default, allocation requests beyond 90% of total memory will return OOM error
-  constexpr static double default_memory_fraction = 0.90;
+  // (0.0 disables the memory allocation limit)
+  constexpr static double default_memory_fraction = 0.0;
 
   explicit MPSHeapAllocatorImpl() :
     m_device(at::mps::MPSDevice::getInstance()->device()),
@@ -270,7 +272,7 @@ private:
   void free_buffer(BufferBlock* buffer_block);
   void release_buffer(BufferBlock* buffer_block, bool remove_empty_heap = true);
   void release_buffers(BufferPool& pool);
-  bool release_available_cached_buffers(const AllocParams& p);
+  bool release_available_cached_buffers(AllocParams& p);
   bool release_cached_buffers();
   void trigger_memory_callbacks(BufferBlock* buffer_block, IMpsAllocatorCallback::EventType event);
 
@@ -291,7 +293,6 @@ private:
   // there are implicit allocations from MPS backend, so we need to query the 'device' for
   // total allocated size instead of manually tracking in MPSAllocator
   size_t current_allocated_size() const { return [m_device currentAllocatedSize]; }
-  size_t max_available_size() const { return max_device_size() - current_allocated_size(); }
 
   // TODO: make a common function to do size unit conversions in PyTorch.
   static std::string format_size(uint64_t size) {
