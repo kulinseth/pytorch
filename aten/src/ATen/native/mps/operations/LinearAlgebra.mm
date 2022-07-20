@@ -300,9 +300,34 @@ Tensor& addmm_out_mps_impl(
 
           // TODO: Use alpha and beta here with fill_.Scalar and mul
           // Intermediate as placeholder
-          MPSGraphTensor* productTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:t1
-                                                                          secondaryTensor:t2
+          MPSGraphTensor* t1_cast = nil;
+          MPSGraphTensor* t2_cast = nil;
+
+          // TODO: Assuming that t1 and t2 are of same type
+          if(!(self.scalar_type() == ScalarType::Double || self.scalar_type() == ScalarType::Float
+                                                        || self.scalar_type() == ScalarType::Half)) {
+            t1_cast = [mpsGraph castTensor:t1
+                                    toType:MPSDataTypeFloat32
+                                      name:@"mat1_cast"];
+            t2_cast = [mpsGraph castTensor:t2
+                                    toType:MPSDataTypeFloat32
+                                      name:@"mat2_cast"];
+          }
+          else {
+            t1_cast = t1;
+            t2_cast = t2;
+          }
+
+          MPSGraphTensor* productTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:t1_cast
+                                                                          secondaryTensor:t2_cast
                                                                                      name:@"MM/(mat1@mat2)"];
+
+          if(!(self.scalar_type() == ScalarType::Double || self.scalar_type() == ScalarType::Float
+                                                        || self.scalar_type() == ScalarType::Half)) {
+            productTensor = [mpsGraph castTensor:productTensor
+                                          toType:getMPSScalarType(self.scalar_type())
+                                            name:@"MM/(mat1@mat2)_cast"];
+          }
 
           // Intermediates for beta and alpha
           MPSGraphTensor* betaTensor = [mpsGraph constantWithScalar:beta.toDouble()
