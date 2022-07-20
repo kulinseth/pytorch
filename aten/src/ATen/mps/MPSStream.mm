@@ -38,6 +38,8 @@ MPSCommandBuffer* MPSStream::commandBuffer() {
 }
 
 void MPSStream::synchronize(SyncType syncType) {
+  if (!_commandBuffer)
+    return;
   switch(syncType) {
     case SyncType::NONE:
       // typically in GPU to GPU copies we won't commit explicitly
@@ -134,7 +136,7 @@ void MPSStream::copy_and_sync(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer, 
        !non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT);
 }
 
-void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results) {
+void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results, SyncType syncType) {
   dispatch_sync(_serialQueue, ^() {
 #if USE_MPSCOMMANDBUFFER
     [mpsGraph encodeToCommandBuffer:commandBuffer()
@@ -142,6 +144,8 @@ void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDicti
                    targetOperations:nil
                   resultsDictionary:results
                 executionDescriptor:_executionDescriptor];
+    // mostly the syncType is NONE, but in some cases we may want to sync and wait (e.g., gatherViewTensor)
+    synchronize(syncType);
 #else
     commit(true);
     [mpsGraph runAsyncWithMTLCommandQueue:_commandQueue
