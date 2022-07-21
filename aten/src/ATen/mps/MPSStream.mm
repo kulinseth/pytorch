@@ -45,7 +45,7 @@ void MPSStream::synchronize(SyncType syncType) {
       // typically in GPU to GPU copies we won't commit explicitly
       break;
     case SyncType::COMMIT:
-      commit(true);
+      flush();
       break;
     case SyncType::COMMIT_AND_WAIT:
       commitAndWait();

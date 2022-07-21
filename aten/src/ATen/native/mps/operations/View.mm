@@ -73,7 +73,7 @@ static Tensor& runViewGraph(ViewCachedGraph* cachedGraph, const at::Tensor& src,
       cachedGraph->outputTensor : outputTensorData
     };
     stream->executeMPSGraph(cachedGraph->graph(), feeds, results,
-                            requires_sync ? SyncType::COMMIT_AND_WAIT : SyncType::NONE);
+                            requires_sync ? SyncType::COMMIT : SyncType::NONE);
   }
   return output;
 }
@@ -240,7 +240,7 @@ Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output)
 {
   ViewCachedGraph* cachedGraph = createViewGraph(output, output.sizes(), output.strides(),
                                                  output.storage_offset(), /*needsScatter*/ true);
-  return runViewGraph(cachedGraph, src, output, /*needsScatter*/ true);
+  return runViewGraph(cachedGraph, src, output, /*needsScatter*/ true, /*requires_sync*/  true);
 }
 
 } // namespace mps
