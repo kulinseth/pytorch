@@ -147,31 +147,45 @@ Tensor& mm_out_mps_impl(
           MPSGraph *mpsGraph = mps::make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          MPSGraphTensor *selfTensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, self);
-          MPSGraphTensor *otherTensor =  mps::mpsGraphRankedPlaceHolder(mpsGraph, other);
+          MPSGraphTensor *selfTensor = nil;
+          MPSGraphTensor *otherTensor = nil;
+          MPSGraphTensor *outputTensor = nil;
 
-          MPSGraphTensor* t1 = nil;
-          MPSGraphTensor* t2 = nil;
+          if(self.numel() == 0 || other.numel() == 0) {
 
-          if(transpose_mat1)
-            t1 = [mpsGraph transposeTensor:selfTensor
-                                 dimension:-1
-                             withDimension:-2
-                                      name:nil];
-          else
-            t1 = selfTensor;
+            outputTensor = [mpsGraph constantWithScalar:0.
+                                                  shape:getMPSShape(output_sizes)
+                                                   dataType:getMPSDataType(output.scalar_type())];
 
-          if(transpose_mat2)
-            t2 = [mpsGraph transposeTensor:otherTensor
-                                 dimension:-1
-                             withDimension:-2
-                                      name:nil];
-          else
-            t2 = otherTensor;
+          }
+          else {
 
-          MPSGraphTensor* outputTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:t1
-                                                                         secondaryTensor:t2
-                                                                                    name:nil];
+            selfTensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, self);
+            otherTensor =  mps::mpsGraphRankedPlaceHolder(mpsGraph, other);
+
+            MPSGraphTensor* t1 = nil;
+            MPSGraphTensor* t2 = nil;
+
+            if(transpose_mat1)
+              t1 = [mpsGraph transposeTensor:selfTensor
+                                   dimension:-1
+                               withDimension:-2
+                                        name:nil];
+            else
+              t1 = selfTensor;
+
+            if(transpose_mat2)
+              t2 = [mpsGraph transposeTensor:otherTensor
+                                   dimension:-1
+                               withDimension:-2
+                                        name:nil];
+            else
+              t2 = otherTensor;
+
+            outputTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:t1
+                                                           secondaryTensor:t2
+                                                                      name:nil];
+          }
 
           newCachedGraph->selfTensor_ = selfTensor;
           newCachedGraph->otherTensor_ = otherTensor;
@@ -181,14 +195,21 @@ Tensor& mm_out_mps_impl(
       });
       cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
-    Placeholder selfPlaceholder = Placeholder(cachedGraph->selfTensor_, self);
-    Placeholder otherPlaceholder = Placeholder(cachedGraph->otherTensor_, other);
+    Placeholder selfPlaceholder = Placeholder();
+    Placeholder otherPlaceholder = Placeholder();
+    if(!(self.numel() == 0 || other.numel() == 0)) {
+      selfPlaceholder = Placeholder(cachedGraph->selfTensor_, self);
+      otherPlaceholder = Placeholder(cachedGraph->otherTensor_, other);
+    }
     Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output);
 
-    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
-      selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData(),
-      otherPlaceholder.getMPSGraphTensor() : otherPlaceholder.getMPSGraphTensorData()
-    };
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = nil;
+
+    if(!(self.numel() == 0 || other.numel() == 0))
+      feeds = @{
+        selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData(),
+        otherPlaceholder.getMPSGraphTensor() : otherPlaceholder.getMPSGraphTensorData()
+      };
 
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
