@@ -125,17 +125,11 @@ Tensor& mm_out_mps_impl(
 
   MPSStream* stream = getCurrentMPSStream();
 
-  bool transpose_mat1            = false;
-  bool transpose_mat2            = false;
-
-  prepare_matrices_for_broadcasting(NULL, self, other, NULL, NULL, transpose_mat1, transpose_mat2);
-
   mps::MPSGraphCache *cache_ = mps::MPSGraphCache::getInstance();
 
   @autoreleasepool {
 
-    string key = "mm_out_mps_impl" + getTensorsStringKey({self, other})
-                                   + ":" + to_string(transpose_mat1) + ":" + to_string(transpose_mat2);
+    string key = "mm_out_mps_impl" + getTensorsStringKey({self, other});
 
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
     if(!cachedGraph) {
@@ -162,28 +156,8 @@ Tensor& mm_out_mps_impl(
 
             selfTensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, self);
             otherTensor =  mps::mpsGraphRankedPlaceHolder(mpsGraph, other);
-
-            MPSGraphTensor* t1 = nil;
-            MPSGraphTensor* t2 = nil;
-
-            if(transpose_mat1)
-              t1 = [mpsGraph transposeTensor:selfTensor
-                                   dimension:-1
-                               withDimension:-2
-                                        name:nil];
-            else
-              t1 = selfTensor;
-
-            if(transpose_mat2)
-              t2 = [mpsGraph transposeTensor:otherTensor
-                                   dimension:-1
-                               withDimension:-2
-                                        name:nil];
-            else
-              t2 = otherTensor;
-
-            outputTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:t1
-                                                           secondaryTensor:t2
+            outputTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:selfTensor
+                                                           secondaryTensor:otherTensor
                                                                       name:nil];
           }
 
