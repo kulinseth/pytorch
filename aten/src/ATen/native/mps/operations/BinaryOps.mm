@@ -27,6 +27,10 @@ typedef MPSGraphTensor* (^BinaryOpBlock)(BinaryOpCachedGraph*, MPSGraphTensor*, 
 void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha,
                     const Tensor& output_, std::string op_name, BinaryOpBlock binaryBlock)
 {
+
+  TORCH_CHECK(!(self.scalar_type() == ScalarType::Long &&
+                (op_name == "power" || op_name == "atan2") ), "MPS does not support " + op_name + " op with int64 input")
+
   // it's possible to receive empty tensors here
   if (self.numel() == 0 || other.numel() == 0) {
     return;
