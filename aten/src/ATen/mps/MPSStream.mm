@@ -7,6 +7,9 @@ namespace mps {
 
 #define USE_MPSCOMMANDBUFFER 1
 
+// the frequency that we call commit(); calculated based on low watermark ratio in MPSAllocator
+uint32_t get_adaptive_commit_frequency();
+
 //-----------------------------------------------------------------
 //  MPSStream
 //-----------------------------------------------------------------
@@ -46,6 +49,12 @@ void MPSStream::synchronize(SyncType syncType) {
       break;
     case SyncType::COMMIT:
       flush();
+      break;
+    case SyncType::COMMIT_ADAPTIVE:
+      // this controls the frequency that we commit based on hitting the low watermark memory threshold
+      if (get_adaptive_commit_frequency() <= 1) {
+        flush();
+      }
       break;
     case SyncType::COMMIT_AND_WAIT:
       commitAndWait();

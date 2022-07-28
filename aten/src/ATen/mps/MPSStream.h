@@ -43,6 +43,7 @@ enum class SyncType {
   COMMIT,             // commit and flush the command buffer
   COMMIT_AND_WAIT,    // flush and wait for command buffer execution to finish
   COMMIT_AND_CONTINUE,// commit and continue with a new underlying command buffer
+  COMMIT_ADAPTIVE,    // commit adaptively based on available memory
 };
 
 class TORCH_API MPSStream
@@ -86,9 +87,9 @@ private:
   MTLCommandQueue_t   _commandQueue = nil;
   MPSCommandBuffer*  _commandBuffer = nil;
   MPSGraphExecutionDescriptor *_executionDescriptor = nil;
-  void _flush(bool commitAndWait) const;
-
   dispatch_queue_t    _serialQueue = nullptr;
+
+  void _flush(bool commitAndWait) const;
 };
 
 /**
