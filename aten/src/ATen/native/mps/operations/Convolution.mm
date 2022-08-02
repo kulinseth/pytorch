@@ -33,8 +33,9 @@ void fill_conv_desc(MPSGraphConvolution2DOpDescriptor* descriptor_,
 
   descriptor_.dataLayout = (memory_format == at::MemoryFormat::Contiguous) ?
         MPSGraphTensorNamedDataLayoutNCHW : MPSGraphTensorNamedDataLayoutNHWC;
-  descriptor_.weightsLayout = (memory_format == at::MemoryFormat::Contiguous) ?
-        MPSGraphTensorNamedDataLayoutOIHW : MPSGraphTensorNamedDataLayoutHWIO;
+
+  // PyTorch always uses OIHW memory layout for weights
+  descriptor_.weightsLayout = MPSGraphTensorNamedDataLayoutOIHW;
   descriptor_.groups = groups;
 }
 
@@ -61,6 +62,7 @@ Tensor _mps_convolution(
    bias_defined = bias_opt->defined();
 
   auto memory_format = input_t.suggest_memory_format();
+  bool is_channels_last = (memory_format == at::MemoryFormat::ChannelsLast);
   auto output_t = at::empty(
                     conv_output_size(input->sizes(), weight->sizes(),
                                      padding, stride, dilation),
@@ -68,7 +70,7 @@ Tensor _mps_convolution(
                     c10::nullopt,
                     kMPS,
                     c10::nullopt,
-                    memory_format);
+                    c10::nullopt);
 
   if (output_t.numel() == 0) {
     return output_t;
@@ -140,19 +142,36 @@ Tensor _mps_convolution(
 
           MPSGraphTensor* inputTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, input_t);
           MPSGraphTensor* weightTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, weight_t);
+          MPSGraphTensor* inputTensor_ = inputTensor;
+
+          // If the input data is marked as channels last, we need to permute it from NCHW to NHWC
+          if (is_channels_last) {
+            // NCHW -> NHWC
+            inputTensor_ = [mpsGraph transposeTensor: inputTensor
+                                            permute: @[@0, @2, @3, @1]
+                                               name: nil];
+          }
+
           MPSGraphTensor* biasTensor = nil;
           if(bias_defined)
             biasTensor = native_mps::mpsGraphUnrankedPlaceHolder(mpsGraph, native_mps::getMPSDataType((bias_opt.value()).scalar_type()));
 
-          MPSGraphTensor* outputTensor = [mpsGraph convolution2DWithSourceTensor:inputTensor
-                                                                   weightsTensor:weightTensor
-                                                                      descriptor:descriptor_
-                                                                            name:nil];
+          MPSGraphTensor* outputTensor = [mpsGraph convolution2DWithSourceTensor: inputTensor_
+                                                                   weightsTensor: weightTensor
+                                                                      descriptor: descriptor_
+                                                                            name: nil];
+          // Convert the result back from NHWC to NCHW
+          if (is_channels_last) {
+            // NHWC -> NCHW
+            outputTensor = [mpsGraph transposeTensor: outputTensor
+                                             permute: @[@0, @3, @1, @2]
+                                                name: nil];
+          }
 
           if(bias_defined) {
-            outputTensor = [mpsGraph additionWithPrimaryTensor:outputTensor
-                                               secondaryTensor:biasTensor
-                                                          name:nil];
+            outputTensor = [mpsGraph additionWithPrimaryTensor: outputTensor
+                                               secondaryTensor: biasTensor
+                                                          name: nil];
           }
 
           newCachedGraph->inputTensor_ = inputTensor;
