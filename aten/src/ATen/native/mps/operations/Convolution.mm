@@ -124,6 +124,15 @@ Tensor _mps_convolution(
                                     + mps::getTensorsStringKey({input_t, weight_t}) + ":"
                                     + to_string(bias_defined) + ":" + bias_shape_key;
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
+    MPSShape* inputShape = nil;
+
+    if (is_channels_last) {
+      const auto inputSizes = input_t.sizes();
+      IntArrayRef input_nhwc = {inputSizes[0], inputSizes[2], inputSizes[3], inputSizes[1]};
+      inputShape = native_mps::getMPSShape(input_nhwc);
+    } else {
+      inputShape = native_mps::getMPSShape(input_t);
+    }
 
     if(!cachedGraph) {
       native_mps::MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ native_mps::MPSCachedGraph * () {
@@ -140,31 +149,22 @@ Tensor _mps_convolution(
                                       padding[1], padding[0],
                                       memory_format, groups);
 
-          MPSGraphTensor* inputTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, input_t);
+          MPSGraphTensor* inputTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, native_mps::getMPSScalarType(input_t.scalar_type()), inputShape);
           MPSGraphTensor* weightTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, weight_t);
-          MPSGraphTensor* inputTensor_ = inputTensor;
-
-          // If the input data is marked as channels last, we need to permute it from NCHW to NHWC
-          if (is_channels_last) {
-            // NCHW -> NHWC
-            inputTensor_ = [mpsGraph transposeTensor: inputTensor
-                                            permute: @[@0, @2, @3, @1]
-                                               name: nil];
-          }
 
           MPSGraphTensor* biasTensor = nil;
           if(bias_defined)
             biasTensor = native_mps::mpsGraphUnrankedPlaceHolder(mpsGraph, native_mps::getMPSDataType((bias_opt.value()).scalar_type()));
 
-          MPSGraphTensor* outputTensor = [mpsGraph convolution2DWithSourceTensor: inputTensor_
+          MPSGraphTensor* outputTensor = [mpsGraph convolution2DWithSourceTensor: inputTensor
                                                                    weightsTensor: weightTensor
                                                                       descriptor: descriptor_
                                                                             name: nil];
-          // Convert the result back from NHWC to NCHW
           if (is_channels_last) {
             // NHWC -> NCHW
-            outputTensor = [mpsGraph transposeTensor: outputTensor
-                                             permute: @[@0, @3, @1, @2]
+            outputTensor = [mpsGraph transposeTensor: [mpsGraph transposeTensor:outputTensor dimension:-1 withDimension:-2 name:nil]
+                                           dimension: -2
+                                       withDimension: -3
                                                 name: nil];
           }
 
@@ -184,7 +184,7 @@ Tensor _mps_convolution(
       cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
 
-    auto inputPlaceholder = native_mps::Placeholder(cachedGraph->inputTensor_, input_t);
+    auto inputPlaceholder = native_mps::Placeholder(cachedGraph->inputTensor_, input_t, inputShape);
     auto weightsPlaceholder = native_mps::Placeholder(cachedGraph->weightTensor_, weight_t);
     auto biasPlaceholder = native_mps::Placeholder();
     // Reshape the bias to be broadcastable with output of conv2d
