@@ -20,6 +20,11 @@ from torch.nn import Parameter
 from torch.testing._internal.common_utils import \
     (gradcheck, gradgradcheck, run_tests, TestCase, download_file,
      TEST_WITH_UBSAN)
+from torch.testing._internal.common_utils import \
+    (TestCase, run_tests, TEST_SCIPY, IS_MACOS, IS_WINDOWS, slowTest,
+     TEST_WITH_ASAN, TEST_WITH_ROCM, IS_FBCODE, IS_REMOTE_GPU, iter_indices,
+     make_fullrank_matrices_with_distinct_singular_values,
+     freeze_rng_state)
 from torch.testing import make_tensor
 from torch.testing._comparison import TensorLikePair
 from torch.testing._internal.common_dtype import get_all_dtypes
@@ -218,6 +223,24 @@ class TestAvgPool(TestCase):
 
 
 class TestMPS(TestCase):
+
+    def test_inverse_many_batches(self, dtype=torch.float32):
+        device = 'mps'
+        make_fullrank = make_fullrank_matrices_with_distinct_singular_values
+        make_arg = partial(make_fullrank, device=device, dtype=dtype)
+
+        def test_inverse_many_batches_helper(torch_inverse, b, n):
+            matrices = make_arg(b, n, n)
+            matrices_inverse = torch_inverse(matrices)
+
+            # Compare against NumPy output
+            expected = np.linalg.inv(matrices.cpu().numpy())
+            self.assertEqual(matrices_inverse, expected, atol=self.precision, rtol=1e-3)
+
+        for torch_inverse in [torch.inverse, torch.linalg.inv]:
+            test_inverse_many_batches_helper(torch_inverse, 5, 256)
+            test_inverse_many_batches_helper(torch_inverse, 3, 512)
+
     def test_exp(self, device="mps", dtype=torch.float):
         for v in (2, -2) + ((1j, 1 + 1j) if dtype.is_complex else ()):
             b = torch.arange(18, device="cpu") / 3 * math.pi
