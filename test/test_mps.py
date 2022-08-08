@@ -10,6 +10,7 @@ import subprocess
 import tempfile
 import os
 import pprint
+import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -1096,6 +1097,19 @@ class TestMPS(TestCase):
                         helper((N, C_out, H, W), (C_out, C_in, kH, kW), bias_shape=(C_in), stride=stride,
                                padding=padding, output_padding=output_padding, dilation=dilation)
 
+    def test_conv1d_all_strides(self):
+        # https://github.com/pytorch/pytorch/issues/82921
+        def helper(stride):
+            y_cpu = torch.randn(1, 57, 40)
+            conv_cpu = nn.Conv1d(57, 20, stride=stride, kernel_size=3, bias=False)
+            conv_gpu = copy.deepcopy(conv_cpu).to(device='mps')
+            x_cpu = conv_cpu(y_cpu)
+
+            y_gpu = y_cpu.to(device='mps')
+            x_gpu = conv_gpu(y_gpu)
+            self.assertEqual(x_cpu, x_gpu.cpu())
+        [helper(stride) for stride in [1, 2, 3]]
+
     def test_conv1d_channels_last(self):
         model_cpu = torch.nn.Conv1d(1, 128, 3)
         a_cpu = torch.arange((128 * 176), dtype=torch.float32)
@@ -1106,8 +1120,36 @@ class TestMPS(TestCase):
         model_mps = model_cpu.to("mps")
         out_mps = model_mps(a_mps)
 
-        torch.testing.assert_allclose(out_cpu.shape, out_mps.shape)
-        torch.testing.assert_allclose(out_cpu, out_mps.cpu())
+        self.assertEqual(out_cpu.shape, out_mps.shape)
+        self.assertEqual(out_cpu, out_mps.cpu())
+
+    def test_conv_transpose_1d_all_strides(self):
+        # https://github.com/pytorch/pytorch/issues/82711
+        def helper(stride):
+            y_cpu = torch.ones(1, 1, 2)
+            deconv_cpu = nn.ConvTranspose1d(in_channels=1, out_channels=1, kernel_size=1, stride=stride, bias=False, padding=1)
+            deconv_cpu.weight.data = torch.ones(1,1,2)
+            deconv_gpu = copy.deepcopy(deconv_cpu).to(device='mps')
+            x_cpu = deconv_cpu(y_cpu)
+
+            y_gpu = y_cpu.to(device='mps')
+            x_gpu = deconv_gpu(y_gpu)
+            self.assertEqual(x_cpu, x_gpu.cpu())
+        [helper(stride) for stride in [1, 2, 3]]
+
+    def test_conv_transpose_1d_nn_functional(self):
+        # https://github.com/pytorch/pytorch/issues/82563
+        tin = torch.rand((1, 512, 1245), dtype=torch.float32)
+        tparams = torch.rand((512, 256, 16), dtype=torch.float32)
+        tbias = torch.rand((256), dtype=torch.float32)
+
+        device = 'cpu'
+        tcpu = torch.nn.functional.conv_transpose1d(tin.to(device), tparams.to(device), tbias.to(device), stride=8, padding=4)
+
+        device = 'mps'
+        tgpu = torch.nn.functional.conv_transpose1d(tin.to(device), tparams.to(device), tbias.to(device), stride=8, padding=4)
+
+        self.assertEqual(tcpu, tgpu.cpu())
 
     def test_conv1d_contiguous(self):
         model_cpu = torch.nn.Conv1d(1, 128, 3)
@@ -1118,8 +1160,8 @@ class TestMPS(TestCase):
         model_mps = model_cpu.to("mps")
         out_mps = model_mps(a_mps)
 
-        torch.testing.assert_allclose(out_cpu.shape, out_mps.shape)
-        torch.testing.assert_allclose(out_cpu, out_mps.cpu())
+        self.assertEqual(out_cpu.shape, out_mps.shape)
+        self.assertEqual(out_cpu, out_mps.cpu())
 
     # Test sigmoid
     def test_sigmoid(self):

@@ -10,6 +10,10 @@
 #include <torch/library.h>
 
 namespace at {
+namespace mps {
+  IntArrayRef get_buffer_shape(void* ptr);
+}
+
 namespace native {
 
 // Create convolution descriptor
@@ -37,6 +41,19 @@ void fill_conv_desc(MPSGraphConvolution2DOpDescriptor* descriptor_,
   // PyTorch always uses OIHW memory layout for weights
   descriptor_.weightsLayout = MPSGraphTensorNamedDataLayoutOIHW;
   descriptor_.groups = groups;
+}
+
+static void getConvStrides_(NSUInteger& strideInX, NSUInteger& strideInY, const Tensor& weight_t, const IntArrayRef& stride) {
+  IntArrayRef weight_base_shape = get_buffer_shape(weight_t.storage().data());
+  strideInX = stride[0];
+  strideInY = stride[1];
+
+  // 1D convolution
+  if (weight_base_shape.size() == 3) {
+    // The 1D stride is expanded to 2D by inserting an 1 at the beginning
+    // of the array (see view1d_as_2d in Convolution.cpp)
+    strideInX = strideInY;
+  }
 }
 
 Tensor _mps_convolution(
@@ -117,7 +134,9 @@ Tensor _mps_convolution(
     else
       bias_shape_key = "nobias";
 
-    string key = "mps_convolution:" + to_string(stride[0]) + ":" + to_string(stride[1]) + ":"
+    NSUInteger strideInX, strideInY;
+    getConvStrides_(strideInX, strideInY, weight_t, stride);
+    string key = "mps_convolution:" + to_string(strideInX) + ":" + to_string(strideInY) + ":"
                                     + to_string(dilation[0]) + ":" + to_string(dilation[1]) + ":"
                                     + to_string(padding[0]) + ":" + to_string(padding[1]) + ":"
                                     + to_string(groups) + ":" +  mem_format_key
@@ -144,9 +163,9 @@ Tensor _mps_convolution(
           newCachedGraph = new CachedGraph(mpsGraph);
 
           MPSGraphConvolution2DOpDescriptor *descriptor_ = [[MPSGraphConvolution2DOpDescriptor new] autorelease];
-          fill_conv_desc(descriptor_, stride[0], stride[1],
+          fill_conv_desc(descriptor_, strideInX, strideInY,
                                       dilation[0], dilation[1],
-                                      padding[1], padding[0],
+                                      padding[0], padding[1],
                                       memory_format, groups);
 
           MPSGraphTensor* inputTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, native_mps::getMPSScalarType(input_t.scalar_type()), inputShape);
@@ -226,7 +245,7 @@ Tensor mps_convolution_backward_input(
                     c10::nullopt,
                     kMPS,
                     c10::nullopt,
-                    memory_format);
+                    c10::nullopt);
 
   // Avoid "grad_input" when this is being used as transposed convolution
   TensorArg grad_input{ grad_input_t, "result", 0 };
@@ -264,7 +283,9 @@ Tensor mps_convolution_backward_input(
 
     NSString* ns_shape_key = [[mps_input_shape valueForKey:@"description"] componentsJoinedByString:@","];
 
-    string key = "mps_convolution_backward_input:" + to_string(stride[0]) + ":" + to_string(stride[1]) + ":"
+    NSUInteger strideInX, strideInY;
+    getConvStrides_(strideInX, strideInY, weight_t, stride);
+    string key = "mps_convolution_backward_input:" + to_string(strideInX) + ":" + to_string(strideInY) + ":"
                                                    + to_string(dilation[0]) + ":" + to_string(dilation[1]) + ":"
                                                    + to_string(padding[0]) + ":" + to_string(padding[1]) + ":"
                                                    + to_string(groups) + ":" +  mem_format_key
@@ -282,7 +303,7 @@ Tensor mps_convolution_backward_input(
           newCachedGraph = new CachedGraph(mpsGraph);
 
           MPSGraphConvolution2DOpDescriptor *descriptor_ = [[MPSGraphConvolution2DOpDescriptor new] autorelease];
-          fill_conv_desc(descriptor_, stride[0], stride[1],
+          fill_conv_desc(descriptor_, strideInX, strideInY,
                                       dilation[0], dilation[1],
                                       padding[1], padding[0],
                                       memory_format, groups);
@@ -339,7 +360,7 @@ Tensor mps_convolution_backward_weights(
   checkAllSameType(c, {grad_output, input});
   checkAllSameGPU(c, {grad_output, input});
 
-  auto grad_weight_t = at::empty(weight_size, grad_output_t.options(), memory_format);
+  auto grad_weight_t = at::empty(weight_size, grad_output_t.options(), c10::nullopt);
   TensorArg grad_weight{ grad_weight_t, "result", 0 };
 
   convolution_shape_check(c, input, grad_weight, grad_output, padding, stride, dilation, groups);
@@ -375,7 +396,9 @@ Tensor mps_convolution_backward_weights(
 
     NSString* ns_shape_key = [[mps_weight_shape valueForKey:@"description"] componentsJoinedByString:@","];
 
-    string key = "mps_convolution_backward_weights:" + to_string(stride[0]) + ":" + to_string(stride[1]) + ":"
+    NSUInteger strideInX, strideInY;
+    getConvStrides_(strideInX, strideInY, input_t, stride);
+    string key = "mps_convolution_backward_weights:" + to_string(strideInX) + ":" + to_string(strideInY) + ":"
                                                      + to_string(dilation[0]) + ":" + to_string(dilation[1]) + ":"
                                                      + to_string(padding[0]) + ":" + to_string(padding[1]) + ":"
                                                      + to_string(groups) + ":" +  mem_format_key
@@ -393,7 +416,7 @@ Tensor mps_convolution_backward_weights(
           newCachedGraph = new CachedGraph(mpsGraph);
 
           MPSGraphConvolution2DOpDescriptor *descriptor_ = [[MPSGraphConvolution2DOpDescriptor new] autorelease];
-          fill_conv_desc(descriptor_, stride[0], stride[1],
+          fill_conv_desc(descriptor_, strideInX, strideInY,
                                       dilation[0], dilation[1],
                                       padding[1], padding[0],
                                       memory_format, groups);
