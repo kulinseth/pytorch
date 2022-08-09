@@ -47,23 +47,24 @@ bool dispatchIndexKernel(TensorIteratorBase& iter, IntArrayRef index_size, IntAr
   dispatch_sync(mpsStream->queue(), ^(){
     @autoreleasepool {
       NSError* error = nil;
-      int64_t num_indices = index_size.size();
+      constexpr uint32_t nOffsets = 3;
+      const int64_t num_indices = index_size.size();
       const uint32_t numThreads = iter.numel();
-      const uint32_t nOffsets = 3;
       const uint32_t nDim = iter.ndim();
-      uint32_t strides[nDim][nOffsets];
       const IntArrayRef& iterShape = iter.shape();
-      std::vector<uint32_t> iterShapeVec;
+      std::vector<uint32_t> iterShapeData(iterShape.size());
+      std::vector<std::array<uint32_t, nOffsets>> strides(nDim);
 
-      for (auto shape : iterShape)
-        iterShapeVec.push_back(shape);
+      for (const auto i: c10::irange(iterShape.size())) {
+        TORCH_CHECK(i <= UINT32_MAX);
+        iterShapeData[i] = (uint32_t)(iterShape[i]);
+      }
 
-      std::vector<uint32_t> stridesVec[nDim];
-      for (uint32_t i=0; i < nDim; i++)
-        for (uint32_t offset = 0; offset < nOffsets; offset++) {
+      for (const auto i: c10::irange(nDim)) {
+        for (const auto offset: c10::irange(nOffsets)) {
           strides[i][offset] = iter.strides(offset)[i];
-          stridesVec[i].push_back(iter.strides(offset)[i]);
         }
+      }
 
       MTLSize gridSize = MTLSizeMake(numThreads, 1, 1);
       id<MTLCommandBuffer> commandBuffer = mpsStream->commandBuffer();
@@ -76,9 +77,9 @@ bool dispatchIndexKernel(TensorIteratorBase& iter, IntArrayRef index_size, IntAr
       TORCH_CHECK(kernelDataOffsetsPSO, "Failed to created pipeline state object, error: ", [[error description] UTF8String]);
 
       [computeEncoder setComputePipelineState:kernelDataOffsetsPSO];
-      [computeEncoder setBytes:strides length:sizeof(uint32_t) * nDim * nOffsets atIndex:0];
+      [computeEncoder setBytes:strides.data() length:sizeof(uint32_t) * nDim * nOffsets atIndex:0];
       [computeEncoder setBuffer:kernelDataOffsets offset:0 atIndex:1];
-      [computeEncoder setBytes:iterShapeVec.data() length:sizeof(uint32_t) * iterShapeVec.size() atIndex:2];
+      [computeEncoder setBytes:iterShapeData.data() length:sizeof(uint32_t) * iterShape.size() atIndex:2];
       [computeEncoder setBytes:&nDim length:sizeof(uint32_t) atIndex:3];
       [computeEncoder setBytes:&nOffsets length:sizeof(uint32_t) atIndex:4];
 
@@ -108,13 +109,6 @@ bool dispatchIndexKernel(TensorIteratorBase& iter, IntArrayRef index_size, IntAr
         TORCH_CHECK(indexTensor.scalar_type() == ScalarType::Long, "index(): Expected dtype int64 for Index");
       }
 
-      id<MTLBuffer> indexSize = [[device newBufferWithBytes: index_size.data()
-                                                     length: sizeof(index_size[0]) * index_size.size()
-                                                    options: options] autorelease];
-      id<MTLBuffer> indexStride = [[device newBufferWithBytes: index_stride.data()
-                                                      length: sizeof(index_stride[0]) * index_stride.size()
-                                                     options: options] autorelease];
-
       // FIXME: PSO needs to be cached
       id<MTLComputePipelineState> indexSelectPSO = [[device newComputePipelineStateWithFunction: indexKernelFunction
                                                                                          error: &error] autorelease];
@@ -125,13 +119,13 @@ bool dispatchIndexKernel(TensorIteratorBase& iter, IntArrayRef index_size, IntAr
         [computeEncoder useResource:getMTLBufferStorage(indexTensor) usage:MTLResourceUsageRead];
       }
 
-      [computeEncoder setComputePipelineState: indexSelectPSO];
-      [computeEncoder setBuffer: indexAB offset:0 atIndex:0];
-      [computeEncoder setBuffer: indexSize offset:0 atIndex:1];
-      [computeEncoder setBuffer: indexStride offset:0 atIndex:2];
-      [computeEncoder setBuffer: kernelDataOffsets offset:0 atIndex:3];
-      [computeEncoder setBuffer: inputBuffer offset: inputTensor.storage_offset() * inputTensor.element_size() atIndex:4];
-      [computeEncoder setBuffer: outputBuffer offset: outputTensor.storage_offset() * outputTensor.element_size() atIndex:5];
+      [computeEncoder setComputePipelineState:indexSelectPSO];
+      [computeEncoder setBuffer:indexAB offset:0 atIndex:0];
+      [computeEncoder setBytes:index_size.data() length:sizeof(index_size[0]) * index_size.size() atIndex:1];
+      [computeEncoder setBytes:index_stride.data() length:sizeof(index_stride[0]) * index_stride.size() atIndex:2];
+      [computeEncoder setBuffer:kernelDataOffsets offset:0 atIndex:3];
+      [computeEncoder setBuffer:inputBuffer offset:inputTensor.storage_offset() * inputTensor.element_size() atIndex:4];
+      [computeEncoder setBuffer:outputBuffer offset:outputTensor.storage_offset() * outputTensor.element_size() atIndex:5];
 
       NSUInteger tgSize = indexSelectPSO.maxTotalThreadsPerThreadgroup;
       if (tgSize > numThreads)
