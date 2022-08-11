@@ -5862,7 +5862,6 @@ class TestViewOpsMPS(TestCase):
             self.assertEqual(x.view(6).shape, [6])
 
 class TestConvolutionMPS(TestCase):
-
     def test_conv1d_all_strides_paddings(self):
         # https://github.com/pytorch/pytorch/issues/82921
         def helper(stride, padding):
@@ -5880,6 +5879,7 @@ class TestConvolutionMPS(TestCase):
 
 
     def test_conv1d_channels_last(self):
+        # https://github.com/pytorch/pytorch/issues/81557
         model_cpu = torch.nn.Conv1d(1, 128, 3)
         a_cpu = torch.arange((128 * 176), dtype=torch.float32)
         a_cpu = a_cpu.view(128, 176, 1).permute(0, 2, 1)
