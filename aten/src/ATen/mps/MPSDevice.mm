@@ -4,6 +4,7 @@
 
 #include <ATen/mps/MPSDevice.h>
 #include <ATen/mps/IndexKernels.h>
+#include <iostream>
 
 namespace at {
 namespace mps {
@@ -69,6 +70,25 @@ id<MTLFunction> MPSDevice::metalFunction(const std::string& kernel, MTLFunctionC
   return indexFunction;
 }
 
+id<MTLComputePipelineState> MPSDevice::metalPSO(const std::string& kernel) {
+  assert(_mtl_device);
+  NSError* error = nil;
+
+  TORCH_CHECK(_mtl_gather_scatter_library != nil);
+  if (_mtl_pipeline_cache.find(kernel) != _mtl_pipeline_cache.end()){
+    return _mtl_pipeline_cache[kernel];
+  }
+
+  id<MTLFunction> func = [_mtl_gather_scatter_library newFunctionWithName:[NSString stringWithUTF8String:kernel.c_str()]];
+  TORCH_CHECK(func, "Failed to load the Metal Shader function: ", kernel);
+  id<MTLComputePipelineState> state = [_mtl_device newComputePipelineStateWithFunction: func
+                                                                                 error: &error];
+  TORCH_CHECK(state, error.localizedDescription.UTF8String);
+  _mtl_pipeline_cache[kernel] = state;
+
+  return state;
+}
+
 MPSDevice::~MPSDevice() {
   [_mtl_device release];
   _mtl_device = nil;
@@ -89,6 +109,7 @@ MPSDevice::MPSDevice(): _mtl_device(nil) {
                                                                   name:)] == NO) {
     return;
   }
+
   NSArray* devices = [MTLCopyAllDevices() autorelease];
   for (unsigned long i = 0 ; i < [devices count] ; i++) {
     id<MTLDevice>  device = devices[i];
@@ -97,8 +118,20 @@ MPSDevice::MPSDevice(): _mtl_device(nil) {
       break;
     }
   }
-  _mtl_indexing_library = nil;
   assert(_mtl_device);
+
+  NSError* error = nil;
+  MTLCompileOptions *options = [MTLCompileOptions new];
+  [options setLanguageVersion: getMetalLanguageVersion(_mtl_device)];
+  [options setFastMathEnabled: YES];
+  _mtl_gather_scatter_library = [_mtl_device newLibraryWithSource: [NSString stringWithCString: mps::gather_scatter_metal_shaders encoding:NSASCIIStringEncoding]
+                                                          options: options
+                                                            error: &error];
+  TORCH_CHECK(_mtl_gather_scatter_library, "Failed to create gather-scatter library, error: ", [[error description] UTF8String]);
+
+  assert(_mtl_gather_scatter_library);
+  _mtl_indexing_library = nil;
+
 }
 
 at::Allocator* getMPSSharedAllocator();

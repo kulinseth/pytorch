@@ -14,12 +14,14 @@ typedef id<MTLDevice> MTLDevice_t;
 typedef id<MTLLibrary> MTLLibrary_t;
 typedef id<MTLFunction> MTLFunction_t;
 typedef MTLFunctionConstantValues* MTLFunctionConstantValues_t;
+typedef id<MTLComputePipelineState> MTLComputePipelineState_t;
 #else
 typedef void* MTLDevice;
 typedef void* MTLDevice_t;
 typedef void* MTLLibrary_t;
 typedef void* MTLFunction_t;
 typedef void* MTLFunctionConstantValues_t;
+typedef void* MTLComputePipelineState_t;
 #endif
 
 using namespace std;
@@ -55,6 +57,7 @@ class TORCH_API MPSDevice {
   }
 
   MTLFunction_t metalFunction(const std::string &kernel, MTLFunctionConstantValues_t constantValues);
+  MTLComputePipelineState_t metalPSO(const std::string &kernel);
 
   ~MPSDevice();
 
@@ -62,6 +65,8 @@ class TORCH_API MPSDevice {
   static MPSDevice* _device;
   MTLDevice_t _mtl_device;
   MTLLibrary_t _mtl_indexing_library;
+  MTLLibrary_t _mtl_gather_scatter_library;
+  std::unordered_map<std::string, MTLComputePipelineState_t> _mtl_pipeline_cache;
   MPSDevice();
 };
 

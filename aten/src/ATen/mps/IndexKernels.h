@@ -183,7 +183,359 @@ kernel void index_put_accumulate_native_dtypes<atomic_int, int>(constant const I
                                                                 device   void          * outputData   [[buffer(5)]],
                                                                 uint thread_index [[thread_position_in_grid]]);
 
+
 )INDEX_METAL";
+
+static const char * gather_scatter_metal_shaders = R"VIEW_OPS(
+#include <metal_stdlib>
+
+using namespace metal;
+
+__attribute__((always_inline))
+uint getLinearIndex(const uint lane, const uint3 tgid, const uint3 tpg, const uint3 tgpg) {
+    const uint flattened_threadgroup_in_grid = tgid.z * (tgpg.x * tgpg.y) + tgid.y * tgpg.x + tgid.x;
+    return lane + (tpg.x * tpg.y * tpg.z * flattened_threadgroup_in_grid);
+}
+
+#define REGISTER_GATHER_OR_SCATTER_KERNEL(DTYPE, RANK, GATHER_OR_SCATTER, DTYPE_SIZE_STRIDE)                       \
+template                                                                                                           \
+[[host_name(#GATHER_OR_SCATTER "_kernel_" #DTYPE #RANK)]]                                                          \
+kernel void GATHER_OR_SCATTER ## _kernel_ ## RANK ## D <DTYPE, DTYPE_SIZE_STRIDE>(                                 \
+                                 uint lane                                  [[thread_index_in_threadgroup]],       \
+                                 uint3 tgid                                 [[threadgroup_position_in_grid]],      \
+                                 uint3 tpg                                  [[threads_per_threadgroup]],           \
+                                 uint3 tgpg                                 [[threadgroups_per_grid]],             \
+                                 constant const DTYPE * src                 [[buffer(0)]],                         \
+                                 device DTYPE * dst                         [[buffer(1)]],                         \
+                                 constant const DTYPE_SIZE_STRIDE & size    [[buffer(2)]],                         \
+                                 constant const DTYPE_SIZE_STRIDE & stride  [[buffer(3)]],                         \
+                                 constant const int & numel                [[buffer(4)]])
+
+#define REGISTER_GATHER_SCATTER_KERNEL(DTYPE, RANK, GATHER_SCATTER, DTYPE_SIZE_STRIDE)                                \
+template                                                                                                              \
+[[host_name("gather_scatter_kernel_" #DTYPE #RANK)]]                                                                  \
+kernel void gather_scatter_kernel_ ## RANK ## D <DTYPE, DTYPE_SIZE_STRIDE>(                                           \
+                                    uint lane                                       [[thread_index_in_threadgroup]],  \
+                                     uint3 tgid                                     [[threadgroup_position_in_grid]], \
+                                     uint3 tpg                                      [[threads_per_threadgroup]],      \
+                                     uint3 tgpg                                     [[threadgroups_per_grid]],        \
+                                     constant const DTYPE * src                     [[buffer(0)]],                    \
+                                     device DTYPE * dst                             [[buffer(1)]],                    \
+                                     constant const DTYPE_SIZE_STRIDE & dst_size    [[buffer(2)]],                    \
+                                     constant const DTYPE_SIZE_STRIDE & dst_stride  [[buffer(3)]],                    \
+                                     constant const DTYPE_SIZE_STRIDE & src_size    [[buffer(4)]],                    \
+                                     constant const DTYPE_SIZE_STRIDE & src_stride  [[buffer(5)]],                    \
+                                     constant const int & numel                     [[buffer(6)]])
+
+template<typename T, typename U>
+kernel void gather_scatter_kernel_4D(uint lane                      [[thread_index_in_threadgroup]],
+                                     uint3 tgid                     [[threadgroup_position_in_grid]],
+                                     uint3 tpg                      [[threads_per_threadgroup]],
+                                     uint3 tgpg                     [[threadgroups_per_grid]],
+                                     constant const T * src         [[buffer(0)]],
+                                     device T * dst                 [[buffer(1)]],
+                                     constant const U & dst_size    [[buffer(2)]],
+                                     constant const U & dst_stride  [[buffer(3)]],
+                                     constant const U & src_size    [[buffer(4)]],
+                                     constant const U & src_stride  [[buffer(5)]],
+                                     constant const int & numel    [[buffer(6)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+    const int dst_sz = dst_size[3] * dst_size[2];
+    const int src_sz = dst_size[3] * dst_size[2];
+
+    U dst_local_index;
+    dst_local_index.x = linear_index / (dst_sz * dst_size[1]) % dst_size[0];
+    dst_local_index.y = linear_index / dst_sz % dst_size[1];
+    dst_local_index.z = linear_index / dst_size[3] % dst_size[2];
+    dst_local_index.w = linear_index % dst_size[3];
+
+    U src_local_index;
+    src_local_index.x = linear_index / (src_sz * src_size[1]) % src_size[0];
+    src_local_index.y = linear_index / src_sz % src_size[1];
+    src_local_index.z = linear_index / src_size[3] % src_size[2];
+    src_local_index.w = linear_index % src_size[3];
+
+    const U dst_strided_index = dst_local_index * dst_stride;
+    const U src_strided_index = src_local_index * src_stride;
+    dst[dst_strided_index.x + dst_strided_index.y + dst_strided_index.z + dst_strided_index.w] =
+        src[src_strided_index.x + src_strided_index.y + src_strided_index.z + src_strided_index.w];
+}
+
+template<typename T, typename U>
+kernel void gather_scatter_kernel_3D(uint lane                      [[thread_index_in_threadgroup]],
+                                     uint3 tgid                     [[threadgroup_position_in_grid]],
+                                     uint3 tpg                      [[threads_per_threadgroup]],
+                                     uint3 tgpg                     [[threadgroups_per_grid]],
+                                     constant const T * src         [[buffer(0)]],
+                                     device T * dst                 [[buffer(1)]],
+                                     constant const U & dst_size    [[buffer(2)]],
+                                     constant const U & dst_stride  [[buffer(3)]],
+                                     constant const U & src_size    [[buffer(4)]],
+                                     constant const U & src_stride  [[buffer(5)]],
+                                     constant const int & numel    [[buffer(6)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+
+    U dst_local_index;
+    dst_local_index.x = linear_index / (dst_size[2] * dst_size[1]) % dst_size[0];
+    dst_local_index.y = linear_index / dst_size[2] % dst_size[1];
+    dst_local_index.z = linear_index % dst_size[2];
+
+    U src_local_index;
+    src_local_index.x = linear_index / (src_size[2] * src_size[1]) % src_size[0];
+    src_local_index.y = linear_index / src_size[2] % src_size[1];
+    src_local_index.z = linear_index % src_size[2];
+
+    const U dst_strided_index = dst_local_index * dst_stride;
+    const U src_strided_index = src_local_index * src_stride;
+    dst[dst_strided_index.x + dst_strided_index.y + dst_strided_index.z] =
+        src[src_strided_index.x + src_strided_index.y + src_strided_index.z];
+}
+
+template<typename T, typename U>
+kernel void gather_scatter_kernel_2D(uint lane                      [[thread_index_in_threadgroup]],
+                                     uint3 tgid                     [[threadgroup_position_in_grid]],
+                                     uint3 tpg                      [[threads_per_threadgroup]],
+                                     uint3 tgpg                     [[threadgroups_per_grid]],
+                                     constant const T * src         [[buffer(0)]],
+                                     device T * dst                 [[buffer(1)]],
+                                     constant const U & dst_size    [[buffer(2)]],
+                                     constant const U & dst_stride  [[buffer(3)]],
+                                     constant const U & src_size    [[buffer(4)]],
+                                     constant const U & src_stride  [[buffer(5)]],
+                                     constant const int & numel    [[buffer(6)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+
+    U dst_local_index;
+    dst_local_index.x = linear_index / dst_size[1] % dst_size[0];
+    dst_local_index.y = linear_index % dst_size[1];
+
+    U src_local_index;
+    src_local_index.x = linear_index / src_size[1] % src_size[0];
+    src_local_index.y = linear_index % src_size[1];
+
+    const U dst_strided_index = dst_local_index * dst_stride;
+    const U src_strided_index = src_local_index * src_stride;
+    dst[dst_strided_index.x + dst_strided_index.y] = src[src_strided_index.x + src_strided_index.y];
+}
+
+template<typename T, typename U>
+kernel void gather_scatter_kernel_1D(uint lane                      [[thread_index_in_threadgroup]],
+                                     uint3 tgid                     [[threadgroup_position_in_grid]],
+                                     uint3 tpg                      [[threads_per_threadgroup]],
+                                     uint3 tgpg                     [[threadgroups_per_grid]],
+                                     constant const T * src         [[buffer(0)]],
+                                     device T * dst                 [[buffer(1)]],
+                                     constant const U & dst_size    [[buffer(2)]],
+                                     constant const U & dst_stride  [[buffer(3)]],
+                                     constant const U & src_size    [[buffer(4)]],
+                                     constant const U & src_stride  [[buffer(5)]],
+                                     constant const int & numel    [[buffer(6)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+
+    const U dst_local_index = linear_index % dst_size;
+    const U dst_strided_index = dst_local_index * dst_stride;
+
+    const U src_local_index = linear_index % src_size;
+    const U src_strided_index = src_local_index * src_stride;
+
+    dst[dst_strided_index] = src[src_strided_index];
+}
+
+template<typename T, typename U>
+kernel void scatter_kernel_4D(uint lane                    [[thread_index_in_threadgroup]],
+                              uint3 tgid                   [[threadgroup_position_in_grid]],
+                              uint3 tpg                    [[threads_per_threadgroup]],
+                              uint3 tgpg                   [[threadgroups_per_grid]],
+                              constant const T * src       [[buffer(0)]],
+                              device T * dst               [[buffer(1)]],
+                              constant const U & size      [[buffer(2)]],
+                              constant const U & stride    [[buffer(3)]],
+                              constant const int & numel  [[buffer(4)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+    const int sz = size[3] * size[2];
+
+    U local_index;
+    local_index.x = linear_index / (sz * size[1]) % size[0];
+    local_index.y = linear_index / sz % size[1];
+    local_index.z = linear_index / size[3] % size[2];
+    local_index.w = linear_index % size[3];
+
+    const U strided_index = local_index * stride;
+    dst[strided_index.x + strided_index.y + strided_index.z + strided_index.w] = src[linear_index];
+}
+
+template<typename T, typename U>
+kernel void scatter_kernel_3D(uint lane                    [[thread_index_in_threadgroup]],
+                              uint3 tgid                   [[threadgroup_position_in_grid]],
+                              uint3 tpg                    [[threads_per_threadgroup]],
+                              uint3 tgpg                   [[threadgroups_per_grid]],
+                              constant const T * src       [[buffer(0)]],
+                              device T * dst               [[buffer(1)]],
+                              constant const U & size      [[buffer(2)]],
+                              constant const U & stride    [[buffer(3)]],
+                              constant const int & numel  [[buffer(4)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+
+    U local_index;
+    local_index.x = linear_index / (size[2] * size[1]) % size[0];
+    local_index.y = linear_index / size[2] % size[1];
+    local_index.z = linear_index % size[2];
+
+    const U strided_index = local_index * stride;
+    dst[strided_index.x + strided_index.y + strided_index.z] = src[linear_index];
+}
+
+template<typename T, typename U>
+kernel void scatter_kernel_2D(uint lane                    [[thread_index_in_threadgroup]],
+                              uint3 tgid                   [[threadgroup_position_in_grid]],
+                              uint3 tpg                    [[threads_per_threadgroup]],
+                              uint3 tgpg                   [[threadgroups_per_grid]],
+                              constant const T * src       [[buffer(0)]],
+                              device T * dst               [[buffer(1)]],
+                              constant const U & size      [[buffer(2)]],
+                              constant const U & stride    [[buffer(3)]],
+                              constant const int & numel  [[buffer(4)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+
+    U local_index;
+    local_index.x = linear_index / size[1] % size[0];
+    local_index.y = linear_index % size[1];
+
+    const U strided_index = local_index * stride;
+    dst[strided_index.x + strided_index.y] = src[linear_index];
+}
+
+template<typename T, typename U>
+kernel void scatter_kernel_1D(uint lane                    [[thread_index_in_threadgroup]],
+                              uint3 tgid                   [[threadgroup_position_in_grid]],
+                              uint3 tpg                    [[threads_per_threadgroup]],
+                              uint3 tgpg                   [[threadgroups_per_grid]],
+                              constant const T * src       [[buffer(0)]],
+                              device T * dst               [[buffer(1)]],
+                              constant const U & size      [[buffer(2)]],
+                              constant const U & stride    [[buffer(3)]],
+                              constant const int & numel  [[buffer(4)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+
+    const U local_index = linear_index % size;
+    const U strided_index = local_index * stride;
+    dst[strided_index] = src[linear_index];
+}
+
+template<typename T, typename U>
+kernel void gather_kernel_4D(uint lane                   [[thread_index_in_threadgroup]],
+                             uint3 tgid                  [[threadgroup_position_in_grid]],
+                             uint3 tpg                   [[threads_per_threadgroup]],
+                             uint3 tgpg                  [[threadgroups_per_grid]],
+                             constant const T * src      [[buffer(0)]],
+                             device T * dst              [[buffer(1)]],
+                             constant const U & size     [[buffer(2)]],
+                             constant const U & stride   [[buffer(3)]],
+                             constant const int & numel [[buffer(4)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+    const uint sz = size[3] * size[2];
+
+    U local_index;
+    local_index.x = linear_index / (sz * size[1]) % size[0];
+    local_index.y = linear_index / sz % size[1];
+    local_index.z = linear_index / size[3] % size[2];
+    local_index.w = linear_index % size[3];
+
+    const U strided_index = local_index * stride;
+    dst[linear_index] = src[strided_index.x + strided_index.y + strided_index.z + strided_index.w];
+}
+
+template<typename T, typename U>
+kernel void gather_kernel_3D(uint lane                    [[thread_index_in_threadgroup]],
+                             uint3 tgid                   [[threadgroup_position_in_grid]],
+                             uint3 tpg                    [[threads_per_threadgroup]],
+                             uint3 tgpg                   [[threadgroups_per_grid]],
+                             constant const T * src       [[buffer(0)]],
+                             device T * dst               [[buffer(1)]],
+                             constant const U & size      [[buffer(2)]],
+                             constant const U & stride    [[buffer(3)]],
+                             constant const int & numel  [[buffer(4)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+
+    U local_index;
+    local_index.x = linear_index / (size[2] * size[1]) % size[0];
+    local_index.y = linear_index / size[2] % size[1];
+    local_index.z = linear_index % size[2];
+
+    const U strided_index = local_index * stride;
+    dst[linear_index] = src[strided_index.x + strided_index.y + strided_index.z];
+}
+
+template<typename T, typename U>
+kernel void gather_kernel_2D(uint lane                    [[thread_index_in_threadgroup]],
+                             uint3 tgid                   [[threadgroup_position_in_grid]],
+                             uint3 tpg                    [[threads_per_threadgroup]],
+                             uint3 tgpg                   [[threadgroups_per_grid]],
+                             constant const T * src       [[buffer(0)]],
+                             device T * dst               [[buffer(1)]],
+                             constant const U & size      [[buffer(2)]],
+                             constant const U & stride    [[buffer(3)]],
+                             constant const int & numel  [[buffer(4)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+
+    U local_index;
+    local_index.x = linear_index / size[1] % size[0];
+    local_index.y = linear_index % size[1];
+
+    const U strided_index = local_index * stride;
+    dst[linear_index] = src[strided_index.x + strided_index.y];
+}
+
+template<typename T, typename U>
+kernel void gather_kernel_1D(uint lane                    [[thread_index_in_threadgroup]],
+                             uint3 tgid                   [[threadgroup_position_in_grid]],
+                             uint3 tpg                    [[threads_per_threadgroup]],
+                             uint3 tgpg                   [[threadgroups_per_grid]],
+                             constant const T * src       [[buffer(0)]],
+                             device T * dst               [[buffer(1)]],
+                             constant const U & size      [[buffer(2)]],
+                             constant const U & stride    [[buffer(3)]],
+                             constant const int & numel  [[buffer(4)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+
+    const U local_index = linear_index % size;
+    const U strided_index = local_index * stride;
+    dst[linear_index] = src[strided_index];
+}
+
+#define REGISTER_GATHER_SCATTER_ALL_DTYPES(RANK, GATHER_OR_SCATTER, DTYPE_SIZE_STRIDE, FUNC)        \
+    FUNC(float, RANK, GATHER_OR_SCATTER, DTYPE_SIZE_STRIDE);                                        \
+    FUNC(half,  RANK, GATHER_OR_SCATTER, DTYPE_SIZE_STRIDE);                                        \
+    FUNC(int,   RANK, GATHER_OR_SCATTER, DTYPE_SIZE_STRIDE);                                        \
+    FUNC(long,  RANK, GATHER_OR_SCATTER, DTYPE_SIZE_STRIDE);                                        \
+    FUNC(short, RANK, GATHER_OR_SCATTER, DTYPE_SIZE_STRIDE);                                        \
+    FUNC(uchar, RANK, GATHER_OR_SCATTER, DTYPE_SIZE_STRIDE);                                        \
+    FUNC(char,  RANK, GATHER_OR_SCATTER, DTYPE_SIZE_STRIDE);                                        \
+    FUNC(bool,  RANK, GATHER_OR_SCATTER, DTYPE_SIZE_STRIDE)
+
+#define REGISTER_GATHER_SCATTER_ALL_RANKS(GATHER_OR_SCATTER, FUNC)                                 \
+    REGISTER_GATHER_SCATTER_ALL_DTYPES(4, GATHER_OR_SCATTER, packed_int4, FUNC);                  \
+    REGISTER_GATHER_SCATTER_ALL_DTYPES(3, GATHER_OR_SCATTER, packed_int3, FUNC);                  \
+    REGISTER_GATHER_SCATTER_ALL_DTYPES(2, GATHER_OR_SCATTER, packed_int2, FUNC);                  \
+    REGISTER_GATHER_SCATTER_ALL_DTYPES(1, GATHER_OR_SCATTER, int, FUNC)
+
+REGISTER_GATHER_SCATTER_ALL_RANKS(gather, REGISTER_GATHER_OR_SCATTER_KERNEL);
+REGISTER_GATHER_SCATTER_ALL_RANKS(scatter, REGISTER_GATHER_OR_SCATTER_KERNEL);
+REGISTER_GATHER_SCATTER_ALL_RANKS(gather_scatter, REGISTER_GATHER_SCATTER_KERNEL);
+
+)VIEW_OPS";
 
 }
 }

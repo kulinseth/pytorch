@@ -52,6 +52,8 @@ double getMPSScalarValue(const Tensor& t);
 std::string getArrayRefString(const IntArrayRef s);
 // use has_storage() on the returned tensor to determine if src actually is a view
 Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst);
+Tensor& gatherScatterViewTensor(const at::Tensor& src, at::Tensor& output);
+Tensor gatherScatterView(const at::Tensor& src, at::Tensor& dst);
 Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output);
 
 MPSShape* getMPSShape(const Tensor& t);
@@ -88,6 +90,10 @@ MPSGraphTensor* trunc_tensor(MPSGraph* mpsGraph, MPSGraphTensor* inputTensor);
 MPSGraphTensor* castMPSTensor(MPSGraph *mpsGraph, MPSGraphTensor* tensor, ScalarType toType);
 MPSGraphTensorData *getMPSGraphTensorData(MPSGraph* mpsGraph, MPSStream* mpsStream, const Tensor& tensor);
 MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, const Scalar& scalar, MPSDataType dataType);
+
+// Helper function to choose the kernel name for advanced indexing
+bool getIndexFunctionName(ScalarType scalar_type, std::string& indexFunctionName, bool index_select, bool accumulate);
+std::string getMetalScalarType(ScalarType scalar_type);
 
 MPSGraph* make_mps_graph();
 void printTensorNDArray(const Tensor& t);
@@ -171,6 +177,7 @@ struct MPSGraphCache
     MPSCacheKey hash = std::hash<std::string>{}(key);
 
     dispatch_sync(serialQueue_, ^() {
+      // std::cout << key << std::endl;
 
       // verify the cached entry doesn't already exist
       if (cache_.count(hash) != 0) {
