@@ -262,7 +262,7 @@ MPSGraphTensor* asStridedLayer_pattern(MPSGraph *graph, MPSGraphTensor *inputTen
       if (dstStrides[dstDim] != 0) {
         int start = dstDimToSliceOffset[dstDim];
         int length = dstDimToSliceLength[dstDim];
-        if (length != [[slicedTensor shape][dstDim] intValue])
+        if (length != [[slicedTensor shape][currDstDim] intValue])
           slicedTensor = [graph sliceTensor:slicedTensor
                                   dimension:currDstDim
                                       start:start
