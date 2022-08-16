@@ -30,7 +30,7 @@ namespace at {
 namespace native {
 
 static
-bool dispatchIndexSelectKernel(TensorIteratorBase& iter, IntArrayRef index_size, IntArrayRef index_stride,
+bool dispatchIndexKernel(TensorIteratorBase& iter, IntArrayRef index_size, IntArrayRef index_stride,
                                bool index_select, bool accumulate) {
   using namespace mps;
 
@@ -282,7 +282,6 @@ TORCH_IMPL_FUNC(index_add_mps_out)(
   dim = maybe_wrap_dim(dim, self.dim());
   auto numel = index.numel();
   auto alpha_f = alpha.to<float>();
-  
   if (source.scalar_type() == ScalarType::Half) {
     alpha_f = alpha.to<at::Half>();
   }

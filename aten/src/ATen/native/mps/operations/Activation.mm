@@ -1485,7 +1485,7 @@ TORCH_IMPL_FUNC(softplus_out_mps) (
               newCachedGraph = new CachedGraph(mpsGraph);
               MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, self);
 
-              MPSGraphTensor* betaTensor = mpsGraphScalarPlaceHolder(mpsGraph, beta);
+              MPSGraphTensor* betaTensor = mpsGraphScalarPlaceHolder(mpsGraph, beta, getMPSScalarType(beta.type()));
 
               MPSGraphTensor* reluTensor = [mpsGraph reLUWithTensor:inputTensor
                                                                name:nil];
@@ -1589,7 +1589,7 @@ TORCH_IMPL_FUNC(softplus_backward_out_mps) (
 
               MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, self);
 
-              MPSGraphTensor* betaTensor = mpsGraphScalarPlaceHolder(mpsGraph, beta);
+              MPSGraphTensor* betaTensor = mpsGraphScalarPlaceHolder(mpsGraph, beta, getMPSScalarType(beta.type()));
 
               MPSGraphTensor* unitTensor = [mpsGraph constantWithScalar:1.0
                                                                   shape:@[@1]
