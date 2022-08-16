@@ -282,6 +282,10 @@ TORCH_IMPL_FUNC(index_add_mps_out)(
   dim = maybe_wrap_dim(dim, self.dim());
   auto numel = index.numel();
   auto alpha_f = alpha.to<float>();
+  
+  if (source.scalar_type() == ScalarType::Half) {
+    alpha_f = alpha.to<at::Half>();
+  }
 
   if (numel == 0) {
     return;
@@ -315,7 +319,7 @@ TORCH_IMPL_FUNC(index_add_mps_out)(
           MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, self);
           MPSGraphTensor* indexTensor = mpsGraphRankedPlaceHolder(mpsGraph, index);
           MPSGraphTensor* sourceTensor = mpsGraphRankedPlaceHolder(mpsGraph, source);
-          MPSGraphTensor* alphaTensor = mpsGraphScalarPlaceHolder(mpsGraph, alpha_f);
+          MPSGraphTensor* alphaTensor = mpsGraphScalarPlaceHolder(mpsGraph, alpha_f, getMPSScalarType(source.scalar_type()));
           MPSGraphTensor* alphaSourceSlice = [mpsGraph multiplicationWithPrimaryTensor:sourceTensor
                                                                        secondaryTensor:alphaTensor
                                                                                   name:nil];
@@ -345,7 +349,7 @@ TORCH_IMPL_FUNC(index_add_mps_out)(
       selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData(),
       indexPlaceholder.getMPSGraphTensor() : indexPlaceholder.getMPSGraphTensorData(),
       sourcePlaceholder.getMPSGraphTensor() : sourcePlaceholder.getMPSGraphTensorData(),
-      cachedGraph->alphaTensor_ : getMPSGraphTensorFromScalar(stream, alpha_f, MPSDataTypeFloat32)
+      cachedGraph->alphaTensor_ : getMPSGraphTensorFromScalar(stream, alpha_f, getMPSScalarType(source.scalar_type()))
     };
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
