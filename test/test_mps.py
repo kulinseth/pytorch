@@ -7793,7 +7793,7 @@ class TestConsistency(TestCase):
         'acosh': ['torch.bool'], 
         'amax': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'], 
         'amin': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'], 
-        'as_strided_scatter': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64'], 
+        'as_strided_scatter': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'], 
         'asin': ['torch.bool'], 
         'asinh': ['torch.bool'], 
         'atan2': ['torch.bool', 'torch.int16', 'torch.int32', 'torch.uint8'], 
