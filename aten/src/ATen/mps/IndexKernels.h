@@ -191,6 +191,14 @@ static const char * gather_scatter_metal_shaders = R"VIEW_OPS(
 
 using namespace metal;
 
+struct int5{
+    int x;
+    int y;
+    int z;
+    int w;
+    int u;
+};
+
 __attribute__((always_inline))
 uint getLinearIndex(const uint lane, const uint3 tgid, const uint3 tpg, const uint3 tgpg) {
     const uint flattened_threadgroup_in_grid = tgid.z * (tgpg.x * tgpg.y) + tgid.y * tgpg.x + tgid.x;
@@ -226,6 +234,21 @@ kernel void gather_scatter_kernel_ ## RANK ## D <DTYPE, DTYPE_SIZE_STRIDE>(     
                                      constant const DTYPE_SIZE_STRIDE & src_size    [[buffer(4)]],                    \
                                      constant const DTYPE_SIZE_STRIDE & src_stride  [[buffer(5)]],                    \
                                      constant const int & numel                     [[buffer(6)]])
+
+template<typename T, typename U>
+kernel void gather_scatter_kernel_5D(uint lane                      [[thread_index_in_threadgroup]],
+                                     uint3 tgid                     [[threadgroup_position_in_grid]],
+                                     uint3 tpg                      [[threads_per_threadgroup]],
+                                     uint3 tgpg                     [[threadgroups_per_grid]],
+                                     constant const T * src         [[buffer(0)]],
+                                     device T * dst                 [[buffer(1)]],
+                                     constant const U & dst_size    [[buffer(2)]],
+                                     constant const U & dst_stride  [[buffer(3)]],
+                                     constant const U & src_size    [[buffer(4)]],
+                                     constant const U & src_stride  [[buffer(5)]],
+                                     constant const int & numel    [[buffer(6)]]) {
+
+}
 
 template<typename T, typename U>
 kernel void gather_scatter_kernel_4D(uint lane                      [[thread_index_in_threadgroup]],
@@ -346,6 +369,36 @@ kernel void gather_scatter_kernel_1D(uint lane                      [[thread_ind
 }
 
 template<typename T, typename U>
+kernel void scatter_kernel_5D(uint lane                    [[thread_index_in_threadgroup]],
+                              uint3 tgid                   [[threadgroup_position_in_grid]],
+                              uint3 tpg                    [[threads_per_threadgroup]],
+                              uint3 tgpg                   [[threadgroups_per_grid]],
+                              constant const T * src       [[buffer(0)]],
+                              device T * dst               [[buffer(1)]],
+                              constant const U & size      [[buffer(2)]],
+                              constant const U & stride    [[buffer(3)]],
+                              constant const int & numel  [[buffer(4)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+
+    U local_index;
+    local_index.x = linear_index / size.u * size.w * size.z * size.y % size.x;
+    local_index.y = linear_index / size.u * size.w * size.z % size.y;
+    local_index.z = linear_index / size.u * size.w % size.z;
+    local_index.w = linear_index / size.u % size.w;
+    local_index.u = linear_index % size.u;
+
+    U strided_index;
+    strided_index.x = local_index.x * stride.x;
+    strided_index.y = local_index.y * stride.y;
+    strided_index.z = local_index.z * stride.z;
+    strided_index.w = local_index.w * stride.w;
+    strided_index.u = local_index.u * stride.u;
+
+    dst[strided_index.x + strided_index.y + strided_index.z + strided_index.w + strided_index.u] = src[linear_index];
+}
+
+template<typename T, typename U>
 kernel void scatter_kernel_4D(uint lane                    [[thread_index_in_threadgroup]],
                               uint3 tgid                   [[threadgroup_position_in_grid]],
                               uint3 tpg                    [[threads_per_threadgroup]],
@@ -428,6 +481,36 @@ kernel void scatter_kernel_1D(uint lane                    [[thread_index_in_thr
     const U local_index = linear_index % size;
     const U strided_index = local_index * stride;
     dst[strided_index] = src[linear_index];
+}
+
+template<typename T, typename U>
+kernel void gather_kernel_5D(uint lane                    [[thread_index_in_threadgroup]],
+                              uint3 tgid                   [[threadgroup_position_in_grid]],
+                              uint3 tpg                    [[threads_per_threadgroup]],
+                              uint3 tgpg                   [[threadgroups_per_grid]],
+                              constant const T * src       [[buffer(0)]],
+                              device T * dst               [[buffer(1)]],
+                              constant const U & size      [[buffer(2)]],
+                              constant const U & stride    [[buffer(3)]],
+                              constant const int & numel  [[buffer(4)]]) {
+    const int linear_index = getLinearIndex(lane, tgid, tpg, tgpg);
+    if (linear_index >= numel) return;
+
+    U local_index;
+    local_index.x = linear_index / size.u * size.w * size.z * size.y % size.x;
+    local_index.y = linear_index / size.u * size.w * size.z % size.y;
+    local_index.z = linear_index / size.u * size.w % size.z;
+    local_index.w = linear_index / size.u % size.w;
+    local_index.u = linear_index % size.u;
+
+    U strided_index;
+    strided_index.x = local_index.x * stride.x;
+    strided_index.y = local_index.y * stride.y;
+    strided_index.z = local_index.z * stride.z;
+    strided_index.w = local_index.w * stride.w;
+    strided_index.u = local_index.u * stride.u;
+
+    dst[linear_index] = src[strided_index.x + strided_index.y + strided_index.z + strided_index.w + strided_index.u];
 }
 
 template<typename T, typename U>
@@ -526,6 +609,7 @@ kernel void gather_kernel_1D(uint lane                    [[thread_index_in_thre
     FUNC(bool,  RANK, GATHER_OR_SCATTER, DTYPE_SIZE_STRIDE)
 
 #define REGISTER_GATHER_SCATTER_ALL_RANKS(GATHER_OR_SCATTER, FUNC)                                 \
+    REGISTER_GATHER_SCATTER_ALL_DTYPES(5, GATHER_OR_SCATTER, int5, FUNC);                  \
     REGISTER_GATHER_SCATTER_ALL_DTYPES(4, GATHER_OR_SCATTER, packed_int4, FUNC);                  \
     REGISTER_GATHER_SCATTER_ALL_DTYPES(3, GATHER_OR_SCATTER, packed_int3, FUNC);                  \
     REGISTER_GATHER_SCATTER_ALL_DTYPES(2, GATHER_OR_SCATTER, packed_int2, FUNC);                  \
