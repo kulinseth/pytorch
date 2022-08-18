@@ -32,10 +32,15 @@ Tensor& pad_out_template(Tensor &output, const Tensor &input_, IntArrayRef paddi
   const Tensor& grad_output_ = *(at::borrow_from_optional_tensor(grad_output_opt));
   const bool is_backward_pass = grad_output_.defined();
 
-  int dim_w = padding_dim, dim_h = padding_dim - 1, dim_d = padding_dim - 2, dim_slices = 0;
-  int64_t nbatch = 1, ndims = input_.ndimension();
+  int64_t nbatch = 1;
+  int64_t ndims = input_.ndimension();
+  // number of input dims with ConstantPad could be less than 2
+  int dim_w = ndims > 1 ? padding_dim : 0;
+  int dim_h = padding_dim - 1;
+  int dim_d = padding_dim - 2;
+  int dim_slices = 0;
 
-  if (!is_backward_pass) {
+  if (!is_backward_pass && ndims > 1) {
     bool valid_dims = input_.size(1) != 0 && input_.size(padding_dim) != 0;
     TORCH_CHECK((ndims == 1 + padding_dim && valid_dims) ||
                 (ndims == 2 + padding_dim && valid_dims && input_.size(1 + padding_dim) != 0),
@@ -95,8 +100,10 @@ Tensor& pad_out_template(Tensor &output, const Tensor &input_, IntArrayRef paddi
         output.resize_({nbatch, nplane, output_d, output_h, output_w});
       else if (padding_dim == 2)
         output.resize_({nbatch, nplane, output_h, output_w});
-      else
+      else if (ndims > 1)
         output.resize_({nbatch, nplane, output_w});
+      else
+        output.resize_({output_w});
     }
     if (output.numel() == 0 || input_.numel() == 0)
       return output;
@@ -120,8 +127,13 @@ Tensor& pad_out_template(Tensor &output, const Tensor &input_, IntArrayRef paddi
     leftPadding = [NSArray arrayWithObjects:(const NSNumber*[]){ @(0), @(0), @(pad_t), @(pad_l) } count:input_dim];
     rightPadding = [NSArray arrayWithObjects:(const NSNumber*[]){ @(0), @(0), @(pad_b), @(pad_r) } count:input_dim];
   } else if (padding_dim == 1) {
-    leftPadding = [NSArray arrayWithObjects:(const NSNumber*[]){ @(0), @(0), @(pad_l) } count:input_dim];
-    rightPadding = [NSArray arrayWithObjects:(const NSNumber*[]){ @(0), @(0), @(pad_r) } count:input_dim];
+    if (input_dim > 1) {
+      leftPadding = [NSArray arrayWithObjects:(const NSNumber*[]){ @(0), @(0), @(pad_l) } count:input_dim];
+      rightPadding = [NSArray arrayWithObjects:(const NSNumber*[]){ @(0), @(0), @(pad_r) } count:input_dim];
+    } else {
+      leftPadding = [NSArray arrayWithObjects:(const NSNumber*[]){ @(pad_l) } count:input_dim];
+      rightPadding = [NSArray arrayWithObjects:(const NSNumber*[]){ @(pad_r) } count:input_dim];
+    }
   }
 
   struct CachedGraph : public MPSCachedGraph {
