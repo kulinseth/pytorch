@@ -3831,6 +3831,14 @@ class TestNLLLoss(TestCase):
         for shape in [[], (2, 3), (2, 8, 4, 5)]:
             helper(shape)
 
+    def test_cast_mps_to_cpu(self):
+        def helper(src_dtype, dst_dtype):
+            input = torch.rand((1,3,128,128), dtype=src_dtype)
+            input = input.to('mps')
+            input = input.to('cpu', dtype=dst_dtype)
+        helper(torch.half, torch.float)
+        helper(torch.float, torch.half)
+
     # Test adaptive avg pool2d - when the input size is a multiple of output size
     # Not testing for channels last right now
     def test_adaptive_avg_pool2d_simple(self):

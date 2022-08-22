@@ -113,37 +113,50 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool
     src = src_;
   }
   id<MTLBuffer> sourceBuffer = getMTLBufferStorage(src);
-  size_t src_total_size = src_.is_view() ? at::detail::computeStorageNbytesContiguous(src.sizes(), src.element_size(), src.storage_offset()) :
-                                           src.nbytes();
-  size_t size_to_copy = src.nbytes();
-
-  // In case of dtype change, first convert src inplace
-  if (src_.dtype() != dst_.dtype()) {
-    copy_cast_mps(dst, src, sourceBuffer, sourceBuffer);
-    // Use the element size of dst to calculate the total size after casting
-    size_to_copy = (size_to_copy / src.element_size()) * dst.element_size();
-  }
-
-  // If there's anything wrong with source, we shouldn't return dst_ silently and must error out.
-  TORCH_INTERNAL_ASSERT(sourceBuffer && size_to_copy > 0);
-  TORCH_INTERNAL_ASSERT(src_total_size >= storage_byte_offset);
-  TORCH_INTERNAL_ASSERT(dst.nbytes() >= (dst.storage_offset() * dst.element_size()));
+  size_t dst_tensor_nbytes = dst.nbytes();
 
   @autoreleasepool {
     MTLResourceOptions options = MTLResourceOptionCPUCacheModeDefault | MTLResourceStorageModeShared;
     NSUInteger alignedLength = 0;
 
     void* host_dst = dst.storage().data();
-    void* alignedPtr = pageAlignedBlockPtr(host_dst, (NSUInteger)src_total_size, &alignedLength);
+    void* alignedPtr = pageAlignedBlockPtr(host_dst, (NSUInteger)dst_tensor_nbytes, &alignedLength);
+    NSUInteger destOffset = (uintptr_t(host_dst) - uintptr_t(alignedPtr));
+    // 4 bytes alignment required on macos for blits.
+    TORCH_INTERNAL_ASSERT(destOffset % 4 == 0, "Unaligned blit request");
+
     id<MTLBuffer> destBuffer = [device newBufferWithBytesNoCopy:alignedPtr
                                                          length:alignedLength
                                                         options:options
                                                     deallocator:nil];
-     NSUInteger destOffset = uintptr_t(host_dst) - uintptr_t(alignedPtr);
-    // 4 bytes alignment required on macos for blits.
-    TORCH_INTERNAL_ASSERT(destOffset % 4 == 0, "Unaligned blit request");
+    id<MTLBuffer> tmpBuffer = sourceBuffer;
+    bool blitData = true;
+    if (src_.dtype() != dst_.dtype()) {
+      if (destOffset == 0) {
+        // Return the casted tensor directly if there's no destination offset
+        blitData = false;
+        tmpBuffer = destBuffer;
+      } else {
+        blitData = true;
+        if (src.element_size() < dst.element_size()) {
+          tmpBuffer = [[device newBufferWithLength:dst.nbytes() options:options] autorelease];
+        }
+      }
+    }
 
-    stream->copy_and_sync(sourceBuffer, destBuffer, size_to_copy, storage_byte_offset, destOffset, non_blocking);
+    size_t size_to_copy = src.nbytes();
+    // In case of dtype change, first convert src inplace
+    if (src_.dtype() != dst_.dtype()) {
+      copy_cast_mps(dst, src, tmpBuffer, sourceBuffer);
+      if (!blitData)
+        return dst_;
+    }
+
+    // If there's anything wrong with source, we shouldn't return dst_ silently and must error out.
+    TORCH_INTERNAL_ASSERT(sourceBuffer && dst_tensor_nbytes > 0);
+    TORCH_INTERNAL_ASSERT(dst_tensor_nbytes >= (dst.storage_offset() * dst.element_size()));
+
+    stream->copy_and_sync(tmpBuffer, destBuffer, size_to_copy, storage_byte_offset, destOffset, non_blocking);
     [destBuffer release];
   }
   if (!dst.is_same(dst_)) {
