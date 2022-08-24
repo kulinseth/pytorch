@@ -130,17 +130,16 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool
                                                         options:options
                                                     deallocator:nil];
     id<MTLBuffer> tmpBuffer = sourceBuffer;
-    bool blitData = true;
+    Tensor tmp;
+    bool needsBlit = true;
     if (src_.dtype() != dst_.dtype()) {
       if (destOffset == 0) {
         // Return the casted tensor directly if there's no destination offset
-        blitData = false;
+        needsBlit = false;
         tmpBuffer = destBuffer;
-      } else {
-        blitData = true;
-        if (src.element_size() < dst.element_size()) {
-          tmpBuffer = [[device newBufferWithLength:dst.nbytes() options:options] autorelease];
-        }
+      } else if (src.element_size() < dst.element_size()) {
+          tmp = at::native::empty_mps(dst_.sizes(), dst_.scalar_type(), c10::nullopt, kMPS);
+          tmpBuffer = getMTLBufferStorage(tmp);
       }
     }
 
@@ -148,8 +147,9 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool
     // In case of dtype change, first convert src inplace
     if (src_.dtype() != dst_.dtype()) {
       copy_cast_mps(dst, src, tmpBuffer, sourceBuffer);
-      if (!blitData)
+      if (!needsBlit)
         return dst_;
+      size_to_copy = (size_to_copy / src.element_size()) * dst.element_size();
     }
 
     // If there's anything wrong with source, we shouldn't return dst_ silently and must error out.
@@ -248,17 +248,29 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_, boo
   } else {
     src = src_;
   }
+  id<MTLBuffer> destBuffer = getMTLBufferStorage(dst_);
+  id<MTLBuffer> sourceBuffer = getMTLBufferStorage(src);
+
   // Scatter to `dst` if the memory is not contiguous
   // If the memory is not contiguous, it means that the tensor has strides and we would not be
   // able to do the copy using a single blit
   if (!dst_.is_contiguous()) {
-    return scatterViewTensor(src, dst_);
+    Tensor tmp;
+    if (src.dtype() != dst_.dtype()) {
+      id<MTLBuffer> tmpBuffer = sourceBuffer;
+      if (src.element_size() < dst_.element_size()) {
+        tmp = at::native::empty_mps(dst_.sizes(), dst_.scalar_type(), c10::nullopt, kMPS);
+        tmpBuffer = getMTLBufferStorage(tmp);
+      }
+
+      copy_cast_mps(dst_, src, tmpBuffer, sourceBuffer);
+    }
+
+    return scatterViewTensor((src.dtype() != dst_.dtype() && tmp.has_storage()) ? tmp : src, dst_);
   }
   src._set_conj(src_.is_conj());
   src._set_neg(src_.is_neg());
 
-  id<MTLBuffer> destBuffer = getMTLBufferStorage(dst_);
-  id<MTLBuffer> sourceBuffer = getMTLBufferStorage(src);
   const size_t src_size = src.nbytes();
   if (src.dtype() == dst_.dtype()) {
     MPSStream* stream = getCurrentMPSStream();

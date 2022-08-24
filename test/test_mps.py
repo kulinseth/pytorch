@@ -5066,6 +5066,24 @@ class TestGatherScatter(TestCase):
 
         self.assertEqual(x_cpu, x_mps)
 
+    def test_cast_gather_scatter(self):
+        for _ in range(0, 50):
+            input = np.random.randint(0, 255, size=(5, 5, 4), dtype = np.uint8)
+            with torch.no_grad():
+                s = torch.tensor(input, dtype=torch.uint8, device="mps").unsqueeze(0)
+                s_cpu = torch.tensor(input, dtype=torch.uint8, device="cpu").unsqueeze(0)
+                s = s.long()
+                s_cpu = s_cpu.long()
+                self.assertEqual(s.cpu(), s_cpu)
+
+                s= s.float()
+                s_cpu = s_cpu.float()
+                self.assertEqual(s.cpu(), s_cpu)
+
+                s /= 255
+                s_cpu /= 255
+                self.assertEqual(s.cpu(), s_cpu)
+
     def test_slicing_replace_column(self):
         # https://github.com/pytorch/pytorch/issues/78074
         def _helper(tensor_data):
