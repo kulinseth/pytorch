@@ -3834,10 +3834,25 @@ class TestNLLLoss(TestCase):
     def test_cast_mps_to_cpu(self):
         def helper(src_dtype, dst_dtype):
             input = torch.rand((1,3,128,128), dtype=src_dtype)
-            input = input.to('mps')
-            input = input.to('cpu', dtype=dst_dtype)
+            input_cast_mps = input.to('mps')
+            input_cast_cpu = input_cast_mps.to('cpu', dtype=dst_dtype)
+
+            # needs to match the initial Tensor
+            self.assertEqual(input_cast_cpu, input.to(dtype=dst_dtype))
         helper(torch.half, torch.float)
         helper(torch.float, torch.half)
+
+    def test_cast_mps_to_mps(self):
+        def helper(src_dtype, dst_dtype):
+            input_cpu = torch.rand((1,3,128,128), dtype=src_dtype)
+            input_mps = input_cpu.to('mps')
+            output_mps = input_mps.to(dtype=dst_dtype)
+            output_cpu = input_cpu.to(dtype=dst_dtype)
+            self.assertEqual(output_mps.cpu(), output_cpu)
+        helper(torch.half, torch.float)
+        helper(torch.float, torch.half)
+        helper(torch.half, torch.long)
+        helper(torch.float, torch.int)
 
     # Test adaptive avg pool2d - when the input size is a multiple of output size
     # Not testing for channels last right now
