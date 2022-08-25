@@ -22,6 +22,8 @@ void set_kernel_params
   TORCH_CHECK((isizeH >= osizeH && isizeW >= osizeW) || (isizeH <= osizeH && isizeW <= osizeW), 
               "Adaptive pool MPS: Input height and width must both be greather than or equal to, or lesser than, output height and width")
 
+  TORCH_CHECK((!(isizeH <= osizeH && isizeW <= osizeW) || (osizeH % isizeH == 0 && osizeW % isizeW == 0)),
+              "Adaptive pool MPS: If output is larger than input, output sizes must be multiples of input sizes")
 
   if(isizeH >= osizeH) {
     strideH = (int64_t) (isizeH / osizeH);
