@@ -124,7 +124,7 @@ if os.getenv("DISABLED_TESTS_FILE", ""):
         disabled_tests_dict = json.load(fp)
         warnings.warn(f"loaded {len(disabled_tests_dict)} disabled tests")
 
-NATIVE_DEVICES = ('cpu', 'cuda', 'meta')
+NATIVE_DEVICES = ('cpu', 'cuda', 'meta', 'mps')
 
 
 class _TestParametrizer(object):
