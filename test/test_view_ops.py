@@ -6,16 +6,17 @@ import unittest
 from itertools import product, permutations, combinations
 from functools import partial
 import random
+from torch._C import dtype
 
 from torch.testing import make_tensor
 from torch.testing._internal.common_utils import (
-    IS_FBCODE, TestCase, run_tests, suppress_warnings, gradcheck, gradgradcheck,
+    IS_FBCODE, TestCase, run_tests, skipIfMps, suppress_warnings, gradcheck, gradgradcheck,
     numpy_to_torch_dtype_dict, skipIfTorchDynamo
 )
 from torch.testing._internal.common_device_type import \
-    (instantiate_device_type_tests, onlyCPU, dtypes, onlyNativeDeviceTypes, skipMeta)
+    (dtypesIfMPS, instantiate_device_type_tests, onlyCPU, dtypes, onlyNativeDeviceTypes, skipMeta)
 from torch.testing._internal.common_dtype import (
-    all_types_and_complex_and, complex_types, all_types_and, floating_and_complex_types_and,
+    all_types_and_complex_and, complex_types, all_types_and, floating_and_complex_types_and, integral_types_and,
 )
 
 # TODO: replace this with make_tensor() in common_utils.py
@@ -369,6 +370,7 @@ class TestViewOps(TestCase):
         self.assertEqual(t_dsplit[1][2, 2, 0], t[2, 2, 2])
 
     @onlyNativeDeviceTypes
+    @skipIfMps
     @dtypes(*all_types_and(torch.half, torch.bfloat16))
     def test_imag_noncomplex(self, device, dtype):
         t = torch.ones((5, 5), dtype=dtype, device=device)
@@ -409,6 +411,7 @@ class TestViewOps(TestCase):
 
     @onlyNativeDeviceTypes
     @dtypes(*complex_types())
+    @skipIfMps
     def test_conj_imag_view(self, device, dtype) -> None:
         t = _make_tensor((4, 5,), dtype, device)
         t_numpy_conj = torch.from_numpy(t.cpu().numpy().conj()).to(device=device)
@@ -423,6 +426,7 @@ class TestViewOps(TestCase):
             self.assertTrue(v_imag.is_neg())
 
     @onlyNativeDeviceTypes
+    @skipIfMps
     def test_conj_view_with_shared_memory(self, device) -> None:
         a = _make_tensor((4, 5,), torch.cfloat, device)
         b = a.conj()
@@ -866,6 +870,7 @@ class TestViewOps(TestCase):
         self.assertEqual(t[2, 2], 0)
 
     @unittest.skip("See https://github.com/pytorch/pytorch/pull/32720")
+    @skipIfMps
     def test_chunk_view(self, device):
         t = torch.zeros(3, 3, device=device)
         l = torch.chunk(t, 3)
@@ -1300,6 +1305,7 @@ class TestOldViewOps(TestCase):
         t2 = torch.from_numpy(t.cpu().numpy().transpose())
         self.assertEqual(t1, t2)
 
+    @skipIfMps
     def test_T(self, device):
         a = torch.randn(2, 3, 4, device=device)
         t1 = a.T
@@ -1309,6 +1315,7 @@ class TestOldViewOps(TestCase):
         self.assertEqual(b, b.T)
 
     @dtypes(*all_types_and_complex_and(torch.half, torch.bfloat16, torch.bool))
+    @dtypesIfMPS(*integral_types_and(torch.bool, torch.half, torch.float32))
     def test_transposes(self, device, dtype):
         for op in ("T", "H", "mT", "mH", "adjoint"):
             shapes = ((2, 3), (2, 3, 4)) if op[0] == "m" or op == "adjoint" else ((2, 3),)
@@ -1324,6 +1331,7 @@ class TestOldViewOps(TestCase):
                 self.assertEqual(t2, t1)
 
     @dtypes(*all_types_and_complex_and(torch.half, torch.bfloat16, torch.bool))
+    @dtypesIfMPS(*integral_types_and(torch.bool, torch.half, torch.float32))
     def test_transposes_errors(self, device, dtype):
         for op in ("H", "mT", "mH", "adjoint"):
             shapes = ((2,), (2, 3, 4)) if op == "H" else ((2,),)
@@ -1334,6 +1342,7 @@ class TestOldViewOps(TestCase):
                     if op == "adjoint":
                         t1 = t1()
 
+    @skipIfMps
     def test_python_types(self, device):
         a1 = torch.randn((1, 2), device=device, dtype=torch.float64)
         a2 = torch.randn((1, 2), device=device, dtype=float)
@@ -1375,6 +1384,7 @@ class TestOldViewOps(TestCase):
 
     @onlyNativeDeviceTypes
     @dtypes(torch.int64, torch.float, torch.complex128)
+    @dtypesIfMPS(torch.int64, torch.float)
     def test_transpose_invalid(self, device, dtype):
         for fn in (torch.swapdims, torch.swapaxes, torch.transpose):
             shape = _rand_shape(4, min_size=5, max_size=10)
@@ -1388,6 +1398,7 @@ class TestOldViewOps(TestCase):
                 fn(x, 0, 5)
 
     @dtypes(torch.int64, torch.float, torch.complex128)
+    @dtypesIfMPS(torch.int64, torch.float)
     def test_transpose_vs_numpy(self, device, dtype):
         for fn in (torch.swapdims, torch.swapaxes, torch.transpose):
             for nd in range(5):
@@ -1450,6 +1461,7 @@ class TestOldViewOps(TestCase):
 
     # TODO: are these view ops?
     @dtypes(*all_types_and_complex_and(torch.half))
+    @dtypesIfMPS(*integral_types_and(torch.bool, torch.half, torch.float32))
     def test_atleast(self, device, dtype):
         self._test_atleast_dim(torch.atleast_1d, np.atleast_1d, device, dtype)
         self._test_atleast_dim(torch.atleast_2d, np.atleast_2d, device, dtype)
@@ -1553,6 +1565,7 @@ class TestOldViewOps(TestCase):
 
     # Skip BFloat16 since numpy does not support it
     @dtypes(*all_types_and_complex_and(torch.half, torch.bool))
+    @dtypesIfMPS(*integral_types_and(torch.bool, torch.half, torch.float32))
     def test_broadcast_to(self, device, dtype):
         def can_broadcast(s0, s1):
             # s0.dim() <= s1.dim(), reverse s0 and s1 to compare trailing dimension
@@ -1580,6 +1593,7 @@ class TestOldViewOps(TestCase):
                                             r"must match the existing size \(\d\)"):
                     torch.broadcast_to(t, s1)
 
+    @skipIfMps
     def test_view(self, device):
         tensor = torch.rand(15, device=device)
         template = torch.rand(3, 5, device=device)
@@ -1656,6 +1670,7 @@ class TestOldViewOps(TestCase):
         self.assertEqual(tensor.view(1, 6, 2, 1), contig_tensor.view(1, 6, 2, 1))
 
     @dtypes(*all_types_and_complex_and(torch.half, torch.bfloat16, torch.bool))
+    @dtypesIfMPS(*integral_types_and(torch.bool, torch.half, torch.float32))
     def test_reshape_view_semantics(self, device, dtype):
         tensor = make_tensor((15, 4), dtype=dtype, device=device)
         target = (20, 3)
@@ -1790,13 +1805,14 @@ class TestOldViewOps(TestCase):
                                     + ' zero-dimensional or one-dimensional tensor, but got a tensor with 2 dims'):
             torch.tensor_split(torch.rand(S, device=device), torch.tensor(((1,),)), 0)
 
+    @skipIfMps
     def test_resize_all_dtypes_and_devices(self, device):
         shape = (2, 2)
         for dt in all_types_and_complex_and(torch.half, torch.bfloat16, torch.bool):
             x = torch.tensor([[1, 2], [3, 4], [5, 6]], dtype=dt, device=device)
             x.resize_(shape)
             self.assertEqual(shape, x.shape)
-
+    @skipIfMps
     def test_resize_as_all_dtypes_and_devices(self, device):
         for dt in all_types_and_complex_and(torch.half, torch.bfloat16, torch.bool):
             x = torch.tensor([[1, 2], [3, 4], [5, 6]], dtype=dt, device=device)
@@ -1812,6 +1828,7 @@ class TestOldViewOps(TestCase):
         with self.assertRaisesRegex(RuntimeError, 'overflow'):
             x.resize_([8, 8, 2**29, 2**29])
 
+    @skipIfMps
     def test_view_all_dtypes_and_devices(self, device):
         for dt in all_types_and_complex_and(torch.half, torch.bfloat16, torch.bool):
             x = torch.tensor([[1, 2], [3, 4], [5, 6]], dtype=dt, device=device)
