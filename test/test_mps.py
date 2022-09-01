@@ -7920,6 +7920,7 @@ class TestConsistency(TestCase):
         'repeat': ['torch.bool'],
         'rot90': ['torch.bool'],
         'tile': ['torch.bool'],
+        'split': ['torch.float32'],
     }
 
     # Used for accept mode only
