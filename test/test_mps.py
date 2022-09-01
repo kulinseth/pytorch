@@ -8890,6 +8890,7 @@ class TestConsistency(TestCase):
         'repeat': ['torch.bool'],
         'rot90': ['torch.bool'],
         'tile': ['torch.bool'],
+        'split': ['torch.float32'],
     }
 
     # Those ops worked on MacOS12, but broken on MacOS13
