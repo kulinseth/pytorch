@@ -31,6 +31,7 @@ void fill_pool_desc(MPSGraphPooling2DOpDescriptor* desc,
   desc.paddingBottom = padH;
   desc.ceilMode = ceil_mode;
   desc.paddingStyle = MPSGraphPaddingStyleExplicit;
+  desc.includeZeroPadToAverage = YES;
   switch(memory_format) {
     case at::MemoryFormat::Contiguous:
       desc.dataLayout = MPSGraphTensorNamedDataLayoutNCHW;
