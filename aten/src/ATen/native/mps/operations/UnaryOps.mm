@@ -16,6 +16,7 @@ namespace mps {
 typedef MPSGraphTensor* (^UnaryOpBlock)(MPSGraph*, MPSGraphTensor*);
 using is_noop_p = std::function<bool(const Tensor&)>;
 
+#define ConditionalOpFn(void) NSArray<MPSGraphTensor *> * (void)
 
 bool is_empty_tensor(const Tensor& self) {
   return self.numel() == 0;
@@ -286,6 +287,109 @@ TORCH_IMPL_FUNC(cumsum_out_mps)
        }
        return rc;
     });
+}
+
+TORCH_IMPL_FUNC(sgn_out_mps) (const Tensor& self, const Tensor& output)
+{
+    using namespace mps;
+    if (!output.is_same_size(self)) {
+      output.resize_(self.sizes());
+    }
+    MPSGraphCache* cache_ = MPSGraphCache::getInstance();
+    @autoreleasepool {
+      string key = string("sgn_out_mps") + getTensorsStringKey({self});
+      auto cachedGraph = cache_->LookUpAs<MPSUnaryCachedGraph>(key);
+
+      if(!cachedGraph) {
+        MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph* () {
+          MPSUnaryCachedGraph *newCachedGraph = nil;
+          @autoreleasepool {
+            MPSGraph* mpsGraph = make_mps_graph();
+            newCachedGraph = new MPSUnaryCachedGraph(mpsGraph);
+            newCachedGraph->inputTensor_ = mpsGraphRankedPlaceHolder(mpsGraph, self);
+              if (newCachedGraph->inputTensor_.dataType == mps::getMPSDataType(ScalarType::ComplexHalf) || newCachedGraph->inputTensor_.dataType == mps::getMPSDataType(ScalarType::ComplexFloat) || newCachedGraph->inputTensor_.dataType == mps::getMPSDataType(ScalarType::ComplexDouble)) {
+                MPSGraphTensor* zeroComplexTensor = [mpsGraph constantWithScalar:0.0
+                                                              shape:getMPSShape(self)
+                                                              dataType:newCachedGraph->inputTensor_.dataType];
+
+                MPSGraphTensor* isComplexZero = [mpsGraph equalWithPrimaryTensor:newCachedGraph->inputTensor_
+                                                              secondaryTensor:zeroComplexTensor
+                                                              name: nil];
+
+                MPSGraphTensor* complexAbsolute = [mpsGraph absoluteWithTensor:newCachedGraph->inputTensor_
+                                                              name: nil];
+
+                MPSGraphTensor* complexSgn = [mpsGraph divisionWithPrimaryTensor:newCachedGraph->inputTensor_
+                                                              secondaryTensor:complexAbsolute
+                                                              name: nil];
+
+                MPSGraphIfThenElseBlock returnComplexZero = ^ConditionalOpFn(){ return @[zeroComplexTensor]; };
+
+                MPSGraphIfThenElseBlock returnComplexNonZeroSgn = ^ConditionalOpFn(){ return @[complexSgn]; };
+
+                MPSGraphTensor* sgnTensor = [mpsGraph ifWithPredicateTensor:isComplexZero
+                                                              thenBlock:returnComplexZero
+                                                              elseBlock:returnComplexNonZeroSgn
+                                                              name:nil][0];
+
+                newCachedGraph->outputTensor_ = sgnTensor;
+              } else {
+                MPSGraphTensor* zeroTensor = [mpsGraph constantWithScalar:0
+                                                              shape:getMPSShape(self)
+                                                              dataType:mps::getMPSDataType(self.scalar_type())];
+
+                MPSGraphTensor* oneTensor = [mpsGraph constantWithScalar:1
+                                                              shape:getMPSShape(self)
+                                                              dataType:mps::getMPSDataType(self.scalar_type())];
+
+                MPSGraphTensor* negativeOneTensor = [mpsGraph constantWithScalar:1
+                                                              shape:getMPSShape(self)
+                                                              dataType:mps::getMPSDataType(self.scalar_type())];
+
+                MPSGraphIfThenElseBlock casePositive = ^ConditionalOpFn(){ return @[oneTensor]; };
+
+                MPSGraphIfThenElseBlock caseNegative = ^ConditionalOpFn(){ return @[negativeOneTensor]; };
+
+                MPSGraphIfThenElseBlock caseZero = ^ConditionalOpFn(){ return @[zeroTensor]; };
+
+                MPSGraphTensor* isPositive = [mpsGraph greaterThanWithPrimaryTensor:newCachedGraph->inputTensor_
+                                                              secondaryTensor:zeroTensor
+                                                              name: nil];
+
+                MPSGraphTensor* isNegative = [mpsGraph lessThanWithPrimaryTensor:newCachedGraph->inputTensor_
+                                                              secondaryTensor:zeroTensor
+                                                              name: nil];
+
+                MPSGraphIfThenElseBlock ifNotPositiveBlock = ^ConditionalOpFn(){
+                  return [mpsGraph ifWithPredicateTensor:isNegative
+                                                              thenBlock:caseNegative
+                                                              elseBlock:caseZero
+                                                              name:nil];
+                };
+
+                MPSGraphTensor* sgnTensor = [mpsGraph ifWithPredicateTensor:isPositive
+                                                              thenBlock:casePositive
+                                                              elseBlock:ifNotPositiveBlock
+                                                              name:nil][0];
+
+                newCachedGraph->outputTensor_ = sgnTensor;
+              }
+          }
+          return newCachedGraph;
+        });
+        cachedGraph = tmpCachedGraph->as<MPSUnaryCachedGraph>();
+      }
+
+      Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self);
+      Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output);
+      NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
+        selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData()
+      };
+      NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
+        outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
+      };
+      runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
+    }
 }
 
 } // namespace native
