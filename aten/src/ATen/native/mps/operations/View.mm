@@ -19,10 +19,12 @@ struct ViewCachedGraph : public MPSCachedGraph
 };
 
 static std::string getStridedKey(const ScalarType& dtype, const IntArrayRef& base_shape,
-                          const IntArrayRef& new_shape, bool is_scatter)
+                                 const IntArrayRef& new_shape, const IntArrayRef& stride,
+                                 int64_t storage_offset, bool is_scatter)
 {
   return (is_scatter ? "scatter:" : "gather:") + getMPSTypeString(dtype) + "[" +
-         getArrayRefString(base_shape) + "]:[" + getArrayRefString(new_shape) + "]";
+         getArrayRefString(base_shape) + "]:[" + getArrayRefString(new_shape) + "]:[" +
+         getArrayRefString(stride) + "]:[" + to_string(storage_offset) + "]";
 }
 
 // initializes the MTLBuffers for tensor data and runs the MPSGraph for the view op
@@ -129,6 +131,10 @@ MPSGraphTensor* asStridedLayer_pattern(MPSGraph *graph, MPSGraphTensor *inputTen
     [uniqueStrides release];
     if (!allUnique)
       return nil;
+
+    // Skip for zero in dst shape
+    for (NSInteger dstDim = 0; dstDim < dstRank; dstDim++)
+      if (dstSizes[dstDim] == 0) { return nil; }
   }
 
   // 1. Flatten the inputTensor if neccessary
@@ -199,9 +205,9 @@ MPSGraphTensor* asStridedLayer_pattern(MPSGraph *graph, MPSGraphTensor *inputTen
     NSMutableArray *missingSrcStrides = [[NSMutableArray alloc] init];
     {
       NSUInteger stride = 1;
-      for (NSInteger srcDim = [[inputTensor shape] count] - 1; srcDim >= 0; srcDim--) {
+      for (NSInteger srcDim = [[flatInputTensor shape] count] - 1; srcDim >= 0; srcDim--) {
         [missingSrcStrides addObject:[NSNumber numberWithInteger:stride]];
-        stride *= [[inputTensor shape][srcDim] integerValue];
+        stride *= [[flatInputTensor shape][srcDim] integerValue];
       }
       for (NSInteger dstDim = 0; dstDim < dstRank; dstDim++) {
         [missingSrcStrides removeObject:[NSNumber numberWithInteger:dstStrides[dstDim]]];
@@ -456,7 +462,7 @@ static ViewCachedGraph* createViewGraph(const Tensor& self, IntArrayRef size, In
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
 
   @autoreleasepool {
-    string key = getStridedKey(self.scalar_type(), base_shape, size, needsScatter);
+    string key = getStridedKey(self.scalar_type(), base_shape, size, stride, storage_offset, needsScatter);
     ViewCachedGraph* cachedGraph = static_cast<ViewCachedGraph *>(cache_->LookUp(key));
 
     if (!cachedGraph) {
@@ -496,7 +502,7 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst)
 
   const IntArrayRef& base_shape = get_buffer_shape(src.storage().data());
   if (base_shape.size() > 0) {
-    string key = getStridedKey(src.scalar_type(), base_shape, src.sizes(), /*is_scatter*/ false);
+    string key = getStridedKey(src.scalar_type(), base_shape, src.sizes(), src.strides(), src.storage_offset(), /*is_scatter*/ false);
     cachedGraph = static_cast<ViewCachedGraph *>(MPSGraphCache::getInstance()->LookUp(key));
   }
   // there are cases where gatherViewTensor() is called without having as_strided() called beforehand.
