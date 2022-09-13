@@ -39,7 +39,6 @@ static Tensor& runViewGraph(ViewCachedGraph* cachedGraph, const at::Tensor& src,
   const int64_t storage_offset = needsScatter ? output.storage_offset() : src.storage_offset();
   const MPSDataType inputType  = [cachedGraph->inputTensor dataType];
 
-
   MPSShape *inputShape = [cachedGraph->inputTensor shape];
   MPSShape *outputShape = needsScatter ? inputShape : getMPSShape(src);
 
@@ -102,21 +101,96 @@ NSDictionary *getStrideToDimLengthOffsetDict(MPSGraphTensor *tensor, NSUInteger 
 
 //#define DEBUG_MPSGRAPH_SHAPE_API_AS_STRIDED
 
-MPSGraphTensor* asStridedLayer_pattern(MPSGraph *graph, MPSGraphTensor *inputTensor, int dstRank, int* dstSizes, int* dstStrides, int offset) {
-#ifdef DEBUG_MPSGRAPH_SHAPE_API_AS_STRIDED
-  printf("input shape:");
-  for (auto length: [inputTensor shape])
-    printf("%lld, ", (int64_t)[length integerValue]);
-  printf("output shape:");
-  for (NSUInteger dstDim = 0; dstDim < dstRank; dstDim++)
-    printf("%lld, ", (int64_t)dstSizes[dstDim]);
-  printf("stride:");
-  for (NSUInteger dstDim = 0; dstDim < dstRank; dstDim++)
-    printf("%lld, ", (int64_t)dstStrides[dstDim]);
-  printf("storage offset: %lld \n", (int64_t)offset);
-#endif
-  if (!dstRank)
+// Detect only expand dims, allows for duplicate strides
+MPSGraphTensor* asStridedLayer_expandDimsPattern(MPSGraph *graph, MPSGraphTensor *inputTensor, int dstRank, const IntArrayRef& dstSizes, const IntArrayRef& dstStrides, int offset) {
+
+  NSUInteger srcRank = [[inputTensor shape] count];
+  // Not an expand dims
+  if (srcRank >= dstRank)
     return nil;
+
+  NSMutableArray *expandAxes = [[NSMutableArray alloc] init];
+
+  BOOL isValidExpand = YES;
+  NSInteger currSrcDim = (NSInteger)srcRank - 1;
+  NSUInteger currSrcStride = 1;
+  for (NSInteger dstDim = dstRank - 1; dstDim >= 0 && isValidExpand; dstDim--) {
+    NSUInteger currDimLength = dstSizes[dstDim];
+    NSUInteger currStride = dstStrides[dstDim];
+    NSUInteger currSrcDimLength = currSrcDim >= 0 ? [[inputTensor shape][currSrcDim] integerValue] : 1;
+
+    NSUInteger targetDimLength =  currSrcDimLength;
+    if (currDimLength != targetDimLength)
+      targetDimLength = 1;
+    if (currDimLength != targetDimLength && currStride != currSrcStride)
+      isValidExpand = NO;
+    if (currSrcDim >= 0 && currSrcDimLength == targetDimLength) {
+      currSrcStride *= currSrcDimLength;
+      currSrcDim--;
+    } else {
+      [expandAxes addObject:[NSNumber numberWithInt:dstDim]];
+    }
+  }
+
+  // Did not use every dimension of source
+  if (!isValidExpand || currSrcDim >= 0) {
+    [expandAxes release];
+    return nil;
+  }
+
+  MPSGraphTensor *expandTensor = inputTensor;
+  if ([expandAxes count]) {
+    expandTensor = [graph expandDimsOfTensor:expandTensor
+                                        axes:expandAxes
+                                        name:nil];
+  }
+  [expandAxes release];
+
+  return expandTensor;
+}
+
+// Detect contiguous reshapes, no slicing
+MPSGraphTensor* asStridedLayer_reshapePattern(MPSGraph *graph, MPSGraphTensor *inputTensor, int dstRank, const IntArrayRef& dstSizes, const IntArrayRef& dstStrides, int offset) {
+  NSUInteger srcRank = [[inputTensor shape] count];
+  // Not a reshape
+  if (srcRank <= dstRank)
+    return nil;
+
+  NSMutableArray *dstShape = [[NSMutableArray alloc] init];
+
+  BOOL isValidReshape = YES;
+  NSInteger srcDim = srcRank - 1;
+  NSUInteger srcStride = 1;
+  for (NSInteger dstDim = dstRank - 1; dstDim >= 0 && isValidReshape; dstDim--) {
+    NSUInteger currDimLength = dstSizes[dstDim];
+    NSUInteger currStride = dstStrides[dstDim];
+    [dstShape insertObject:[NSNumber numberWithInteger:currDimLength] atIndex: 0];
+
+    NSUInteger targetDimLength = currDimLength;
+    NSUInteger currReshapeSize = 1;
+    NSUInteger innerStride = srcStride;
+    do {
+      NSUInteger srcDimLength = [[inputTensor shape][srcDim] integerValue];
+      currReshapeSize *= srcDimLength;
+      srcStride *= srcDimLength;
+
+      srcDim--;
+    } while(currReshapeSize != targetDimLength && srcDim >= 0);
+
+    isValidReshape &= (currReshapeSize == targetDimLength && currStride == innerStride);
+  }
+  isValidReshape &= (srcDim < 0);
+
+  MPSGraphTensor *outputTensor = nil;
+  if (isValidReshape)
+    outputTensor = [graph reshapeTensor: inputTensor
+                              withShape: dstShape
+                                   name: nil];
+  [dstShape release];
+  return outputTensor;
+}
+
+MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *inputTensor, int dstRank, const IntArrayRef& dstSizes, const IntArrayRef& dstStrides, int offset) {
 
   // Duplicate strides cannot be done
   {
@@ -180,7 +254,7 @@ MPSGraphTensor* asStridedLayer_pattern(MPSGraph *graph, MPSGraphTensor *inputTen
         dstDimToSliceOffset[dstDim] = 0;
       } else {
         // Find what dimension and native length was for the specified stride
-        NSDictionary *srcDimLengthOffset = srcStrideToDimLengthOffset[[NSString stringWithFormat:@"%d",dstStrides[dstDim]]];
+        NSDictionary *srcDimLengthOffset = srcStrideToDimLengthOffset[[NSString stringWithFormat:@"%lld",dstStrides[dstDim]]];
 
         // Stride does not exist in source tensor, or the specified size is too long. Not possible
         // TODO: Longer length with same stride + removal of dim(s) above this is a flatten/reshape. Consider adding support
@@ -311,6 +385,33 @@ MPSGraphTensor* asStridedLayer_pattern(MPSGraph *graph, MPSGraphTensor *inputTen
   return broadcastTensor;
 }
 
+MPSGraphTensor* asStridedLayer_pattern(MPSGraph *graph, MPSGraphTensor *inputTensor, int dstRank, const IntArrayRef& dstSizes, const IntArrayRef& dstStrides, int offset) {
+#ifdef DEBUG_MPSGRAPH_SHAPE_API_AS_STRIDED
+  printf("input shape:");
+  for (auto length: [inputTensor shape])
+    printf("%lld, ", (int64_t)[length integerValue]);
+  printf("output shape:");
+  for (NSUInteger dstDim = 0; dstDim < dstRank; dstDim++)
+    printf("%lld, ", (int64_t)dstSizes[dstDim]);
+  printf("stride:");
+  for (NSUInteger dstDim = 0; dstDim < dstRank; dstDim++)
+    printf("%lld, ", (int64_t)dstStrides[dstDim]);
+  printf("storage offset: %lld \n", (int64_t)offset);
+#endif
+
+  if (!dstRank)
+    return nil;
+
+  MPSGraphTensor *outputTensor = nil;
+  outputTensor = asStridedLayer_expandDimsPattern(graph, inputTensor, dstRank, dstSizes, dstStrides, offset);
+  if (!outputTensor)
+    outputTensor = asStridedLayer_reshapePattern(graph, inputTensor, dstRank, dstSizes, dstStrides, offset);
+  if (!outputTensor)
+    outputTensor = asStridedLayer_genericPattern(graph, inputTensor, dstRank, dstSizes, dstStrides, offset);
+
+  return outputTensor;
+}
+
 
 static MPSGraphTensor* chainViewOperation(ViewCachedGraph* cachedGraph, const IntArrayRef& size,
                                           const IntArrayRef& stride, int64_t offset,
@@ -365,17 +466,8 @@ static MPSGraphTensor* chainViewOperation(ViewCachedGraph* cachedGraph, const In
                                     name:@"Cast away from bool"];
     }
 
-    if (!needsScatter && true) {
-      int *dstSizes = (int *)malloc(shape_size * sizeof(int));
-      int *dstStrides = (int *)malloc(shape_size * sizeof(int));
-      for (NSUInteger dstDim = 0; dstDim < shape_size; dstDim++) {
-        dstSizes[dstDim] = static_cast<int32_t>(size[dstDim]);
-        dstStrides[dstDim] = static_cast<int32_t>(stride[dstDim]);
-      }
-
-      MPSGraphTensor *outputTensor = asStridedLayer_pattern(mpsGraph, inputTensor, shape_size, dstSizes, dstStrides, offset);
-      free(dstSizes);
-      free(dstStrides);
+    if (!needsScatter) {
+      MPSGraphTensor *outputTensor = asStridedLayer_pattern(mpsGraph, inputTensor, shape_size, size, stride, offset);
 
       if (outputTensor) {
         if (needsBoolCast) {
