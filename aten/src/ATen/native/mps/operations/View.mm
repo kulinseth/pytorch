@@ -80,6 +80,31 @@ static Tensor& runViewGraph(ViewCachedGraph* cachedGraph, const at::Tensor& src,
   return output;
 }
 
+MPSGraphTensor *permuteTensor(MPSGraph *graph, MPSGraphTensor *inputTensor, NSArray *permuteOrder) {
+  NSUInteger srcRank = [[inputTensor shape] count];
+  if (srcRank != [permuteOrder count])
+    return nil;
+
+  MPSGraphTensor *outputTensor = inputTensor;
+  std::vector<NSUInteger> dimensionOrder(srcRank);
+  std::iota (std::begin(dimensionOrder), std::end(dimensionOrder), 0);
+
+  for (NSUInteger i = 0; i < srcRank; i++) {
+    NSUInteger axis = [permuteOrder[i] integerValue];
+    auto axisIter = std::find(dimensionOrder.begin(), dimensionOrder.end(), axis);
+    NSUInteger axis1 = i;
+    NSUInteger axis2 = axisIter - dimensionOrder.begin();
+    iter_swap(dimensionOrder.begin() + i, axisIter);
+
+    outputTensor = [graph transposeTensor:outputTensor
+                                dimension:axis1
+                            withDimension:axis2
+                                     name:nil];
+  }
+
+  return outputTensor;
+}
+
 NSDictionary *getStrideToDimLengthOffsetDict(MPSGraphTensor *tensor, NSUInteger rank, NSUInteger offset) {
   // Assuming input tensor has default strides
   NSInteger stride = 1;
@@ -215,26 +240,16 @@ MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *i
   MPSGraphTensor *flatInputTensor = inputTensor;
   {
     // Flatten inputs to remove duplicate strides.
-    BOOL needsFlatten = NO;
-    BOOL allOnes = YES;
-    for(NSUInteger srcDim = 0; srcDim < [[flatInputTensor shape] count]; srcDim++) {
-      needsFlatten |= ([[flatInputTensor shape][srcDim] intValue] == 1);
-      allOnes &= ([[flatInputTensor shape][srcDim] intValue] == 1);
+    NSMutableArray *squeezeAxes = [[NSMutableArray alloc] init];
+    for(NSUInteger srcDim = 1; srcDim < [[flatInputTensor shape] count]; srcDim++) {
+        if ([[flatInputTensor shape][srcDim] intValue] == 1)
+            [squeezeAxes addObject:[NSNumber numberWithInteger:srcDim]];
     }
     // We have to leave at least 1 dimension, if all input dims are 1
-    if (allOnes) {
-      NSMutableArray *squeezeAxes = [[NSMutableArray alloc] init];
-      for(NSUInteger srcDim = 1; srcDim < [[flatInputTensor shape] count]; srcDim++)
-        [squeezeAxes addObject:[NSNumber numberWithInteger:srcDim]];
-
-      flatInputTensor = [graph squeezeTensor:flatInputTensor
-                                        axes:squeezeAxes
-                                        name:nil];
-      [squeezeAxes release];
-    } else if (needsFlatten) {
-      flatInputTensor = [graph squeezeTensor:flatInputTensor
-                                        name:nil];
-    }
+    if ([squeezeAxes count])
+        flatInputTensor = [graph squeezeTensor:flatInputTensor
+                                          axes:squeezeAxes
+                                          name:nil];
   }
 
   int srcRank = (int)[[flatInputTensor shape] count];
@@ -288,8 +303,8 @@ MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *i
       }
     }
     for (NSUInteger i = 0; i < [missingSrcStrides count]; i++) {
-      int stride = [missingSrcStrides[i] intValue];
-      NSDictionary *srcDimLengthOffset = srcStrideToDimLengthOffset[[NSString stringWithFormat:@"%d",stride]];
+      NSUInteger stride = [missingSrcStrides[i] integerValue];
+      NSDictionary *srcDimLengthOffset = srcStrideToDimLengthOffset[[NSString stringWithFormat:@"%ld",stride]];
       NSNumber *missingSrcDim = srcDimLengthOffset[@"dim"];
       [missingSrcDims addObject:missingSrcDim];
       [dstDimOrder insertObject:missingSrcDim atIndex:0];
@@ -311,9 +326,7 @@ MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *i
     for(NSUInteger dstDim = 0; dstDim < [dstDimOrder count] && !needsTranspose; dstDim++ )
       needsTranspose |= ([dstDimOrder[dstDim] intValue] != dstDim);
     if (needsTranspose)
-      transposedTensor = [graph transposeTensor:transposedTensor
-                                        permute:dstDimOrder
-                                           name:nil];
+      transposedTensor = permuteTensor(graph, transposedTensor, dstDimOrder);
   }
 
   // 4. Squeeze any unused dimensions following transpose
