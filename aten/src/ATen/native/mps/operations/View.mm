@@ -704,13 +704,16 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst)
   if (!dst.has_storage()) {
     output = at::native::empty_mps(src.sizes(), src.scalar_type(), c10::nullopt, kMPS);
   }
-  ViewCachedGraph* cachedGraph = createViewGraph(src, dst, src.sizes(), src.strides(),
+  ViewCachedGraph* cachedGraph = createViewGraph(src.is_complex() ?  at::view_as_real(src) : src,
+                                                 dst, src.sizes(), src.strides(),
                                                  src.storage_offset(), /*needsScatter*/ false);
   return runViewGraph(cachedGraph, src, dst.has_storage() ? dst : output, /*needsScatter*/ false);
 }
 
-Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output) {
-  ViewCachedGraph* cachedGraph = createViewGraph(output, src, output.sizes(), output.strides(),
+Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output, id<MTLBuffer> updatesBuffer)
+{
+  ViewCachedGraph* cachedGraph = createViewGraph(output.is_complex() ?  at::view_as_real(output) : output,
+                                                 src, output.sizes(), output.strides(),
                                                  output.storage_offset(), /*needsScatter*/ true);
   return runViewGraph(cachedGraph, src, output, /*needsScatter*/ true);
 }
