@@ -7195,9 +7195,7 @@ class TestConsistency(TestCase):
                       'torch.int64'],
              'dist': ['torch.float16', 'torch.float32'],
              'dot': ['torch.float32',
-                     'torch.int16',
-                     'torch.int32',
-                     'torch.int64',],
+                     'torch.int32',],
              'einsum': ['torch.float32'],
              'equal': ['torch.bool',
                        'torch.float16',
@@ -7413,8 +7411,7 @@ class TestConsistency(TestCase):
                                                    'torch.int16',
                                                    'torch.int32'],
              'nn.functional.mse_loss': ['torch.float16', 'torch.float32'],
-             'nn.functional.pairwise_distance': ['torch.float16',
-                                                 'torch.float32',
+             'nn.functional.pairwise_distance': ['torch.float32',
                                                  'torch.int16',
                                                  'torch.int32',
                                                  'torch.int64'],
@@ -7426,7 +7423,6 @@ class TestConsistency(TestCase):
              'nn.functional.relu': ['torch.float32',
                                     'torch.int16',
                                     'torch.int32',
-                                    'torch.int64',
                                     'torch.uint8'],
              'nn.functional.relu6': ['torch.float32',
                                      'torch.int16',
@@ -8057,7 +8053,7 @@ class TestConsistency(TestCase):
         'nn.functional.max_pool2d': ['torch.float32'], 
         'nn.functional.normalize': ['torch.float32'], 
         'nn.functional.pad': ['torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64'], 
-        'nn.functional.pairwise_distance': ['torch.uint8'], 
+        'nn.functional.pairwise_distance': ['torch.uint8', 'torch.float16'],
         'nn.functional.triplet_margin_loss': ['torch.uint8'], 
         'nn.functional.triplet_margin_with_distance_loss': ['torch.uint8'], 
         'nn.functional.upsample_nearest': ['torch.float32'], 
@@ -8090,7 +8086,8 @@ class TestConsistency(TestCase):
         'rot90': ['torch.bool'],
         'tile': ['torch.bool'],
         'split': ['torch.float32'],
-        'dot': ['torch.uint8']
+        'dot': ['torch.uint8', 'torch.int16', 'torch.int64'],
+        'nn.functional.relu': ['torch.int64']
     }
 
     # Used for accept mode only
