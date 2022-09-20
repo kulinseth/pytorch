@@ -52,8 +52,10 @@ void check_min_max_dims(const OptionalTensorRef clamp_opt,
         TORCH_CHECK(num_clamp_dims <= num_input_dims, op_name + ": clamp tensor number of dims must not be greater than that of input tensor")
 
         for(int i = 0; i < num_clamp_dims; i++)
+            // One of the indices is allowed to be 1; will be handled by broadcast
             TORCH_CHECK(clamp_shape[num_clamp_dims-1-i] == input_shape[num_input_dims-1-i] || 
-                        clamp_shape[num_clamp_dims-1-i] == 1,
+                        clamp_shape[num_clamp_dims-1-i] == 1 ||
+                        input_shape[num_input_dims-1-i] == 1,
                         op_name + ": clamp tensor trailing shape must match input tensor")
 
     }
@@ -63,14 +65,17 @@ void check_min_max_dims(const OptionalTensorRef clamp_opt,
 void fill_new_shape(int64_t num_input_dims,
                     int64_t num_clamp_dims,
                     int64_t *new_shape,
-                    IntArrayRef input_shape) {
+                    IntArrayRef clamp_shape) {
 
     // Extend the shape with ones to the left
+    int clamp_idx = 0;
     for(int i = 0; i < num_input_dims; i++) {
         if(i <  num_input_dims - num_clamp_dims)
             new_shape[i] = 1;
-        else
-            new_shape[i] = input_shape[i];
+        else {
+            new_shape[i] = clamp_shape[clamp_idx];
+            clamp_idx++;
+        }
     }
     
 }
@@ -105,12 +110,12 @@ void clamp_tensor_out_mps(const Tensor& input_t,
     int64_t new_max_arr[num_input_dims];
 
     if(has_min && num_min_dims < num_input_dims) {
-        fill_new_shape(num_input_dims, num_min_dims, new_min_arr, input_t.sizes());
+        fill_new_shape(num_input_dims, num_min_dims, new_min_arr, min_opt->sizes());
         new_min_shape = IntArrayRef({new_min_arr, num_input_dims});
     }
 
     if(has_max && num_max_dims < num_input_dims) {
-        fill_new_shape(num_input_dims, num_max_dims, new_max_arr, input_t.sizes());   
+        fill_new_shape(num_input_dims, num_max_dims, new_max_arr, max_opt->sizes());
         new_max_shape = IntArrayRef({new_max_arr, num_input_dims});
     }
 
