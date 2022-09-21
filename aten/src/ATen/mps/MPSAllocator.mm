@@ -282,6 +282,7 @@ bool MPSHeapAllocatorImpl::release_buffer(BufferBlock* buffer_block, bool remove
   delete buffer_block;
 
   if (remove_empty_heap && heap_block->n_buffers == 0) {
+    pool.heaps_pending_update.erase(heap_block);
     retainCount = heap_block->releaseMTLHeap();
     if (m_debug_verbosity & DebugVerbosity::RELEASES) {
       std::cerr << "Released heap #" << heap_block->heap_id
@@ -292,19 +293,23 @@ bool MPSHeapAllocatorImpl::release_buffer(BufferBlock* buffer_block, bool remove
     delete heap_block;
     return true;
   } else {
-    // if heap wasn't released and its released buffer is still busy in command buffer, the
-    // available size of the heap cannot be updated. So we keep the heap out of the pool until its
-    // size could be updated after command buffer finishes.
+    pool.heaps.insert(heap_block);
+    // if heap wasn't released and its released buffer is still busy in command buffer, the available
+    // size of the heap cannot be updated and we should defer updating until command buffer finishes.
     if (retainCount > 1) {
+      pool.heaps_pending_update.insert(heap_block);
       m_mutex.unlock();
       m_stream->addCompletedHandler(^(id <MTLCommandBuffer>) {
         std::lock_guard<std::mutex> lock(m_mutex);
-        heap_block->updateAvailableSize();
-        pool.heaps.insert(heap_block);
+        // check if the heap block still exists
+        if (pool.heaps_pending_update.find(heap_block) != pool.heaps_pending_update.end()) {
+          pool.heaps_pending_update.erase(heap_block);
+          pool.heaps.erase(heap_block);
+          heap_block->updateAvailableSize();
+          pool.heaps.insert(heap_block);
+        }
       });
       m_mutex.lock();
-    } else {
-      pool.heaps.insert(heap_block);
     }
   }
   return false;

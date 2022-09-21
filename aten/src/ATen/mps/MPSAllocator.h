@@ -240,6 +240,8 @@ struct BufferPool
   std::set<HeapBlock*, HeapComparison> heaps;
   // list of only "available" buffers in the pool (i.e., buffers not in-use)
   std::set<BufferBlock*, BufferComparison> buffers;
+  // list of heaps pending size update
+  std::unordered_set<HeapBlock*> heaps_pending_update;
 };
 
 class MPSHeapAllocatorImpl
@@ -285,8 +287,7 @@ private:
   // (see m_low_watermark_ratio for description)
   // on unified memory, we could allocate beyond the recommendedMaxWorkingSetSize
   constexpr static double default_low_watermark_ratio_unified  = 1.5;
-  // on discrete memory, the low watermark ratio cannot be more than 1.0
-  constexpr static double default_low_watermark_ratio_discrete = 0.8;
+  constexpr static double default_low_watermark_ratio_discrete = 1.0;
 
   const id<MTLDevice> m_device;
   std::mutex m_mutex;
