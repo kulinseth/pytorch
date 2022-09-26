@@ -1776,6 +1776,48 @@ class TestMPS(TestCase):
         x = torch.tensor([[]], device='mps')
         y = -x
         self.assertEqual(x, y)
+        
+    def test_unique(self):
+        def helper(x, return_inverse, return_counts):
+            cpu_x = x
+            x = cpu_x.detach().clone().to('mps')
+
+            result = torch.unique(x, return_inverse=return_inverse, return_counts=return_counts)
+            result_cpu = torch.unique(cpu_x, return_inverse=return_inverse, return_counts=return_counts)
+
+            self.assertEqual(result, result_cpu)
+        helper(torch.tensor([1,2,4,2,1]), False, False)
+        helper(torch.randint(3,(10,)), False, False)
+        helper(torch.randint(3,(10,)), True, False)
+        helper(torch.randint(3,(10,)), False, True)
+        helper(torch.randint(3,(10,)), True, True)
+
+    def test_unique_dim(self):
+        def helper(x, dim, return_inverse, return_counts):
+            cpu_x = x
+            x = cpu_x.detach().clone().to('mps')
+
+            result = torch.unique(x, dim=dim, return_inverse=return_inverse, return_counts=return_counts)
+            result_cpu = torch.unique(cpu_x, dim=dim, return_inverse=return_inverse, return_counts=return_counts)
+
+            self.assertEqual(result, result_cpu)
+        helper(torch.tensor([1,2,4,2,1]), 0, False, False)
+        helper(torch.randint(3,(10,)), 0, False, False)
+        helper(torch.randint(3,(10,)), 0, True, False)
+        helper(torch.randint(3,(10,)), 0, False, True)
+        helper(torch.randint(3,(10,)), 0, True, True)
+        
+        helper(torch.tensor([[1,2,4,4,1],[4,3,6,5,5]]), 0, False, False)
+        helper(torch.randint(3,(10,10)), 0, False, False)
+        helper(torch.randint(3,(10,10)), 0, True, False)
+        helper(torch.randint(3,(10,10)), 0, False, True)
+        helper(torch.randint(3,(10,10)), 0, True, True)
+        
+        helper(torch.tensor([[1,2,4,4,1],[4,3,6,5,5]]), 1, False, False)
+        helper(torch.randint(3,(10,10)), 1, False, False)
+        helper(torch.randint(3,(10,10)), 1, True, False)
+        helper(torch.randint(3,(10,10)), 1, False, True)
+        helper(torch.randint(3,(10,10)), 1, True, True)
 
     # See https://github.com/pytorch/pytorch/issues/85675
     def test_cat_non_contiguous(self):

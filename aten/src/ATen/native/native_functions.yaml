@@ -5509,6 +5509,7 @@
   dispatch:
     CPU: unique_dim_cpu
     CUDA: unique_dim_cuda
+    MPS: unique_dim_mps
   tags: dynamic_output_shape
   autogen: unique_dim.out
 
@@ -5517,6 +5518,7 @@
   dispatch:
     CPU: unique_consecutive_cpu
     CUDA: unique_consecutive_cuda
+    MPS: unique_consecutive_mps
   tags: dynamic_output_shape
   autogen: unique_consecutive.out
 
@@ -5525,6 +5527,7 @@
   dispatch:
     CPU: unique_dim_consecutive_cpu
     CUDA: unique_dim_consecutive_cuda
+    MPS: unique_dim_consecutive_mps
   tags: dynamic_output_shape
   autogen: unique_dim_consecutive.out
 
@@ -5537,6 +5540,7 @@
   dispatch:
     CPU: _unique2_cpu
     CUDA: _unique2_cuda
+    MPS: _unique2_mps
   tags: dynamic_output_shape
   autogen: _unique2.out
 
