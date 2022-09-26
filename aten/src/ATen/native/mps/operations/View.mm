@@ -124,8 +124,6 @@ NSDictionary *getStrideToDimLengthOffsetDict(MPSGraphTensor *tensor, NSUInteger 
   return strideToDimLengthOffset;
 }
 
-//#define DEBUG_MPSGRAPH_SHAPE_API_AS_STRIDED
-
 // Detect only expand dims, allows for duplicate strides
 MPSGraphTensor* asStridedLayer_expandDimsPattern(MPSGraph *graph, MPSGraphTensor *inputTensor, int dstRank, const IntArrayRef& dstSizes, const IntArrayRef& dstStrides, int offset) {
 
@@ -250,6 +248,7 @@ MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *i
         flatInputTensor = [graph squeezeTensor:flatInputTensor
                                           axes:squeezeAxes
                                           name:nil];
+    [squeezeAxes release];
   }
 
   int srcRank = (int)[[flatInputTensor shape] count];
@@ -257,8 +256,8 @@ MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *i
 
   // Populate the dimension order, slice info, and broadcast info
   NSMutableArray *dstDimOrder = [[NSMutableArray alloc] init];
-  int *dstDimToSliceLength = (int *) malloc(sizeof(int) * dstRank);
-  int *dstDimToSliceOffset = (int *) malloc(sizeof(int) * dstRank);
+  std::vector<int32_t> dstDimToSliceLength(dstRank);
+  std::vector<int32_t> dstDimToSliceOffset(dstRank);
   bool needsBroadcast = false;
   {
     for (NSInteger dstDim = dstRank - 1; dstDim >= 0; dstDim--) {
@@ -392,26 +391,11 @@ MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *i
   [srcStrideToDimLengthOffset release];
   [dstDimOrder release];
   [missingSrcDims release];
-  free(dstDimToSliceLength);
-  free(dstDimToSliceOffset);
 
   return broadcastTensor;
 }
 
 MPSGraphTensor* asStridedLayer_pattern(MPSGraph *graph, MPSGraphTensor *inputTensor, int dstRank, const IntArrayRef& dstSizes, const IntArrayRef& dstStrides, int offset) {
-#ifdef DEBUG_MPSGRAPH_SHAPE_API_AS_STRIDED
-  printf("input shape:");
-  for (auto length: [inputTensor shape])
-    printf("%lld, ", (int64_t)[length integerValue]);
-  printf("output shape:");
-  for (NSUInteger dstDim = 0; dstDim < dstRank; dstDim++)
-    printf("%lld, ", (int64_t)dstSizes[dstDim]);
-  printf("stride:");
-  for (NSUInteger dstDim = 0; dstDim < dstRank; dstDim++)
-    printf("%lld, ", (int64_t)dstStrides[dstDim]);
-  printf("storage offset: %lld \n", (int64_t)offset);
-#endif
-
   if (!dstRank)
     return nil;
 
@@ -490,9 +474,6 @@ static MPSGraphTensor* chainViewOperation(ViewCachedGraph* cachedGraph, const In
         }
         return outputTensor;
       }
-#ifdef DEBUG_MPSGRAPH_SHAPE_API_AS_STRIDED
-      printf("Failed to implement as strided layer using MPSGraph shape APIs.\n");
-#endif
     }
 
     MPSGraphTensor *reshapedInputTensor = [mpsGraph reshapeTensor: inputTensor
