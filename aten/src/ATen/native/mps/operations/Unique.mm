@@ -18,38 +18,6 @@ struct UniqueCachedGraph : public MPSCachedGraph
   MPSGraphTensor* lengthTensor_ = nil;
 };
 
-struct UniqueSliceCachedGraph : public MPSCachedGraph
-{
-  UniqueSliceCachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
-  MPSGraphTensor* outputTensor_ = nil;
-};
-
-const char * dataTypeToString(MPSDataType dataType)
-{
-    const char * result = nil;
-    switch (dataType)
-    {
-        case MPSDataTypeInvalid: result = "MPSDataTypeInvalid"; break;
-        case MPSDataTypeFloatBit: result = "MPSDataTypeFloatBit"; break;
-        case MPSDataTypeFloat32: result = "MPSDataTypeFloat32"; break;
-        case MPSDataTypeFloat16: result = "MPSDataTypeFloat16"; break;
-        case MPSDataTypeSignedBit: result = "MPSDataTypeSignedBit"; break;
-        case MPSDataTypeInt8: result = "MPSDataTypeInt8"; break;
-        case MPSDataTypeInt16: result = "MPSDataTypeInt16"; break;
-        case MPSDataTypeInt32: result = "MPSDataTypeInt32"; break;
-        case MPSDataTypeInt64: result = "MPSDataTypeInt64"; break;
-        case MPSDataTypeUInt8: result = "MPSDataTypeUInt8"; break;
-        case MPSDataTypeUInt16: result = "MPSDataTypeUInt16"; break;
-        case MPSDataTypeUInt32: result = "MPSDataTypeUInt32"; break;
-        case MPSDataTypeUInt64: result = "MPSDataTypeUInt64"; break;
-        case MPSDataTypeNormalizedBit: result = "MPSDataTypeNormalizedBit"; break;
-        case MPSDataTypeUnorm1: result = "MPSDataTypeUnorm1"; break;
-        case MPSDataTypeUnorm8: result = "MPSDataTypeUnorm8"; break;
-        default: result = "<Unknown datatype>"; break;
-    }
-    return result;
-}
-
 static std::string getUniqueKey(const ScalarType& dtype, const IntArrayRef& base_shape,
                                 const bool return_inverse, const bool return_counts,
                                 const bool consecutive, c10::optional<int64_t> dimOpt)
@@ -59,23 +27,35 @@ static std::string getUniqueKey(const ScalarType& dtype, const IntArrayRef& base
          "]:[" + to_string(return_counts) + "]:[" + to_string(consecutive) + "]";
 }
 
+// dim arg not supported when non consecutive, ie sorted
 NSArray<MPSGraphTensor*> *buildUniqueGraph(UniqueCachedGraph *uniqueGraph, const bool return_inverse, const bool return_counts, const bool consecutive, c10::optional<int64_t> dimOpt) {
   int64_t dim = dimOpt.has_value() ? dimOpt.value() : 0;
-  
+
   MPSGraph *graph = uniqueGraph->graph();
   MPSGraphTensor *inputTensor = uniqueGraph->inputTensor_;
   MPSShape *shape = [inputTensor shape];
+  MPSShape *destShape = shape;
   NSUInteger length = [shape[dim] integerValue];
   MPSDataType dataType = [inputTensor dataType];
-  
-  MPSGraphTensor *resultTensor = nil;
-  MPSGraphTensor *inverseIndicesTensor = nil;
-  MPSGraphTensor *countTensor = nil;
-  MPSGraphTensor *lengthTensor = nil;
+
+  MPSGraphTensor *resultTensor = (MPSGraphTensor *)[NSNull null];
+  MPSGraphTensor *inverseIndicesTensor = (MPSGraphTensor *)[NSNull null];
+  MPSGraphTensor *countTensor = (MPSGraphTensor *)[NSNull null];
+  MPSGraphTensor *lengthTensor = (MPSGraphTensor *)[NSNull null];
   if (length <= 1) {
+    // Trivial case, only 1 element everything is unique
+    resultTensor = inputTensor;
+    lengthTensor = [graph constantWithScalar:0.0f
+                                    dataType:MPSDataTypeInt32];
+    if (return_inverse)
+      inverseIndicesTensor = [graph constantWithScalar:0.0f
+                                              dataType:MPSDataTypeInt32];
+    if (return_counts)
+      countTensor = [graph constantWithScalar:1.0f
+                                     dataType:MPSDataTypeInt32];
     return @[resultTensor, inverseIndicesTensor, countTensor, lengthTensor];
   }
-  
+
   // Sort only supports following types, cast if necessary
   if (dataType != MPSDataTypeInt32 &&
       dataType != MPSDataTypeFloat32 &&
@@ -86,25 +66,25 @@ NSArray<MPSGraphTensor*> *buildUniqueGraph(UniqueCachedGraph *uniqueGraph, const
                                name:@"castInputTensor"];
   }
 
-  if (!dimOpt.has_value())
+  bool needsFlatten = !(dimOpt.has_value() || [shape count] == 1);
+  if (needsFlatten) {
     inputTensor = [graph reshapeTensor:inputTensor
                              withShape:@[@-1]
                                   name:nil];
-
-  MPSGraphTensor *sortedInput;
-  MPSGraphTensor *argSortedInput;
-  if (consecutive) {
-    sortedInput = inputTensor;
-    argSortedInput = [graph coordinateAlongAxis:dim];
-  } else {
-    sortedInput = [graph sortWithTensor:inputTensor
-                                   axis:dim
-                                   name:nil];
-    argSortedInput = [graph argSortWithTensor:inputTensor
-                                         axis:dim
-                                         name:nil];
+    length = 1;
+    for(NSUInteger i = 0; i < [shape count]; i++)
+      length *= [shape[i] integerValue];
+    destShape = @[[NSNumber numberWithUnsignedInteger:length]];
   }
-  
+
+  MPSGraphTensor *sortedInput = nil;
+  if (consecutive)
+    sortedInput = inputTensor;
+  else
+    sortedInput = [graph sortWithTensor:inputTensor
+                                   axis:0
+                                   name:nil];
+
   MPSGraphTensor *frontNMinusOne = [graph sliceTensor:sortedInput
                                             dimension:dim
                                                 start:0
@@ -118,70 +98,97 @@ NSArray<MPSGraphTensor*> *buildUniqueGraph(UniqueCachedGraph *uniqueGraph, const
   MPSGraphTensor *notEqualToPreviousElement = [graph notEqualWithPrimaryTensor:backNMinusOne
                                                                secondaryTensor:frontNMinusOne
                                                                           name:nil];
-  MPSGraphTensor *castedMask = [graph castTensor:notEqualToPreviousElement
-                                          toType:MPSDataTypeInt32
-                                            name:@"castMaskTensor"];
-  MPSGraphTensor *scannedIndices = [graph cumulativeSumWithTensor:castedMask
-                                                             axis:dim
+  MPSGraphTensor *mask = [graph castTensor:notEqualToPreviousElement
+                                    toType:MPSDataTypeInt32
+                                      name:@"castMaskTensor"];
+
+  // If comparing tensors, not scalars, check if entire tensor matches previos element using reductionOr over tensor
+  if (dimOpt.has_value() && [shape count] != 1) {
+    NSMutableArray *axes = [[NSMutableArray alloc] initWithCapacity:[shape count]-1];
+    for (NSUInteger axis = 0; axis < [shape count]; axis++){
+      if (axis != dim)
+        [axes addObject:[NSNumber numberWithUnsignedInteger:axis]];
+    }
+    mask = [graph reductionOrWithTensor:mask
+                                   axes:axes
+                                   name:nil];
+    mask = [graph squeezeTensor:mask
+                           axes:axes
+                           name:nil];
+    [axes release];
+  }
+
+  MPSGraphTensor *scannedIndices = [graph cumulativeSumWithTensor:mask
+                                                             axis:0
                                                              name:nil];
   lengthTensor = [graph sliceTensor:scannedIndices
-                          dimension:dim
+                          dimension:0
                               start:length-2
                              length:1
                                name:nil];
-  if ([shape count] > 1) {
-      lengthTensor = [graph reductionMaximumWithTensor:lengthTensor
-                                                  axes:nil
-                                                  name:nil];
-  }
+
   MPSGraphTensor *minusOneTensor = [graph constantWithScalar:-1.0f
                                                     dataType:MPSDataTypeInt32];
-  MPSGraphTensor *maskedIndices = [graph selectWithPredicateTensor:notEqualToPreviousElement
+  MPSGraphTensor *maskedIndices = [graph selectWithPredicateTensor:mask
                                                truePredicateTensor:scannedIndices
                                               falsePredicateTensor:minusOneTensor
                                                               name:nil];
-  NSMutableArray *headShape = [[NSMutableArray alloc] initWithArray:shape];
-  headShape[dim] = @1;
+
   MPSGraphTensor *zeroTensor = [graph constantWithScalar:0.0f
-                                                   shape:headShape
+                                                   shape:@[@1]
                                                 dataType:MPSDataTypeInt32];
-  [headShape release];
   MPSGraphTensor *maskedIndicesWithHead = [graph concatTensors:@[zeroTensor, maskedIndices]
-                                                     dimension:dim
+                                                     dimension:0
                                                           name:nil];
   MPSGraphTensor *scannedIndicesWithHead = [graph concatTensors:@[zeroTensor, scannedIndices]
-                                                      dimension:dim
+                                                      dimension:0
                                                            name:nil];
-  
-  resultTensor = [graph scatterAlongAxisWithUpdatesTensor:sortedInput
+
+  resultTensor = [graph scatterWithUpdatesTensor:sortedInput
                                             indicesTensor:maskedIndicesWithHead
-                                                    shape:shape
+                                                    shape:destShape
                                                      axis:dim
                                                      mode:MPSGraphScatterModeSet
                                                      name:nil];
-  
-  inverseIndicesTensor = [graph scatterAlongAxisWithUpdatesTensor:scannedIndicesWithHead
-                                                    indicesTensor:argSortedInput
-                                                            shape:shape
-                                                             axis:dim
-                                                             name:nil];
-
-  MPSGraphTensor *unitTensor = [graph constantWithScalar:1.0f
-                                                   shape:shape
-                                                dataType:MPSDataTypeInt64];
-
-  countTensor = [graph scatterAlongAxisWithUpdatesTensor:unitTensor
-                                           indicesTensor:scannedIndicesWithHead
-                                                   shape:shape
-                                                    axis:dim
-                                                    name:nil];
-  
   // Cast back if necessary
   if ([uniqueGraph->inputTensor_ dataType] != dataType)
     resultTensor = [graph castTensor:resultTensor
                               toType:[uniqueGraph->inputTensor_ dataType]
                                 name:@"castResultTensor"];
-  
+
+  // Compute optional returned tensors if requested
+  if(return_inverse) {
+    MPSGraphTensor *argSortedInput = nil;
+    if (consecutive)
+      argSortedInput = [graph coordinateAlongAxis:0
+                                        withShape:@[[NSNumber numberWithUnsignedInteger:length]]
+                                             name:nil];
+    else
+      argSortedInput = [graph argSortWithTensor:inputTensor
+                                           axis:0
+                                           name:nil];
+    inverseIndicesTensor = [graph scatterWithUpdatesTensor:scannedIndicesWithHead
+                                                      indicesTensor:argSortedInput
+                                                              shape:@[[NSNumber numberWithUnsignedInteger:length]]
+                                                               axis:0
+                                                               name:nil];
+    if (needsFlatten)
+      inverseIndicesTensor = [graph reshapeTensor:inverseIndicesTensor
+                                        withShape:shape
+                                             name:nil];
+  }
+
+  if (return_counts) {
+    MPSGraphTensor *unitTensor = [graph constantWithScalar:1.0f
+                                                     shape:@[[NSNumber numberWithUnsignedInteger:length]]
+                                                  dataType:MPSDataTypeInt32];
+    countTensor = [graph scatterWithUpdatesTensor:unitTensor
+                                             indicesTensor:scannedIndicesWithHead
+                                                     shape:@[[NSNumber numberWithUnsignedInteger:length]]
+                                                      axis:0
+                                                      name:nil];
+  }
+
   return @[resultTensor, inverseIndicesTensor, countTensor, lengthTensor];
 }
 
@@ -200,7 +207,7 @@ static UniqueCachedGraph* getUniqueGraph(const Tensor& self, const bool return_i
            // Initialize graph
            MPSGraph* mpsGraph = make_mps_graph();
            newCachedGraph = new UniqueCachedGraph(mpsGraph);
-           
+
            // Workaround for MPSShaderLibrary bug
            // TODO: Remove once https://github.com/pytorch/pytorch/issues/82305 is resolved
            auto inputType = getMPSScalarType(self.scalar_type());
@@ -227,21 +234,27 @@ static UniqueCachedGraph* getUniqueGraph(const Tensor& self, const bool return_i
 void runUniqueGraph(UniqueCachedGraph *uniqueGraph, const Tensor& input, Tensor& output,
                     Tensor& inverse_indices, Tensor& counts, Tensor& length){
   Placeholder inputPlaceholder = Placeholder(uniqueGraph->inputTensor_, input);
-  Placeholder outputPlaceholder = Placeholder(uniqueGraph->outputTensor_, output);
-  Placeholder inverseIndicesPlaceholder = Placeholder(uniqueGraph->inverseIndicesTensor_, inverse_indices);
-  Placeholder countsPlaceholder = Placeholder(uniqueGraph->countsTensor_, counts);
-  Placeholder lengthPlaceholder = Placeholder(uniqueGraph->lengthTensor_, length);
-
   NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
     inputPlaceholder.getMPSGraphTensor() : inputPlaceholder.getMPSGraphTensorData(),
   };
 
-  NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
-    outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData(),
-    inverseIndicesPlaceholder.getMPSGraphTensor() : inverseIndicesPlaceholder.getMPSGraphTensorData(),
-    countsPlaceholder.getMPSGraphTensor() : countsPlaceholder.getMPSGraphTensorData(),
-    lengthPlaceholder.getMPSGraphTensor() : lengthPlaceholder.getMPSGraphTensorData(),
-  };
+  NSMutableDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = [NSMutableDictionary dictionary];
+  Placeholder outputPlaceholder = Placeholder(uniqueGraph->outputTensor_, output);
+  Placeholder lengthPlaceholder = Placeholder(uniqueGraph->lengthTensor_, length);
+  [results setObject:outputPlaceholder.getMPSGraphTensorData()
+              forKey:outputPlaceholder.getMPSGraphTensor()];
+  [results setObject:lengthPlaceholder.getMPSGraphTensorData()
+              forKey:lengthPlaceholder.getMPSGraphTensor()];
+  if (inverse_indices.sizes().size() != 0) {
+    Placeholder inverseIndicesPlaceholder = Placeholder(uniqueGraph->inverseIndicesTensor_, inverse_indices);
+    [results setObject:inverseIndicesPlaceholder.getMPSGraphTensorData()
+                forKey:inverseIndicesPlaceholder.getMPSGraphTensor()];
+  }
+  if (counts.sizes().size() != 0) {
+    Placeholder countsPlaceholder = Placeholder(uniqueGraph->countsTensor_, counts);
+    [results setObject:countsPlaceholder.getMPSGraphTensorData()
+                forKey:countsPlaceholder.getMPSGraphTensor()];
+  }
 
   // Run the graph
   MPSStream* stream = getCurrentMPSStream();
@@ -252,58 +265,62 @@ void runUniqueGraph(UniqueCachedGraph *uniqueGraph, const Tensor& input, Tensor&
 
 std::tuple<Tensor, Tensor, Tensor>
 _unique_impl_mps(const Tensor& self, const bool return_inverse, const bool return_counts, const bool consecutive, c10::optional<int64_t> dimOpt) {
-  printf("Running mps unique.\n");
-  
+
   const Tensor& input = self.contiguous();
 
-  Tensor output = at::native::empty_mps(input.sizes(), input.scalar_type(), c10::nullopt, kMPS);
-  Tensor inverse_indices = at::native::empty_mps(input.sizes(), ScalarType::Long, c10::nullopt, kMPS);
-  Tensor counts = at::native::empty_mps(input.sizes(), ScalarType::Long, c10::nullopt, kMPS);
+  // get flat output size
+  int64_t totalElems = c10::multiply_integers(input.sizes());
+
+  IntArrayRef outputShape = IntArrayRef(totalElems);
+  IntArrayRef inverseIndicesShape = input.sizes();
+  IntArrayRef countsShape = IntArrayRef(totalElems);
+  if (dimOpt.has_value()) {
+    outputShape = input.sizes();
+    inverseIndicesShape = IntArrayRef(input.sizes()[dimOpt.value()]);
+    countsShape = IntArrayRef(input.sizes()[dimOpt.value()]);
+  }
+  if (!return_inverse)
+    inverseIndicesShape = {};
+  if (!return_counts)
+    countsShape = {};
+
+  Tensor output = at::native::empty_mps(outputShape, input.scalar_type(), c10::nullopt, kMPS);
+  Tensor inverse_indices = at::native::empty_mps(inverseIndicesShape, ScalarType::Long, c10::nullopt, kMPS);
+  Tensor counts = at::native::empty_mps(countsShape, ScalarType::Long, c10::nullopt, kMPS);
   Tensor length = at::native::empty_mps({1}, ScalarType::Int, c10::nullopt, kMPS);
 
   if (input.numel() == 0)
     return std::make_tuple(output, inverse_indices, counts);
 
   mps::UniqueCachedGraph *uniqueGraph = mps::getUniqueGraph(input, return_inverse, return_counts, consecutive, dimOpt);
-//  NSLog(@"%@", [uniqueGraph->graph() debugDescription]);
-
   mps::runUniqueGraph(uniqueGraph, input, output, inverse_indices, counts, length);
 
   int64_t lengthScalar = length.item<int64_t>() + 1; // length actually holds max index, add 1
-
-//  printf("length is: %lld\n", lengthScalar);
   int64_t dim = dimOpt.has_value() ? dimOpt.value() : 0;
-//  printf("dim is: %lld\n", dim);
-
   output = at::slice(output, dim, 0, lengthScalar);
-  counts = at::slice(counts, dim, 0, lengthScalar);
-  
-  printf("Finished running mps unique.\n");
+  if (return_counts)
+    counts = at::slice(counts, 0, 0, lengthScalar);
 
   return std::make_tuple(output, inverse_indices, counts);
 }
 
 std::tuple<Tensor, Tensor, Tensor>
 unique_dim_mps(const Tensor& self, int64_t dim, const bool sorted, const bool return_inverse, const bool return_counts) {
-  printf("unique_dim\n");
   return _unique_impl_mps(self, return_inverse, return_counts, false, c10::make_optional((int64_t)dim));
 }
 
 std::tuple<Tensor, Tensor, Tensor>
 unique_consecutive_mps(const Tensor& self, const bool return_inverse, const bool return_counts, c10::optional<int64_t> dim) {
-  printf("unique_consecutive\n");
   return _unique_impl_mps(self, return_inverse, return_counts, true, dim);
 }
 
 std::tuple<Tensor, Tensor, Tensor>
 unique_dim_consecutive_mps(const Tensor& self, int64_t dim, const bool return_inverse, const bool return_counts) {
-  printf("unique_dim_consecutive\n");
   return _unique_impl_mps(self, return_inverse, return_counts, true, c10::make_optional((int64_t)dim));
 }
 
 std::tuple<Tensor, Tensor, Tensor>
 _unique2_mps(const Tensor& self, const bool sorted, const bool return_inverse, const bool return_counts) {
-  printf("unique2\n");
   return _unique_impl_mps(self, return_inverse, return_counts, false, c10::nullopt);
 }
 
