@@ -1791,6 +1791,8 @@ class TestMPS(TestCase):
         helper(torch.randint(3,(10,)), True, False)
         helper(torch.randint(3,(10,)), False, True)
         helper(torch.randint(3,(10,)), True, True)
+        helper(torch.randint(3,(1,)), True, True)
+        helper(torch.randint(3,(0,)), True, True)
 
     def test_unique_consecutive(self):
         def helper(x, dim, return_inverse, return_counts):
@@ -1806,14 +1808,21 @@ class TestMPS(TestCase):
         helper(torch.randint(3,(10,)), 0, True, False)
         helper(torch.randint(3,(10,)), 0, False, True)
         helper(torch.randint(3,(10,)), 0, True, True)
+        helper(torch.randint(3,(10,)), 0, True, True)
+        helper(torch.randint(3,(1,)), 0, True, True)
+        helper(torch.randint(3,(0,)), 0, True, True)
 
         helper(torch.tensor([[1,1,2,3,3,2],[1,1,1,2,2,1]]), 0, False, False)
         helper(torch.tensor([[1,1,2,3,3,2],[1,1,1,2,2,1]]), 0, True, True)
         helper(torch.randint(2,(20,2)), 0, True, True)
+        helper(torch.randint(2,(1,2)), 0, True, True)
+        helper(torch.randint(2,(0,2)), 0, True, True)
 
         helper(torch.tensor([[1,1,2,3,3,2],[1,1,1,2,2,1]]), 1, False, False)
         helper(torch.tensor([[1,1,2,3,3,2],[1,1,1,2,2,1]]), 1, True, True)
         helper(torch.randint(2,(2,20)), 1, True, True)
+        helper(torch.randint(2,(2,1)), 1, True, True)
+        helper(torch.randint(2,(2,0)), 1, True, True)
 
     # See https://github.com/pytorch/pytorch/issues/85675
     def test_cat_non_contiguous(self):
