@@ -51,13 +51,35 @@ Tensor dot_mps(
           MPSGraphTensor *selfTensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, self);
           MPSGraphTensor *otherTensor =  mps::mpsGraphRankedPlaceHolder(mpsGraph, other);
 
-          MPSGraphTensor *dot = [mpsGraph multiplicationWithPrimaryTensor: selfTensor
-                                                          secondaryTensor: otherTensor
+          MPSGraphTensor *castSelf = nil;
+          MPSGraphTensor *castOther = nil;
+
+          if(self.scalar_type() == ScalarType::Short || self.scalar_type() == ScalarType::Byte) {
+            castSelf = [mpsGraph castTensor:selfTensor
+                                     toType:MPSDataTypeInt32
+                                       name:@"castSelfTensor"];
+            castOther = [mpsGraph castTensor:otherTensor
+                                      toType:MPSDataTypeInt32
+                                        name:@"castOtherTensor"];
+          }
+          else {
+            castSelf = selfTensor;
+            castOther = otherTensor;
+          }
+
+          MPSGraphTensor *dot = [mpsGraph multiplicationWithPrimaryTensor: castSelf
+                                                          secondaryTensor: castOther
                                                                      name: @"multiplication"];
 
           MPSGraphTensor *dotProductTensor = [mpsGraph reductionSumWithTensor: dot
                                                                          axes: nil
                                                                          name: @"dotProduct"];
+
+          if(self.scalar_type() == ScalarType::Short || self.scalar_type() == ScalarType::Byte)
+            dotProductTensor = [mpsGraph castTensor:dotProductTensor
+                                             toType:getMPSDataType(self.scalar_type())
+                                               name:@"castDotProductTensor"];
+
           newCachedGraph->selfTensor_ = selfTensor;
           newCachedGraph->otherTensor_ = otherTensor;
           newCachedGraph->outputTensor_ = dotProductTensor;
