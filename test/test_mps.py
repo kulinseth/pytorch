@@ -1362,7 +1362,7 @@ class TestMPS(TestCase):
         res = tensor.ne(0)
         res_mps = tensor_mps.ne(0)
 
-        torch.testing.assert_close(res, res_mps.cpu())
+        self.assertEqual(res, res_mps)
 
     def test_index_storage_offset(self):
         # https://github.com/pytorch/pytorch/issues/78107
