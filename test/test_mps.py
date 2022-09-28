@@ -7309,7 +7309,8 @@ class TestConsistency(TestCase):
              'dot': ['torch.float32',
                      'torch.int16',
                      'torch.int32',
-                     'torch.int64',],
+                     'torch.int64',
+                     'torch.uint8'],
              'einsum': ['torch.float32'],
              'equal': ['torch.bool',
                        'torch.float16',
@@ -8203,7 +8204,6 @@ class TestConsistency(TestCase):
         'rot90': ['torch.bool'],
         'tile': ['torch.bool'],
         'split': ['torch.float32'],
-        'dot': ['torch.uint8']
     }
 
     # Used for accept mode only
