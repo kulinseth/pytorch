@@ -297,9 +297,8 @@ Tensor replication_pad3d_backward_mps(const Tensor& grad_output, const Tensor& i
 Tensor constant_pad_nd_mps(const Tensor& self, IntArrayRef pad, const Scalar& value)
 {
   if (pad.size() > 6) {
-    TORCH_WARN_ONCE("The constant padding of more than 3 dimensions is not currently supported ",
-                    "on the MPS backend and will fall back to run on the default implementation.",
-                    " This may have performance implications.");
+    TORCH_WARN_ONCE("MPS: The constant padding of more than 3 dimensions is not currently supported natively. ",
+                    "It uses View Ops default implementation to run. This may have performance implications.");
     return at::native::constant_pad_nd(self, pad, value);
   }
   Tensor output = at::empty({0}, self.options());
