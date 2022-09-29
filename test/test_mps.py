@@ -8010,7 +8010,7 @@ class TestConsistency(TestCase):
             'logical_xor': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
             'native_layer_norm': ['torch.float32'],
             'nn.functional.layer_norm': ['torch.float32'],
-            'where': ['torch.bool','torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
+            'where': ['torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         }
 
     # These ops that are problematic. So never run them even when
@@ -8019,7 +8019,7 @@ class TestConsistency(TestCase):
     # All the entries in this list should be removed
     BLOCKLIST = {
         # Functions that hang
-        'masked_fill': [torch.bool, torch.uint8, torch.float32],
+        'masked_fill': [torch.bool, torch.uint8, torch.float32], 'where': [torch.bool],
         # Functions that hard crash
         'nn.functional.kl_div': [torch.int16, torch.int32, torch.int64],
         'nn.functional.nll_loss': [torch.float32],
