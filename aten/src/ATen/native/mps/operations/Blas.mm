@@ -54,7 +54,8 @@ Tensor dot_mps(
           MPSGraphTensor *castSelf = nil;
           MPSGraphTensor *castOther = nil;
 
-          if(self.scalar_type() == ScalarType::Short || self.scalar_type() == ScalarType::Byte) {
+          if(self.scalar_type() == ScalarType::Short || self.scalar_type() == ScalarType::Byte
+                                                     || self.scalar_type() == ScalarType::Char) {
             castSelf = [mpsGraph castTensor:selfTensor
                                      toType:MPSDataTypeInt32
                                        name:@"castSelfTensor"];
@@ -75,7 +76,8 @@ Tensor dot_mps(
                                                                          axes: nil
                                                                          name: @"dotProduct"];
 
-          if(self.scalar_type() == ScalarType::Short || self.scalar_type() == ScalarType::Byte)
+          if(self.scalar_type() == ScalarType::Short || self.scalar_type() == ScalarType::Byte
+                                                     || self.scalar_type() == ScalarType::Char)
             dotProductTensor = [mpsGraph castTensor:dotProductTensor
                                              toType:getMPSDataType(self.scalar_type())
                                                name:@"castDotProductTensor"];
