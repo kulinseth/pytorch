@@ -33,6 +33,7 @@ from torch.testing._internal.common_device_type import ops, instantiate_device_t
 from torch.testing._internal.common_nn import NNTestCase
 import numpy as np
 import torch
+from einops import rearrange
 
 # Same logic as test_cuda.py
 if not torch.backends.mps.is_available():
@@ -1598,6 +1599,30 @@ class TestMPS(TestCase):
             t = tensor_list[i].view(1, 784)
             t_mps = t.to("mps")
             self.assertEqual(t, t_mps.cpu())
+
+    # See https://github.com/pytorch/pytorch/issues/85516
+    def test_einops_rearrange(self):
+        to_q = torch.nn.Linear(768, 320, bias=False, device='mps')
+        to_k = torch.nn.Linear(768, 320, bias=False, device='mps')
+        to_v = torch.nn.Linear(768, 320, bias=False, device='mps')
+        to_q_cpu = copy.deepcopy(to_q).cpu()
+        to_k_cpu = copy.deepcopy(to_k).cpu()
+        to_v_cpu = copy.deepcopy(to_v).cpu()
+
+        context = torch.ones([1, 77, 768], device='mps', dtype=torch.float32)
+        context_cpu = context.cpu()
+        q = to_q(context)
+        k = to_k(context)
+        v = to_v(context)
+        q_cpu = to_q_cpu(context_cpu)
+        k_cpu = to_k_cpu(context_cpu)
+        v_cpu = to_v_cpu(context_cpu)
+
+        q, k, v = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=8), (q, k, v))
+        q_cpu, k_cpu, v_cpu = map(lambda t: rearrange(t, 'b n (h d) -> (b h) n d', h=8), (q_cpu, k_cpu, v_cpu))
+        self.assertEqual(q.isnan().sum(), q_cpu.isnan().sum())
+        self.assertEqual(k.isnan().sum(), k_cpu.isnan().sum())
+        self.assertEqual(v.isnan().sum(), v_cpu.isnan().sum())
 
     # See https://github.com/pytorch/pytorch/issues/82427
     # Test should not crash
