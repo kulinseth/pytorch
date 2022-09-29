@@ -401,7 +401,7 @@ Tensor where_mps(const Tensor& condition,
     int64_t self_idx = self_zero_shape ? 1 : (i < self.dim() ? self.size(i) : 1);
     int64_t other_idx = other_zero_shape ? 1 : (i < other.dim() ? other.size(i) : 1);
 
-    auto max_idx = std::max(cond_idx, std::max(self_idx, other_idx));
+    auto max_idx = std::max({cond_idx, self_idx, other_idx});
 
     TORCH_CHECK(cond_idx == max_idx || cond_idx == 1, i, "'th index ", cond_idx, " of condition tensor does not match the other tensors")
     TORCH_CHECK(self_idx == max_idx || self_idx == 1, i, "'th index ", self_idx, " of x tensor does not match the other tensors")
