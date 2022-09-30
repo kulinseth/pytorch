@@ -1289,6 +1289,27 @@ class TestMPS(TestCase):
 
         self.assertEqual(x_cpu, x.cpu())
 
+    def def_view_slice(self):
+        # https://github.com/pytorch/pytorch/issues/83995
+        NUM_SAMPLES=60
+        s = (0,1)
+
+        X = torch.rand(8000, 3, dtype=torch.float32, device='mps')
+        X_cpu = X.to("cpu")
+
+        idx = torch.randint(0, X.shape[0], (1,)).repeat(len(s))
+        pts = torch.randint(0, X.shape[0], (NUM_SAMPLES, X.shape[1]))
+
+        pts[:, s] = idx
+        actual_pts = torch.zeros(NUM_SAMPLES, X.shape[1], dtype=torch.float)
+        actual_pts_cpu = torch.zeros(NUM_SAMPLES, X.shape[1], dtype=torch.float)
+
+        for i in range(NUM_SAMPLES):
+            for j in range(X.shape[1]):
+                actual_pts[i,j] = X[pts[i,j],j]
+                actual_pts_cpu[i,j] = X_cpu[pts[i,j],j]
+        self.assertEqual(actual_pts, actual_pts_cpu)
+
     def test_slice(self):
         values = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
         cpu_x = torch.tensor(values, device='cpu')
