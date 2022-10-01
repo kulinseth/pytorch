@@ -115,8 +115,8 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool
     src = src_;
   }
   id<MTLBuffer> sourceBuffer = getMTLBufferStorage(src);
-  size_t dst_tensor_nbytes = dst.nbytes();
-
+  size_t dst_tensor_nbytes = dst.is_view() ? at::detail::computeStorageNbytesContiguous(dst.sizes(), dst.element_size(), dst.storage_offset()) :
+                                             dst.nbytes();
   @autoreleasepool {
     MTLResourceOptions options = MTLResourceOptionCPUCacheModeDefault | MTLResourceStorageModeShared;
     NSUInteger alignedLength = 0;
@@ -194,6 +194,9 @@ static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_, bool n
     }
     src_total_size = src.nbytes();
   }
+
+  size_t dst_tensor_nbytes = dst_.is_view() ? at::detail::computeStorageNbytesContiguous(dst_.sizes(), dst_.element_size(), dst_.storage_offset()) :
+                                              dst_.nbytes();
 
   const size_t size_to_copy = src.nbytes();
   const void* host_src = src.storage().data();
