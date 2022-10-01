@@ -8860,6 +8860,10 @@ class TestConsistency(TestCase):
         'trapz': ['torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'nn.functional.local_response_norm': ['torch.int64'],
         'index_select': ['torch.bool'],
+        'repeat': ['torch.bool'],
+        'rot90': ['torch.bool'],
+        'tile': ['torch.bool'],
+        'split': ['torch.float32'],
     }
 
     # Those ops worked on MacOS12, but broken on MacOS13
