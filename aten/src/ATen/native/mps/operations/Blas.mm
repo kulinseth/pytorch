@@ -62,8 +62,7 @@ Tensor dot_mps(
             castOther = [mpsGraph castTensor:otherTensor
                                       toType:MPSDataTypeInt32
                                         name:@"castOtherTensor"];
-          }
-          else {
+          } else {
             castSelf = selfTensor;
             castOther = otherTensor;
           }
