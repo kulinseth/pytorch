@@ -1,3 +1,5 @@
+//  Copyright © 2022 Apple Inc.
+
 #pragma once
 
 #include <ATen/detail/MPSHooksInterface.h>
@@ -12,6 +14,7 @@ struct MPSHooks : public at::MPSHooksInterface {
   void initMPS() const override;
   bool hasMPS() const override;
   Allocator* getMPSDeviceAllocator() const override;
+  const Generator& getDefaultMPSGenerator() const override;
 };
 
 }} // at::mps

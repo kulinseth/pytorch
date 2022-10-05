@@ -8,8 +8,8 @@
 #include <ATen/core/LegacyTypeDispatch.h>
 #include <ATen/detail/CUDAHooksInterface.h>
 #include <ATen/detail/HIPHooksInterface.h>
-#include <ATen/detail/ORTHooksInterface.h>
 #include <ATen/detail/MPSHooksInterface.h>
+#include <ATen/detail/ORTHooksInterface.h>
 #include <c10/core/QEngine.h>
 #include <c10/core/impl/DeviceGuardImplInterface.h>
 #include <c10/util/CallOnce.h>
@@ -38,6 +38,8 @@ class TORCH_API Context {
       return at::detail::getDefaultCPUGenerator();
     } else if (device_type == at::kCUDA) {
       return at::detail::getCUDAHooks().getDefaultCUDAGenerator(device.index());
+    } else if (device_type == at::kMPS) {
+      return at::detail::getMPSHooks().getDefaultMPSGenerator();
     } else {
       AT_ERROR(DeviceTypeName(device_type), " device type not enabled.");
     }
@@ -420,6 +422,13 @@ static inline void manual_seed(uint64_t seed) {
         cuda_gen.set_current_seed(seed);
       }
     }
+  }
+
+  if (hasMPS()) {
+    auto mps_gen = globalContext().defaultGenerator(DeviceType::MPS);
+    // See Note [Acquire lock when using random generators]
+    std::lock_guard<std::mutex> lock(mps_gen.mutex());
+    mps_gen.set_current_seed(seed);
   }
 }
 
