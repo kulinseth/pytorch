@@ -1,5 +1,6 @@
 #include <ATen/detail/MPSHooksInterface.h>
 #include <c10/util/Exception.h>
+#include <c10/util/CallOnce.h>
 
 namespace at {
 namespace detail {
@@ -7,8 +8,8 @@ namespace detail {
 const MPSHooksInterface& getMPSHooks() {
   static std::unique_ptr<MPSHooksInterface> mps_hooks;
 #if !defined C10_MOBILE
-  static std::once_flag once;
-  std::call_once(once, [] {
+  static c10::once_flag once;
+  c10::call_once(once, [] {
     mps_hooks = MPSHooksRegistry()->Create("MPSHooks", MPSHooksArgs{});
     if (!mps_hooks) {
       mps_hooks =
