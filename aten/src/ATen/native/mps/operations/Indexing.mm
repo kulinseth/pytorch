@@ -221,6 +221,7 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out){
   TORCH_CHECK(self.device() == out.device(), "expected self and out to be on the same device, but got out on ",
   out.device(), " and self on ", self.device());
   TORCH_CHECK(self.dim() <= maxDimensions, "nonzero is not supported for tensor with more than ", 16, " dimensions");
+  TORCH_CHECK(out.is_mps());
 
   MPSStream *stream = getCurrentMPSStream();
   struct CachedGraph : public MPSCachedGraph
@@ -228,7 +229,7 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out){
     CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
     MPSGraphTensor* inputTensor_ = nil;
     MPSGraphTensor* outputTensor_ = nil;
-    MPSGraphTensor* lengthTensor_ = nil;
+    MPSGraphTensor* scatterDataTensor_ = nil;
   };
 
   int64_t total_nonzero = at::count_nonzero(self).item<int64_t>();
@@ -237,6 +238,13 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out){
   if (out.numel() == 0) {
     return out;
   }
+
+  int64_t _apparentInputShape = 1;
+  for (auto dim : self.sizes()) {
+    _apparentInputShape *= dim;
+  }
+  MPSShape *apparentOutputShape = @[@(total_nonzero * nDim)];
+  MPSShape *apparentInputShape = @[@(_apparentInputShape)];
 
   // Pseudocode:
   //
@@ -261,19 +269,14 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out){
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          MPSGraphTensor *inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, self);
+          MPSGraphTensor *inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(self.scalar_type()), apparentInputShape);
+          MPSGraphTensor *scatterDataTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(out.scalar_type()));
           MPSGraphTensor *zeroTensor = [mpsGraph constantWithScalar:0.0 dataType:inputDataType];
-          MPSGraphTensor *minusOneTensor = [mpsGraph constantWithScalar:-1.0 dataType:MPSDataTypeInt32];
           MPSGraphTensor *oneTensor = [mpsGraph constantWithScalar:1.0 dataType:MPSDataTypeInt32];
           MPSGraphTensor *minusMaxDimTensor = [mpsGraph constantWithScalar:-maxDimensions dataType:MPSDataTypeInt32];
           MPSGraphTensor *inputNotEqualToZeroTensor = [mpsGraph notEqualWithPrimaryTensor:inputTensor
                                                                           secondaryTensor:zeroTensor
                                                                                      name:nil];
-          if (nDim > 1) {
-            inputNotEqualToZeroTensor = [mpsGraph reshapeTensor:inputNotEqualToZeroTensor
-                                                      withShape:@[@-1]
-                                                           name:nil];
-          }
           MPSGraphTensor *maskTensor = [mpsGraph castTensor:inputNotEqualToZeroTensor
                                                      toType:MPSDataTypeInt32
                                                        name:nil];
@@ -312,16 +315,15 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out){
             coordinatesTensor = [mpsGraph concatTensors:coordinatesTensorArray dimension:0 interleave:YES name:nil];
           }
 
-          MPSGraphTensor *scatteredTensor = [mpsGraph scatterWithUpdatesTensor:coordinatesTensor
-                                                                indicesTensor:maskedIndicesTensor
-                                                                        shape:@[@(total_nonzero * nDim)]
-                                                                         axis:0
-                                                                         mode:MPSGraphScatterModeSet
-                                                                         name:nil];
-          MPSGraphTensor *outputTensor = [mpsGraph reshapeTensor:scatteredTensor
-                                                       withShape:@[@(total_nonzero), @(nDim)]
-                                                            name:nil];
+          MPSGraphTensor *outputTensor = [mpsGraph scatterWithDataTensor:scatterDataTensor
+                                                           updatesTensor:coordinatesTensor
+                                                           indicesTensor:maskedIndicesTensor
+                                                                    axis:0
+                                                                    mode:MPSGraphScatterModeSet
+                                                                    name:nil];
+
           newCachedGraph->inputTensor_ = inputTensor;
+          newCachedGraph->scatterDataTensor_ = scatterDataTensor;
           newCachedGraph->outputTensor_ = outputTensor;
         }
         return newCachedGraph;
@@ -329,12 +331,14 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out){
       cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
 
-    Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self);
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, out);
+    Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self, apparentInputShape);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, out, apparentOutputShape);
+    Placeholder scatterPlaceholder = Placeholder(cachedGraph->scatterDataTensor_, out, apparentOutputShape);
 
     // Create dictionary of inputs and outputs
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
-      selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData()
+      selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData(),
+      scatterPlaceholder.getMPSGraphTensor() : scatterPlaceholder.getMPSGraphTensorData()
     };
 
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
