@@ -1,3 +1,5 @@
+//  Copyright © 2022 Apple Inc.
+
 #include <ATen/native/mps/OperationUtils.h>
 
 namespace at {
