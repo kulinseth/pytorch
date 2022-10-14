@@ -1971,6 +1971,25 @@ class TestNLLLoss(TestCase):
         self.assertEqual(torch.empty(0, device="mps"), x.unfold(0, 0, 2))
         self.assertEqual(torch.tensor([0.5], device="mps"), x.unfold(0, 1, 1))
 
+    def test_bincount(self):
+        def helper(dtype):
+            input = torch.randint(0, 8, (5,), dtype=dtype, device="mps")
+            input_cpu = input.to("cpu")
+
+            weights = torch.linspace(0, 1, steps=5, device="mps")
+            weights_cpu = weights.to("cpu")
+
+            print(input)
+            x = torch.bincount(input)
+            x_cpu = torch.bincount(input_cpu)
+            self.assertEqual(x, x_cpu)
+
+            y = input.bincount(weights)
+            y_cpu = input_cpu.bincount(weights_cpu)
+            self.assertEqual(y, y_cpu)
+
+        [helper(dtype) for dtype in [torch.int32]]
+
     def test_sum_backward(self):
         def helper(n, c):
             values = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0], [7.0, 8.0, 9.0]]
@@ -7039,9 +7058,9 @@ class TestFallbackWarning(TestCase):
     def _get_not_implemented_op(self):
         # This can be changed once we actually implement `torch.bincount`
         # Should return fn, args, kwargs, string_version
-        return (torch.bincount,
-                torch.tensor([4], device='mps'), {},
-                "torch.bincount(torch.tensor([4, 3, 6, 3, 4], device='mps'))")
+        return (torch.histc,
+                torch.tensor([100], device='mps'), {},
+                "torch.histc(torch.tensor([4], device='mps', dtype=torch.float))")
 
     def test_error_on_not_implemented(self):
         fn, args, kwargs, _ = self._get_not_implemented_op()
