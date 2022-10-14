@@ -46,9 +46,16 @@ Tensor& bincount_mps_impl(const Tensor& self,
                                                 dataType:getMPSDataType(output.scalar_type())];
           }
 
+          MPSGraphTensor *castedInputTensor = inputTensor;
+          if (self.scalar_type() == kByte) {
+            castedInputTensor = [mpsGraph castTensor:inputTensor
+                                              toType:MPSDataTypeInt32
+                                                name:nil];
+          }
+
           MPSGraphTensor *outputTensor = [mpsGraph scatterWithDataTensor:scatterDataTensor
                                                            updatesTensor:updatesTensor
-                                                           indicesTensor:inputTensor
+                                                           indicesTensor:castedInputTensor
                                                                      axis:0
                                                                      mode:MPSGraphScatterModeAdd
                                                                      name:nil];
@@ -115,13 +122,20 @@ Tensor _bincount_mps(const Tensor& self, const c10::optional<Tensor>& weights_op
   const int64_t nbins = std::max(self.max().item<int64_t>() + 1L, minlength);
   Tensor output;
 
+  Tensor weights_ = weights;
   if (has_weights) {
+    if(weights.scalar_type() != ScalarType::Float &&
+       weights.scalar_type() != ScalarType::Int   &&
+       weights.scalar_type() != ScalarType::Half) {
+        // Scatter doesn't work for int8/int16 dtypes
+        weights_ = weights.to(kInt);
+    }
     output = at::zeros(
         {nbins},
-        optTypeMetaToScalarType(weights.options().dtype_opt()),
-        weights.options().layout_opt(),
-        weights.options().device_opt(),
-        weights.options().pinned_memory_opt());
+        optTypeMetaToScalarType(weights_.options().dtype_opt()),
+        weights_.options().layout_opt(),
+        weights_.options().device_opt(),
+        weights_.options().pinned_memory_opt());
   }
   else {
     output = at::zeros(
@@ -132,7 +146,7 @@ Tensor _bincount_mps(const Tensor& self, const c10::optional<Tensor>& weights_op
         c10::nullopt /* pin_memory */);
   }
 
-  return bincount_mps_impl(self, weights, output);
+  return bincount_mps_impl(self, weights_, output);
 }
 
 }
