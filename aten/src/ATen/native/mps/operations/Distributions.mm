@@ -11,15 +11,8 @@ namespace mps {
 
 struct RandomCachedGraph : public MPSCachedGraph
 {
-  RandomCachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {
-    // initialize Philox state values (only required once when graph is created)
-    const auto seed = c10::detail::getNonDeterministicRandom();
-    const auto subsequence = c10::detail::getNonDeterministicRandom();
-    philoxState = at::Philox4_32(seed, subsequence);
-    // the two last state values are the Philox keys which are initialized once only
-    stateValues[5] = static_cast<uint32_t>(seed);
-    stateValues[6] = static_cast<uint32_t>(seed >> 32);
-  }
+  RandomCachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) { }
+
   // Only relevant for multinomial
   MPSGraphTensor *probTensor = nil;
   MPSGraphTensor *resultTensor = nil;
@@ -356,6 +349,7 @@ Tensor& multinomial_with_replacement_mps_kernel(
 
   using namespace mps;
 
+  auto mps_gen = get_generator_or_default<MPSGeneratorImpl>(generator, at::mps::detail::getDefaultMPSGenerator());
   int inputSize = self.dim();
   int numDist =
       inputSize == 1 ? 1 : self.size(0);
@@ -474,11 +468,15 @@ Tensor& multinomial_with_replacement_mps_kernel(
      });
     }
     // update the Philox state values on each run of the same graph
-    cachedGraph->updatePhiloxCounters();
-    // feed the updated state values to the graph
-    MPSNDArrayDescriptor *stateDesc = [MPSNDArrayDescriptor descriptorWithDataType: MPSDataTypeInt32 shape: @[@7]];
+    MPSNDArrayDescriptor *stateDesc = [MPSNDArrayDescriptor descriptorWithDataType: MPSDataTypeInt32 shape: @[@(at::mps::detail::PHILOX_STATE_N)]];
     MPSNDArray *stateNDArray = [[[MPSNDArray alloc] initWithDevice: stream->device() descriptor: stateDesc] autorelease];
-    [stateNDArray writeBytes: &cachedGraph->stateValues[0] strideBytes: nil];
+    {
+      // See Note [Acquire lock when using random generators]
+      std::lock_guard<std::mutex> lock(mps_gen->mutex_);
+      // update the Philox state values on each run
+      mps_gen->update_philox_counters();
+      [stateNDArray writeBytes: mps_gen->state_data() strideBytes: nil];
+    }
     MPSGraphTensorData* stateTensorData = [[[MPSGraphTensorData alloc] initWithMPSNDArray: stateNDArray] autorelease];
 
     auto probPlaceholder = Placeholder(cachedGraph->probTensor, self_v);
