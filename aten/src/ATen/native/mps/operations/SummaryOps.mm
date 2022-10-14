@@ -1,10 +1,4 @@
-#include <ATen/ATen.h>
-#include <ATen/Tensor.h>
-#include <ATen/Utils.h>
-#include <ATen/mps/MPSStream.h>
 #include <ATen/native/mps/OperationUtils.h>
-#include <torch/library.h>
-#include <c10/util/Optional.h>
 
 namespace at {
 namespace native {
@@ -28,8 +22,7 @@ Tensor& bincount_mps_impl(const Tensor& self,
   bool has_weights = weights.defined();
 
   @autoreleasepool {
-    string key =  "bincount_mps_impl:" +
-            (has_weights ? getTensorsStringKey({self, weights}) : getTensorsStringKey(self));
+    string key = "bincount_mps_impl" + getTensorsStringKey({self, weights});
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
     if(!cachedGraph) {
       MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
