@@ -32,7 +32,7 @@ enum MPSReductionType {
 
 NSArray<NSNumber*>* getTensorAxes(const Tensor& t) {
   int64_t ndim = t.dim();
-	auto axes = [NSMutableArray<NSNumber*> arrayWithCapacity:ndim];
+  auto axes = [NSMutableArray<NSNumber*> arrayWithCapacity:ndim];
   for (const auto i: c10::irange(ndim)) {
     axes[i] = [NSNumber numberWithInteger:i];
   }
