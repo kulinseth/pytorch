@@ -28,7 +28,6 @@ Tensor& bincount_mps_impl(const Tensor& self,
   bool has_weights = weights.defined();
 
   @autoreleasepool {
-    // add the weights??
     string key =  "bincount_mps_impl:" +
             (has_weights ? getTensorsStringKey({self, weights}) : getTensorsStringKey(self));
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
