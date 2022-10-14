@@ -1173,8 +1173,6 @@ Tensor min_max_mps
   namespace native_mps = at::native::mps;
   using CachedGraph = native_mps::MPSUnaryCachedGraph;
 
-  TORCH_INTERNAL_ASSERT(input_t.scalar_type() != ScalarType::Long, "min/max not supported for torch.int64 on MPS");
-
   native_mps::MPSGraphCache* cache_ = native_mps::MPSGraphCache::getInstance();
 
   Tensor output_t = at::native::empty_mps({}, input_t.scalar_type(), c10::nullopt, kMPS, c10::nullopt, c10::nullopt);
@@ -1570,8 +1568,6 @@ std::tuple<Tensor, Tensor> min_max_mps
     const std::string& func_name) {
 
     namespace native_mps = at::native::mps;
-
-    TORCH_INTERNAL_ASSERT(input_t.scalar_type() != ScalarType::Long, "min/max not supported for torch.int64 on MPS");
 
     int64_t dim_ = maybe_wrap_dim(dim, input_t.dim());
     native::zero_numel_check_dims(input_t, dim_, "max()");

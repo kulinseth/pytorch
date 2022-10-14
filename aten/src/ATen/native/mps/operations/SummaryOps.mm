@@ -56,9 +56,9 @@ Tensor& bincount_mps_impl(const Tensor& self,
           MPSGraphTensor *outputTensor = [mpsGraph scatterWithDataTensor:scatterDataTensor
                                                            updatesTensor:updatesTensor
                                                            indicesTensor:inputTensor
-                                                                       axis:0
-                                                                       mode:MPSGraphScatterModeAdd
-                                                                       name:nil];
+                                                                     axis:0
+                                                                     mode:MPSGraphScatterModeAdd
+                                                                     name:nil];
 
           newCachedGraph->inputTensor_ = inputTensor;
           newCachedGraph->outputTensor_ = outputTensor;
@@ -83,8 +83,8 @@ Tensor& bincount_mps_impl(const Tensor& self,
     feeds[inputPlaceholder.getMPSGraphTensor()] = inputPlaceholder.getMPSGraphTensorData();
     feeds[scatterPlaceholder.getMPSGraphTensor()] = scatterPlaceholder.getMPSGraphTensorData();
     if(has_weights) {
-        weightsPlaceholder = Placeholder(cachedGraph->weightsTensor_, weights);
-        feeds[weightsPlaceholder.getMPSGraphTensor()] = weightsPlaceholder.getMPSGraphTensorData();
+      weightsPlaceholder = Placeholder(cachedGraph->weightsTensor_, weights);
+      feeds[weightsPlaceholder.getMPSGraphTensor()] = weightsPlaceholder.getMPSGraphTensorData();
     }
 
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
