@@ -28,8 +28,7 @@ static std::string getStridedKey(const ScalarType& dtype, const IntArrayRef& bas
 }
 
 // initializes the MTLBuffers for tensor data and runs the MPSGraph for the view op
-static Tensor& runViewGraph(ViewCachedGraph* cachedGraph, const at::Tensor& src, Tensor& output,
-                            bool needsScatter, bool requires_sync = false)
+static Tensor& runViewGraph(ViewCachedGraph* cachedGraph, const at::Tensor& src, Tensor& output, bool needsScatter)
 {
   const id<MTLBuffer> sourceBuffer = getMTLBufferStorage(src);
   const id<MTLBuffer> outputBuffer = getMTLBufferStorage(output);
@@ -74,8 +73,7 @@ static Tensor& runViewGraph(ViewCachedGraph* cachedGraph, const at::Tensor& src,
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
       cachedGraph->outputTensor : outputTensorData
     };
-    stream->executeMPSGraph(cachedGraph->graph(), feeds, results,
-                            requires_sync ? SyncType::COMMIT : SyncType::COMMIT_ADAPTIVE);
+    runMPSGraph(stream, cachedGraph->graph(), feeds, results);
   }
   return output;
 }
@@ -234,7 +232,7 @@ MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *i
       if (dstSizes[dstDim] == 0) { return nil; }
   }
 
-  // 1. Flatten the inputTensor if neccessary
+  // 1. Flatten the inputTensor if necessary
   MPSGraphTensor *flatInputTensor = inputTensor;
   {
     // Flatten inputs to remove duplicate strides.
@@ -596,22 +594,20 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst)
   if (src.sizes().size() == 0) {
     return Tensor();
   }
-  bool requires_sync = false;
   Tensor output;
   if (!dst.has_storage()) {
     output = at::native::empty_mps(src.sizes(), src.scalar_type(), c10::nullopt, kMPS);
-    requires_sync = true;
   }
   ViewCachedGraph* cachedGraph = createViewGraph(src, src.sizes(), src.strides(),
                                                  src.storage_offset(), /*needsScatter*/ false);
-  return runViewGraph(cachedGraph, src, dst.has_storage() ? dst : output, /*needsScatter*/ false, requires_sync);
+  return runViewGraph(cachedGraph, src, dst.has_storage() ? dst : output, /*needsScatter*/ false);
 }
 
 Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output)
 {
   ViewCachedGraph* cachedGraph = createViewGraph(output, output.sizes(), output.strides(),
                                                  output.storage_offset(), /*needsScatter*/ true);
-  return runViewGraph(cachedGraph, src, output, /*needsScatter*/ true, /*requires_sync*/  true);
+  return runViewGraph(cachedGraph, src, output, /*needsScatter*/ true);
 }
 
 } // namespace mps
