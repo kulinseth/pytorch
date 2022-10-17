@@ -30,6 +30,15 @@ enum MPSReductionType {
 };
 
 
+NSArray<NSNumber*>* getTensorAxes(const Tensor& t) {
+  int64_t ndim = t.dim();
+  auto axes = [NSMutableArray<NSNumber*> arrayWithCapacity:ndim];
+  for (const auto i: c10::irange(ndim)) {
+    axes[i] = [NSNumber numberWithInteger:i];
+  }
+  return axes;
+}
+
 void set_apparent_shapes(NSMutableArray<NSNumber*> * &apparent_out_shape,
                          NSMutableArray<NSNumber*> * &apparent_in_shape,
                          int64_t num_reduce_dims,
@@ -1159,26 +1168,15 @@ Tensor min_max_mps
   (const Tensor& input_t,
    MPSReductionType reduction_type,
    const std::string& func_name) {
+  TORCH_INTERNAL_ASSERT(input_t.scalar_type() != ScalarType::Long, "min/max not supported for Long dtype on MPS");
 
   namespace native_mps = at::native::mps;
   using CachedGraph = native_mps::MPSUnaryCachedGraph;
 
   native_mps::MPSGraphCache* cache_ = native_mps::MPSGraphCache::getInstance();
 
-  IntArrayRef input_shape = input_t.sizes();
-  int64_t num_input_dims = input_shape.size();
-
-  // Flatten the input tensor to reduce it to one value
-  NSMutableArray<NSNumber*> *apparent_input_shape = [NSMutableArray<NSNumber*> arrayWithCapacity:1];
-  int64_t num_in_elements = 1;
-  for(int i = 0; i < num_input_dims; i++) {
-      num_in_elements *= input_shape[i];
-  }
-  apparent_input_shape[0] = [NSNumber numberWithInt:num_in_elements];
-
   Tensor output_t = at::native::empty_mps({}, input_t.scalar_type(), c10::nullopt, kMPS, c10::nullopt, c10::nullopt);
-
-  if (output_t.numel() == 0 || num_in_elements == 0) {
+  if (output_t.numel() == 0 || input_t.numel() == 0) {
     return output_t;
   }
 
@@ -1195,17 +1193,29 @@ Tensor min_max_mps
           MPSGraph* mpsGraph = native_mps::make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          MPSGraphTensor* inputTensor = native_mps::mpsGraphUnrankedPlaceHolder(mpsGraph, native_mps::getMPSDataType(input_t.scalar_type()));
+          MPSGraphTensor* inputTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, input_t);
 
           MPSGraphTensor* outputTensor = nil;
+          MPSGraphTensor* castInputTensor = nil;
 
+          if(input_t.scalar_type() != ScalarType::Float &&
+             input_t.scalar_type() != ScalarType::Int   &&
+             input_t.scalar_type() != ScalarType::Half) {
+            castInputTensor =  [mpsGraph castTensor:inputTensor
+                                             toType:MPSDataTypeInt32
+                                               name:@"castInputTensor"];
+          } else {
+            castInputTensor = inputTensor;
+          }
+
+          NSArray<NSNumber*>* axes = getTensorAxes(input_t);
           if(reduction_type == MPSReductionType::MAX)
-            outputTensor = [mpsGraph reductionMaximumWithTensor:inputTensor
-                                                           axes:@[@0]
+            outputTensor = [mpsGraph reductionMaximumWithTensor:castInputTensor
+                                                           axes:axes
                                                            name:nil];
           else if(reduction_type == MPSReductionType::MIN)
-            outputTensor = [mpsGraph reductionMinimumWithTensor:inputTensor
-                                                           axes:@[@0]
+            outputTensor = [mpsGraph reductionMinimumWithTensor:castInputTensor
+                                                           axes:axes
                                                            name:nil];
 
           newCachedGraph->inputTensor_ = inputTensor;
@@ -1217,7 +1227,7 @@ Tensor min_max_mps
       cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
 
-    auto inputPlaceholder = native_mps::Placeholder(cachedGraph->inputTensor_, input_t, apparent_input_shape);
+    auto inputPlaceholder = native_mps::Placeholder(cachedGraph->inputTensor_, input_t);
     auto outputPlaceholder = native_mps::Placeholder(cachedGraph->outputTensor_, output_t, @[@1]);
 
     NSDictionary<MPSGraphTensor *, MPSGraphTensorData *> *feeds = @{
@@ -1254,6 +1264,7 @@ void min_max_out_mps
   const Tensor& indices_t,
   MPSReductionType reduction_type,
   const std::string& func_name) {
+    TORCH_INTERNAL_ASSERT(input_t.scalar_type() != ScalarType::Long, "min/max not supported for Long dtype on MPS");
 
     namespace native_mps = at::native::mps;
 
@@ -1309,7 +1320,7 @@ void min_max_out_mps
               MPSGraph* mpsGraph = native_mps::make_mps_graph();
               newCachedGraph = new CachedGraph(mpsGraph);
 
-              MPSGraphTensor* inputTensor = native_mps::mpsGraphUnrankedPlaceHolder(mpsGraph, native_mps::getMPSDataType(input_t.scalar_type()));
+              MPSGraphTensor* inputTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, input_t);
               MPSGraphTensor* outputTensor = nil;
               if(reduction_type == MPSReductionType::MAX)
                 outputTensor = [mpsGraph reductionMaximumWithTensor:inputTensor
@@ -1326,7 +1337,7 @@ void min_max_out_mps
                  input_t.scalar_type() != ScalarType::Int   &&
                  input_t.scalar_type() != ScalarType::Half)
                 castInputTensor =  [mpsGraph castTensor:inputTensor
-                                                 toType:MPSDataTypeFloat32
+                                                 toType:MPSDataTypeInt32
                                                    name:@"castInputTensor"];
               else
                 castInputTensor = inputTensor;
