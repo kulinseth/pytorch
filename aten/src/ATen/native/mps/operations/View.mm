@@ -18,11 +18,11 @@ struct ViewCachedGraph : public MPSCachedGraph
   std::vector<MPSGraphTensor*> strideTensors;
 };
 
-static std::string getStridedKey(const ScalarType& dtype, const ScalarType& updates_dtype, const IntArrayRef& base_shape,
+static std::string getStridedKey(const ScalarType& self_dtype, const ScalarType& updates_dtype, const IntArrayRef& base_shape,
                                  const IntArrayRef& new_shape, const IntArrayRef& stride,
                                  int64_t storage_offset, bool is_scatter)
 {
-  std::string dtype_key = getMPSTypeString(dtype);
+  std::string dtype_key = getMPSTypeString(self_dtype);
   if (is_scatter) {
     dtype_key += ":" + getMPSTypeString(updates_dtype);
   }
@@ -555,12 +555,12 @@ static IntArrayRef updateTensorBaseShape(const Tensor& self)
 //            |    /          \   |
 //            |   /            \  |
 //            NonView T         NonView T
-static ViewCachedGraph* createViewGraph(const Tensor& self, IntArrayRef size, IntArrayRef stride, int64_t storage_offset, bool needsScatter, const Tensor &other)
+static ViewCachedGraph* createViewGraph(const Tensor& self, const Tensor &updates, IntArrayRef size, IntArrayRef stride, int64_t storage_offset, bool needsScatter)
 {
   IntArrayRef base_shape = updateTensorBaseShape(self);
 
   @autoreleasepool {
-    string key = getStridedKey(self.scalar_type(), other.scalar_type(), base_shape, size, stride, storage_offset, needsScatter);
+    string key = getStridedKey(self.scalar_type(), updates.scalar_type(), base_shape, size, stride, storage_offset, needsScatter);
     MPSGraphCache* cache_ = MPSGraphCache::getInstance();
     ViewCachedGraph* cachedGraph = static_cast<ViewCachedGraph *>(cache_->LookUp(key));
 
@@ -585,7 +585,7 @@ static ViewCachedGraph* createViewGraph(const Tensor& self, IntArrayRef size, In
               newCachedGraph->strideTensors.push_back(mpsGraphRankedPlaceHolder(mpsGraph, MPSDataTypeInt32, @[@1]));
             }
             if (needsScatter) {
-              auto updatesType = getMPSScalarType(other.scalar_type());
+              auto updatesType = getMPSScalarType(updates.scalar_type());
               newCachedGraph->updatesTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, updatesType);
               updatesTensor = newCachedGraph->updatesTensor;
               if (inputType != updatesType) {
@@ -612,15 +612,15 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst)
   if (!dst.has_storage()) {
     output = at::native::empty_mps(src.sizes(), src.scalar_type(), c10::nullopt, kMPS);
   }
-  ViewCachedGraph* cachedGraph = createViewGraph(src, src.sizes(), src.strides(),
-                                                 src.storage_offset(), /*needsScatter*/ false, dst);
+  ViewCachedGraph* cachedGraph = createViewGraph(src, dst, src.sizes(), src.strides(),
+                                                 src.storage_offset(), /*needsScatter*/ false);
   return runViewGraph(cachedGraph, src, dst.has_storage() ? dst : output, /*needsScatter*/ false);
 }
 
 Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output)
 {
-  ViewCachedGraph* cachedGraph = createViewGraph(output, output.sizes(), output.strides(),
-                                                 output.storage_offset(), /*needsScatter*/ true, src);
+  ViewCachedGraph* cachedGraph = createViewGraph(output, src, output.sizes(), output.strides(),
+                                                 output.storage_offset(), /*needsScatter*/ true);
   return runViewGraph(cachedGraph, src, output, /*needsScatter*/ true);
 }
 
