@@ -2038,7 +2038,6 @@ class TestNLLLoss(TestCase):
         byte_counts = torch.bincount(
             torch.tensor([0, 1, 1, 1, 4], device=device, dtype=torch.int32),
             torch.tensor([1, 2, 3, 4, 5], dtype=torch.int8, device=device))
-        print(byte_counts)
         self.assertEqual(
             torch.tensor([1, 9, 0, 0, 5], device=device, dtype=torch.int32), byte_counts)
         # test non-contiguous inputs and weights
