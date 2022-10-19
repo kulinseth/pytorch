@@ -195,9 +195,6 @@ static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_, bool n
     src_total_size = src.nbytes();
   }
 
-  size_t dst_tensor_nbytes = dst_.is_view() ? at::detail::computeStorageNbytesContiguous(dst_.sizes(), dst_.element_size(), dst_.storage_offset()) :
-                                              dst_.nbytes();
-
   const size_t size_to_copy = src.nbytes();
   const void* host_src = src.storage().data();
   TORCH_INTERNAL_ASSERT(src_total_size >= (src.storage_offset() * src.element_size()));
