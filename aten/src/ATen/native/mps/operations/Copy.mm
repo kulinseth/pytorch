@@ -213,9 +213,6 @@ static void copy_to_mps_stride_contig(at::Tensor& dst, const at::Tensor& src, bo
     src_total_size = src.nbytes();
   }
 
-  size_t dst_tensor_nbytes = dst_.is_view() ? at::detail::computeStorageNbytesContiguous(dst_.sizes(), dst_.element_size(), dst_.storage_offset()) :
-                                              dst_.nbytes();
-
   const size_t size_to_copy = src.nbytes();
   const void* host_src = static_cast<char *>(src.storage().data()) + src_byte_offset;
 
