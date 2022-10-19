@@ -214,19 +214,20 @@ static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_, bool n
     id<MTLBuffer> sourceBuffer = nil;
     // If the destination is a strided MPS tensor, we cannot perform a blit directly to copy the
     // memory from the CPU tensor into the MPS tensor. We need to scatter the data into the right indices
-    if (!dst_.is_contiguous() && sourceOffset != 0) {
+    bool doScatter = (!dst_.is_contiguous() && src.is_contiguous());
+    if (doScatter) {
       sourceBuffer = [device newBufferWithBytes:(void*)((uint8_t*)host_src + (src_.storage_offset() * src_.itemsize()))
                                          length:size_to_copy
                                         options:options];
     }
     else {
       sourceBuffer = [device newBufferWithBytesNoCopy:alignedPtr
-                                              length:alignedLength
-                                             options:options
-                                         deallocator:nil];
+                                               length:alignedLength
+                                              options:options
+                                          deallocator:nil];
     }
 
-    if (!dst_.is_contiguous()) {
+    if (doScatter) {
       scatterViewTensor(src, dst_, sourceBuffer);
     } else {
       stream->copy_and_sync(sourceBuffer, destBuffer, size_to_copy, sourceOffset, dst_byte_offset, non_blocking);
