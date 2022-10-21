@@ -62,16 +62,25 @@ Tensor& pad_out_template(Tensor &output, const Tensor &input_, IntArrayRef paddi
   Tensor grad_output, input = input_;
 
   if (!is_backward_pass) {
-    TORCH_CHECK(pad_l < input_w && pad_r < input_w,
-      "Argument #4: Padding size should be less than the corresponding "
-      "input dimension, but got: padding (", pad_l, ", ", pad_r,
-      ") at dimension ", dim_w, " of input ", ndims);
+    // these checks aren't relevant for constant pad
+    if (mode != MPSGraphPaddingModeConstant) {
+      TORCH_CHECK(pad_l < input_w && pad_r < input_w,
+        "Argument #4: Padding size should be less than the corresponding "
+        "input dimension, but got: padding (", pad_l, ", ", pad_r,
+        ") at dimension ", dim_w, " of input ", ndims);
 
-    if (padding_dim > 1) {
-      TORCH_CHECK(pad_t < input_h && pad_b < input_h,
-        "Argument #6: Padding size should be less than the corresponding "
-        "input dimension, but got: padding (", pad_t, ", ", pad_b,
-        ") at dimension ", dim_h, " of input ", ndims);
+      if (padding_dim > 1) {
+        TORCH_CHECK(pad_t < input_h && pad_b < input_h,
+          "Argument #6: Padding size should be less than the corresponding "
+          "input dimension, but got: padding (", pad_t, ", ", pad_b,
+          ") at dimension ", dim_h, " of input ", ndims);
+      }
+      if (padding_dim > 2) {
+        TORCH_CHECK(pad_front < input_d && pad_back < input_d,
+          "Argument #8: Padding size should be less than the corresponding "
+          "input dimension, but got: padding (", pad_front, ", ", pad_back,
+          ") at dimension ", dim_d, " of input ", ndims);
+      }
     }
     TORCH_CHECK(output_w >= 1 || output_h >= padding_dim - 1,
       "input (H: ", input_h, ", W: ", input_w, ") is too small. Calculated "
