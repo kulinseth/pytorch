@@ -33,7 +33,12 @@ static std::string getStridedKey(const ScalarType& self_dtype, const ScalarType&
 }
 
 // initializes the MTLBuffers for tensor data and runs the MPSGraph for the view op
-static Tensor& runViewGraph(ViewCachedGraph* cachedGraph, const at::Tensor& src, Tensor& output, bool needsScatter)
+static Tensor& runViewGraph(
+  ViewCachedGraph* cachedGraph,
+  const at::Tensor& src,
+  Tensor& output,
+  bool needsScatter,
+  id<MTLBuffer> updatesBuffer = nil)
 {
   const id<MTLBuffer> sourceBuffer = getMTLBufferStorage(src);
   const id<MTLBuffer> outputBuffer = getMTLBufferStorage(output);
@@ -54,7 +59,7 @@ static Tensor& runViewGraph(ViewCachedGraph* cachedGraph, const at::Tensor& src,
                                                                                shape: inputShape
                                                                             dataType: inputType] autorelease];
     if (needsScatter) {
-      feeds[cachedGraph->updatesTensor] = [[[MPSGraphTensorData alloc] initWithMTLBuffer: sourceBuffer
+      feeds[cachedGraph->updatesTensor] = [[[MPSGraphTensorData alloc] initWithMTLBuffer: (updatesBuffer != nil) ? updatesBuffer : sourceBuffer
                                                                                    shape: getMPSShape(src.numel())
                                                                                 dataType: getMPSDataType(src.scalar_type())] autorelease];
     }
@@ -617,11 +622,11 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst)
   return runViewGraph(cachedGraph, src, dst.has_storage() ? dst : output, /*needsScatter*/ false);
 }
 
-Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output)
+Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output, id<MTLBuffer> updatesBuffer)
 {
   ViewCachedGraph* cachedGraph = createViewGraph(output, src, output.sizes(), output.strides(),
                                                  output.storage_offset(), /*needsScatter*/ true);
-  return runViewGraph(cachedGraph, src, output, /*needsScatter*/ true);
+  return runViewGraph(cachedGraph, src, output, /*needsScatter*/ true, updatesBuffer);
 }
 
 } // namespace mps
