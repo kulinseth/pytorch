@@ -48,7 +48,7 @@ std::string getTensorsStringKey(const TensorList& tensors, bool use_scalar_value
 std::string getArrayRefString(const IntArrayRef s);
 // use has_storage() on the returned tensor to determine if src actually is a view
 Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst);
-Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output);
+Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output, id<MTLBuffer> updatesBuffer = nil);
 
 MPSShape* getMPSShape(const Tensor& t);
 MPSShape* getMPSShape(IntArrayRef sizes);
