@@ -172,7 +172,7 @@ MPSNDArray* ndArrayFromTensor(const Tensor& tensor, MPSShape *shape, MPSDataType
   id<MTLBuffer> buffer = getMTLBufferStorage(tensor);
   MPSGraphTensorData* tmpGraphTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer:buffer
                                                                                     shape:shape
-                                                                                  dataType:mpsType] autorelease];
+                                                                                 dataType:mpsType] autorelease];
 
   return [tmpGraphTensorData mpsndarray];
 }
