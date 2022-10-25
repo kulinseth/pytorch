@@ -187,7 +187,7 @@ MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mp
   if (hasMPSShape) {
     src_ndim_view = [mpsShape count];
     src_view_shape.reserve(src_ndim_view);
-    for (int i = 0; i < src_ndim_view; i++) {
+    for (const auto i : c10::irange(src_ndim_view)) {
       src_view_shape[i] = [mpsShape[i] intValue];
     }
   } else {
@@ -209,15 +209,15 @@ MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mp
       firstDimToSlice++;
     }
 
-    int x = 1;
-    for (int el = firstDimToSlice + 1; el < src_base_shape.size(); el++) {
-      x *= src_base_shape[el];
+    int view_numel = 1;
+    for (const auto i : c10::irange(firstDimToSlice + 1, src_base_shape.size())) {
+      view_numel *= src_base_shape[i];
     }
 
-    int sliceOffset = src.storage_offset() / x;
+    int sliceOffset = src.storage_offset() / view_numel;
     // There are cases where both dimensions of a view can shrink
     // E.g: x = torch.randn((3,6))[1, 1:3]
-    int nextSliceOffset = src.storage_offset() % x;
+    int nextSliceOffset = src.storage_offset() % view_numel;
 
     [srcTensorNDArrayDesc sliceDimension:src_ndim_base - 1 - firstDimToSlice withSubrange:{static_cast<NSUInteger>(sliceOffset), src.sizes()[firstDimToSlice]}];
     if (nextSliceOffset) {
@@ -226,7 +226,7 @@ MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mp
   }
   else {
     int src_view_numel = 1;
-    for (int i = 0; i < src_ndim_view; i++) {
+    for (const auto i : c10::irange(src_ndim_view)) {
       src_view_numel *= src_view_shape[i];
     }
 
@@ -238,12 +238,12 @@ MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mp
     // E.g: base tensor [5, 7, 3], view tensor [7, 3] (storage_offset=21). We need to flatten [5, 7, 3] to [35, 3], then
     // we can slice directly into the first dimension based on the storage_offset
     uint32_t flattenedSlice = 1;
-    for (int i = 0; i < src_ndim_base - finalShapeSize + 1; i++) {
+    for (const auto i : c10::irange(src_ndim_base - finalShapeSize + 1)) {
       flattenedSlice *= src_base_shape[i];
     }
     mpsFinalShape[idx++] = [NSNumber numberWithInteger:flattenedSlice];
 
-    for (int i = src_ndim_base - finalShapeSize + 1; i < src_ndim_base; i++) {
+    for (const auto i : c10::irange(src_ndim_base - finalShapeSize + 1, src_ndim_base)) {
       mpsFinalShape[idx++] = [NSNumber numberWithInteger:src_base_shape[i]];
     }
 
