@@ -425,17 +425,21 @@ TORCH_IMPL_FUNC(mean_out_mps)
     reduction_out_mps(input_t, opt_dim, keepdim, dtype, output_t, MPSReductionType::MEAN, "mean_out_mps");
 }
 
-TORCH_IMPL_FUNC(norm_out_mps)
-(const Tensor& input_tensor,
- const OptionalScalarRef opt_p,
- IntArrayRef dim,
- bool keepdim,
- const Tensor& output_t)
-{
+void impl_func_norm_mps(
+    const Tensor& input_tensor,
+    const OptionalScalarRef& opt_p,
+    IntArrayRef dim,
+    bool keepdim,
+    optional<ScalarType> opt_dtype,
+    const Tensor& output_t) {
+
+  namespace native_mps = at::native::mps;
   if (input_tensor.numel() == 0)
     return;
 
   auto input_t = (input_tensor.sizes().size() == 0) ? input_tensor.view({1}) : input_tensor;
+  auto in_dtype = opt_dtype.value_or(input_tensor.scalar_type());
+  auto mps_input_dtype = native_mps::getMPSDataType(in_dtype);
 
   IntArrayRef input_shape = input_t.sizes();
 
@@ -444,7 +448,6 @@ TORCH_IMPL_FUNC(norm_out_mps)
     TORCH_CHECK(wrap_dim < input_shape.size(),
     "norm_out_mps: reduction dim must be in the range of input shape")
   }
-  namespace native_mps = at::native::mps;
 
   using CachedGraph = native_mps::MPSUnaryCachedGraph;
 
@@ -498,7 +501,13 @@ TORCH_IMPL_FUNC(norm_out_mps)
           MPSGraph* mpsGraph = native_mps::make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          MPSGraphTensor* inputTensor = native_mps::mpsGraphUnrankedPlaceHolder(mpsGraph, native_mps::getMPSDataType(input_t.scalar_type()));
+          MPSGraphTensor* inputTensor_ = native_mps::mpsGraphUnrankedPlaceHolder(mpsGraph, native_mps::getMPSDataType(input_t.scalar_type()));
+          MPSGraphTensor* inputTensor = inputTensor_;
+          if (opt_dtype.has_value()) {
+            inputTensor = [mpsGraph castTensor:inputTensor
+                                         toType:mps_input_dtype
+                                           name:@"any_all"];
+          }
 
           MPSGraphTensor *outputTensor;
 
@@ -507,7 +516,7 @@ TORCH_IMPL_FUNC(norm_out_mps)
               MPSGraphTensor *absoluteTensor = [mpsGraph absoluteWithTensor:inputTensor
                                                                        name:nil];
               MPSGraphTensor *powerValTensor = [mpsGraph constantWithScalar:p
-                                                                   dataType:native_mps::getMPSDataType(input_t.scalar_type())];
+                                                                   dataType:mps_input_dtype];
               MPSGraphTensor *powerTensor = [mpsGraph powerWithPrimaryTensor:absoluteTensor
                                                              secondaryTensor:powerValTensor
                                                                         name:nil];
@@ -537,10 +546,10 @@ TORCH_IMPL_FUNC(norm_out_mps)
                                                                        name:nil];
 
               MPSGraphTensor *powerValTensor = [mpsGraph constantWithScalar:p
-                                                                   dataType:native_mps::getMPSDataType(input_t.scalar_type())];
+                                                                   dataType:mps_input_dtype];
 
               MPSGraphTensor *reciprocalPowerValTensor = [mpsGraph constantWithScalar:reciprocal_p
-                                                                             dataType:native_mps::getMPSDataType(input_t.scalar_type())];
+                                                                             dataType:mps_input_dtype];
 
               MPSGraphTensor *powerTensor = [mpsGraph powerWithPrimaryTensor:absoluteTensor
                                                              secondaryTensor:powerValTensor
@@ -555,7 +564,7 @@ TORCH_IMPL_FUNC(norm_out_mps)
                                                          name:nil];
           }
 
-          newCachedGraph->inputTensor_ = inputTensor;
+          newCachedGraph->inputTensor_ = inputTensor_;
           newCachedGraph->outputTensor_ = outputTensor;
         }
         return newCachedGraph;
@@ -581,8 +590,26 @@ TORCH_IMPL_FUNC(norm_out_mps)
     };
 
     native_mps::runMPSGraph(stream, cachedGraph->graph(), feeds, results);
-
   }
+}
+
+TORCH_IMPL_FUNC(norm_out_mps)
+(const Tensor& self,
+ const OptionalScalarRef opt_p,
+ IntArrayRef dim,
+ bool keepdim,
+ const Tensor& result) {
+  impl_func_norm_mps(self, opt_p, dim, keepdim, c10::nullopt, result);
+}
+
+TORCH_IMPL_FUNC(norm_dtype_out_mps)
+(const Tensor& self,
+ const OptionalScalarRef opt_p,
+ IntArrayRef dim,
+ bool keepdim,
+ ScalarType dtype,
+ const Tensor& result) {
+  impl_func_norm_mps(self, opt_p, dim, keepdim, dtype, result);
 }
 
 Tensor std_var_common_impl_mps(
