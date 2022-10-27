@@ -27,6 +27,10 @@ MPSDevice* MPSDevice::getInstance() {
   return mps_device.get();
 }
 
+bool MPSDevice::macOS_13_0() {
+  return _macos_13_0_or_newer;
+}
+
 id<MTLFunction> MPSDevice::metalIndexingFunction(const std::string& kernel, MTLFunctionConstantValues* constantValues) {
   TORCH_INTERNAL_ASSERT_DEBUG_ONLY(_mtl_device);
   NSError* error = nil;
@@ -76,6 +80,8 @@ MPSDevice::MPSDevice(): _mtl_device(nil), _mtl_indexing_library(nil)  {
                                                                   name:)] == NO) {
     return;
   }
+
+  _macos_13_0_or_newer = ([mpsCD instancesRespondToSelector:@selector(sortWithTensor:axis:name:)] == YES);
   NSArray* devices = [MTLCopyAllDevices() autorelease];
   for (unsigned long i = 0 ; i < [devices count] ; i++) {
     id<MTLDevice>  device = devices[i];
