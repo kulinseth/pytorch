@@ -306,10 +306,16 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
                                                                                      name:nil];
           MPSGraphTensor *maskTensor = [mpsGraph castTensor:inputNotEqualToZeroTensor
                                                      toType:MPSDataTypeInt32
-                                                       name:nil];
+                                                       name:@"castToInt32"];
+
+          C10_CLANG_DIAGNOSTIC_PUSH()
+          #if C10_CLANG_HAS_WARNING("-Wobjc-method-access")
+          C10_CLANG_DIAGNOSTIC_IGNORE("-Wobjc-method-access")
+          #endif
           MPSGraphTensor *indicesTensor = [mpsGraph cumulativeSumWithTensor:maskTensor
                                                                        axis:0
                                                                        name:nil];
+          C10_CLANG_DIAGNOSTIC_POP()
           MPSGraphTensor *indicesMinusOneTensor = [mpsGraph subtractionWithPrimaryTensor:indicesTensor
                                                                         secondaryTensor:oneTensor
                                                                                    name:nil];
