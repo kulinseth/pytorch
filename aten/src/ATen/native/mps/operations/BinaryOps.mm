@@ -319,139 +319,26 @@ Tensor& floor_divide_mps_(Tensor& self, const Tensor& other) {
 
 TORCH_IMPL_FUNC(logaddexp_out_mps) (const Tensor& self, const Tensor& other, const Tensor& output)
 {
-      using namespace mps;
-      MPSStream* stream = getCurrentMPSStream();
-
-      if (&output != &self) {
-          output.resize_(self.sizes());;
-      }
-
-      // Derive from MPSCachedGraph
-      struct CachedGraph : public MPSCachedGraph
-      {
-        CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
-        MPSGraphTensor *inputTensor_ = nil;
-        MPSGraphTensor *otherTensor_ = nil;
-        MPSGraphTensor *outputTensor_ = nil;
-      };
-
-      MPSGraphCache* cache_ = MPSGraphCache::getInstance();
-
-      @autoreleasepool {
-        string key = "log_base_e_out_mps:" + getTensorsStringKey({self, other});
-        CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
-
-        if(!cachedGraph) {
-          MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
-            CachedGraph *newCachedGraph = nil;
-
-            @autoreleasepool {
-              MPSGraph* mpsGraph = make_mps_graph();
-              newCachedGraph = new CachedGraph(mpsGraph);
-              MPSGraphTensor* xTensor = mpsGraphRankedPlaceHolder(mpsGraph, self);
-              MPSGraphTensor* yTensor = mpsGraphRankedPlaceHolder(mpsGraph, other);
-              MPSGraphTensor* ePowXTensor = [mpsGraph exponentWithTensor:xTensor
-                                                                         name:nil];
-              MPSGraphTensor* ePowYTensor = [mpsGraph exponentWithTensor:yTensor
-                                                                         name:nil];
-              MPSGraphTensor* sumTensor = [mpsGraph additionWithPrimaryTensor:ePowXTensor
-                                                                secondaryTensor:ePowYTensor
-                                                                     name:nil];
-              MPSGraphTensor* outputTensor = [mpsGraph logarithmWithTensor:sumTensor
-                                                                     name:nil];
-
-              newCachedGraph->inputTensor_ = xTensor;
-              newCachedGraph->otherTensor_ = yTensor;
-              newCachedGraph->outputTensor_ = outputTensor;
-            }
-            return newCachedGraph;
-          });
-          cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
-        }
-
-        Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self);
-        Placeholder otherPlaceholder = Placeholder(cachedGraph->otherTensor_, other);
-        Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output);
-
-        NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
-          selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData(),
-          otherPlaceholder.getMPSGraphTensor() : otherPlaceholder.getMPSGraphTensorData()
-        };
-        NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
-          outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
-        };
-
-        runMPSGraph(stream, cachedGraph->graph(), feeds, results);
-      }
-
-    }
+  mps::BinaryOpBlock logaddexp_op_block = ^BinaryOpFn(cachedGraph, primaryCastTensor, secondaryCastTensor) {
+    MPSGraph* mpsGraph = cachedGraph->graph();
+    MPSGraphTensor* sumTensor = [mpsGraph additionWithPrimaryTensor:[mpsGraph exponentWithTensor:primaryCastTensor name:nil]
+                                                    secondaryTensor:[mpsGraph exponentWithTensor:secondaryCastTensor name:nil]
+                                                               name:nil];
+    return [mpsGraph logarithmWithTensor:sumTensor name:nil];
+  };
+  mps::binaryOpTensor(self, other, Scalar(1.0), output, "logaddexp_out_mps", logaddexp_op_block);
+}
 
 TORCH_IMPL_FUNC(logaddexp2_out_mps) (const Tensor& self, const Tensor& other, const Tensor& output)
 {
-      using namespace mps;
-      MPSStream* stream = getCurrentMPSStream();
-
-      if (&output != &self) {
-          output.resize_(self.sizes());;
-      }
-
-      // Derive from MPSCachedGraph
-      struct CachedGraph : public MPSCachedGraph
-      {
-        CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
-        MPSGraphTensor *inputTensor_ = nil;
-        MPSGraphTensor *otherTensor_ = nil;
-        MPSGraphTensor *outputTensor_ = nil;
-      };
-
-      MPSGraphCache* cache_ = MPSGraphCache::getInstance();
-
-      @autoreleasepool {
-        string key = "log_base_two_out_mps:" + getTensorsStringKey({self, other});
-        CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
-
-        if(!cachedGraph) {
-          MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
-            CachedGraph *newCachedGraph = nil;
-
-            @autoreleasepool {
-              MPSGraph* mpsGraph = make_mps_graph();
-              newCachedGraph = new CachedGraph(mpsGraph);
-              MPSGraphTensor* xTensor = mpsGraphRankedPlaceHolder(mpsGraph, self);
-              MPSGraphTensor* yTensor = mpsGraphRankedPlaceHolder(mpsGraph, other);
-              MPSGraphTensor* twoPowXTensor = [mpsGraph exponentBase2WithTensor:xTensor
-                                                                         name:nil];
-              MPSGraphTensor* twoPowYTensor = [mpsGraph exponentBase2WithTensor:yTensor
-                                                                         name:nil];
-              MPSGraphTensor* sumTensor = [mpsGraph additionWithPrimaryTensor:twoPowXTensor
-                                                                secondaryTensor:twoPowYTensor
-                                                                     name:nil];
-              MPSGraphTensor* outputTensor = [mpsGraph logarithmBase2WithTensor:sumTensor
-                                                                     name:nil];
-
-              newCachedGraph->inputTensor_ = xTensor;
-              newCachedGraph->otherTensor_ = yTensor;
-              newCachedGraph->outputTensor_ = outputTensor;
-            }
-            return newCachedGraph;
-          });
-          cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
-        }
-
-        Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self);
-        Placeholder otherPlaceholder = Placeholder(cachedGraph->otherTensor_, other);
-        Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output);
-
-        NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
-          selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData(),
-          otherPlaceholder.getMPSGraphTensor() : otherPlaceholder.getMPSGraphTensorData()
-        };
-        NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
-          outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
-        };
-
-        runMPSGraph(stream, cachedGraph->graph(), feeds, results);
-      }
+ mps::BinaryOpBlock logaddexp2_op_block = ^BinaryOpFn(cachedGraph, primaryCastTensor, secondaryCastTensor) {
+    MPSGraph* mpsGraph = cachedGraph->graph();
+    MPSGraphTensor* sumTensor = [mpsGraph additionWithPrimaryTensor:[mpsGraph exponentBase2WithTensor:primaryCastTensor name:nil]
+                                                    secondaryTensor:[mpsGraph exponentBase2WithTensor:secondaryCastTensor name:nil]
+                                                               name:nil];
+    return [mpsGraph logarithmBase2WithTensor:sumTensor name:nil];
+  };
+  mps::binaryOpTensor(self, other, Scalar(1.0), output, "logaddexp2_out_mps", logaddexp2_op_block);
 }
 
 } // namespace native
