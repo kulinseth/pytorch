@@ -211,17 +211,32 @@ static Tensor & masked_select_out_mps_impl(Tensor & result, const Tensor & self,
   return result;
 }
 
-Tensor& nonzero_out_mps(const Tensor& self, Tensor& out){
+static
+Tensor nonzero_fallback(const Tensor& self) {
+  TORCH_WARN_ONCE("MPS: nonzero op is supported natively starting from macOS 13.0. ",
+                  "Falling back on CPU. This may have performace implications.");
+
+  return at::nonzero(self.to("cpu")).clone().to("mps");
+}
+
+Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
+  if (!MPSDevice::getInstance()->macOS_13_0()) {
+      Tensor out_fallback = nonzero_fallback(self);
+      at::native::resize_output(out_, out_fallback.sizes());
+      out_.copy_(out_fallback.to("mps"));
+      return out_;
+  }
+
   using namespace mps;
   const uint32_t maxDimensions = 16;
 
   TORCH_CHECK(self.numel() < std::numeric_limits<int>::max(), "nonzero is not supported for tensors with more than INT_MAX elements, \
   file a support request");
-  TORCH_CHECK(out.dtype() == at::kLong, "Expected object of scalar type ", at::kLong, " as out, but got ", out.dtype());
-  TORCH_CHECK(self.device() == out.device(), "expected self and out to be on the same device, but got out on ",
-  out.device(), " and self on ", self.device());
+  TORCH_CHECK(out_.dtype() == at::kLong, "Expected object of scalar type ", at::kLong, " as out, but got ", out_.dtype());
+  TORCH_CHECK(self.device() == out_.device(), "expected self and out to be on the same device, but got out on ",
+  out_.device(), " and self on ", self.device());
   TORCH_CHECK(self.dim() <= maxDimensions, "nonzero is not supported for tensor with more than ", 16, " dimensions");
-  TORCH_CHECK(out.is_mps());
+  TORCH_CHECK(out_.is_mps());
 
   MPSStream *stream = getCurrentMPSStream();
   struct CachedGraph : public MPSCachedGraph
@@ -234,9 +249,21 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out){
 
   int64_t total_nonzero = at::count_nonzero(self).item<int64_t>();
   int64_t nDim = self.dim();
-  at::native::resize_output(out, {total_nonzero, nDim});
-  if (out.numel() == 0) {
-    return out;
+  at::native::resize_output(out_, {total_nonzero, nDim});
+  if (out_.numel() ==  0) {
+    return out_;
+  }
+
+  bool contiguous_output = (out_.is_contiguous() && !out_.is_view());
+  Tensor out = out_;
+  if (!contiguous_output) {
+    out = at::native::empty_mps(
+           out_.sizes(),
+           out_.scalar_type(),
+           c10::nullopt,
+           kMPS,
+           c10::nullopt,
+           c10::nullopt);
   }
 
   int64_t _apparentInputShape = 1;
@@ -332,8 +359,8 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out){
     }
 
     Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self, apparentInputShape);
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, out, apparentOutputShape);
-    Placeholder scatterPlaceholder = Placeholder(cachedGraph->scatterDataTensor_, out, apparentOutputShape);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, contiguous_output ? out_ : out, apparentOutputShape);
+    Placeholder scatterPlaceholder = Placeholder(cachedGraph->scatterDataTensor_, contiguous_output ? out_ : out, apparentOutputShape);
 
     // Create dictionary of inputs and outputs
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
@@ -346,12 +373,19 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out){
     };
 
     runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+    if (!contiguous_output) {
+      out_.copy_(out);
+    }
   }
 
-  return out;
+  return out_;
 }
 
 Tensor nonzero_mps(const Tensor& self){
+  if (!MPSDevice::getInstance()->macOS_13_0()) {
+    return nonzero_fallback(self);
+  }
+
   Tensor out = at::empty({0}, self.options().dtype(kLong));
   return nonzero_out_mps(self, out);
 }

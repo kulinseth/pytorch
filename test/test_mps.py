@@ -6544,29 +6544,28 @@ class TestAdvancedIndexing(TestCase):
         self.assertEqual(traced_nontuple, expected_nontuple)
         self.assertEqual(traced_out, expected_nontuple)
 
-    # TODO: Fix slice [:, ::2]
-    # def test_nonzero_discontiguous(self):
-    #     device = "mps"
-    #     shape = (4, 4)
-    #     tensor = torch.randint(2, shape, device=device)
-    #     tensor_nc = torch.empty(shape[0], shape[1] * 2, device=device)[:, ::2].copy_(tensor)
-    #     dst1 = tensor.nonzero(as_tuple=False)
-    #     dst2 = tensor_nc.nonzero(as_tuple=False)
-    #     self.assertEqual(dst1, dst2, atol=0, rtol=0)
-    #     dst3 = torch.empty_like(dst1)
-    #     data_ptr = dst3.data_ptr()
-    #     # expect dst3 storage to be reused
-    #     torch.nonzero(tensor, out=dst3)
-    #     self.assertEqual(data_ptr, dst3.data_ptr())
-    #     self.assertEqual(dst1, dst3, atol=0, rtol=0)
-    #     # discontiguous out
-    #     dst4 = torch.empty(dst1.size(0), dst1.size(1) * 2, dtype=torch.long, device=device)[:, ::2]
-    #     data_ptr = dst4.data_ptr()
-    #     strides = dst4.stride()
-    #     torch.nonzero(tensor, out=dst4)
-    #     self.assertEqual(data_ptr, dst4.data_ptr())
-    #     self.assertEqual(dst1, dst4, atol=0, rtol=0)
-    #     self.assertEqual(strides, dst4.stride())
+    def test_nonzero_discontiguous(self):
+        device = "mps"
+        shape = (4, 4)
+        tensor = torch.randint(2, shape, device=device)
+        tensor_nc = torch.empty(shape[0], shape[1] * 2, device=device)[:, ::2].copy_(tensor)
+        dst1 = tensor.nonzero(as_tuple=False)
+        dst2 = tensor_nc.nonzero(as_tuple=False)
+        self.assertEqual(dst1, dst2, atol=0, rtol=0)
+        dst3 = torch.empty_like(dst1)
+        data_ptr = dst3.data_ptr()
+        # expect dst3 storage to be reused
+        torch.nonzero(tensor, out=dst3)
+        self.assertEqual(data_ptr, dst3.data_ptr())
+        self.assertEqual(dst1, dst3, atol=0, rtol=0)
+        # discontiguous out
+        dst4 = torch.empty(dst1.size(0), dst1.size(1) * 2, dtype=torch.long, device=device)[:, ::2]
+        data_ptr = dst4.data_ptr()
+        strides = dst4.stride()
+        torch.nonzero(tensor, out=dst4)
+        self.assertEqual(data_ptr, dst4.data_ptr())
+        self.assertEqual(dst1, dst4, atol=0, rtol=0)
+        self.assertEqual(strides, dst4.stride())
 
     def test_nonzero_non_diff(self):
         device = "mps"
@@ -7730,7 +7729,8 @@ class TestConsistency(TestCase):
         'logical_and': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'logical_or': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'logical_xor': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'where': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8']}
+        'where': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'nonzero': ['f32', 'i16', 'i32', 'i64']}
 
 
     ALLOWLIST_OP_GRAD = {
@@ -7953,6 +7953,8 @@ class TestConsistency(TestCase):
         'slice_scatter': [torch.uint8],
         'square': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8],  # moved from section below
 
+        # count_nonzero returns wrong results for these dtypes
+        'nonzero': [torch.uint8, torch.float16],
 
         # ALLOW_LIST doesn't know about variants
         'nn.functional.padconstant': None,
@@ -8007,7 +8009,6 @@ class TestConsistency(TestCase):
         'trapezoid': None,
         'eq': None,
         'mul': None,
-        'nonzero': None,
         'inner': None,
         'take_along_dim': None,
 
