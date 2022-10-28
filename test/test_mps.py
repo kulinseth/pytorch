@@ -8072,8 +8072,8 @@ class TestConsistency(TestCase):
         'sigmoid': [torch.int64],
         'slice_scatter': [torch.uint8],
         'square': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8],  # moved from section below
-
-        # count_nonzero returns wrong results for these dtypes
+        'unique': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'unique_consecutive': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nonzero': [torch.uint8, torch.float16],
 
         # ALLOW_LIST doesn't know about variants
