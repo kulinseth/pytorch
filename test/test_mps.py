@@ -7566,6 +7566,7 @@ class TestConsistency(TestCase):
         'diagonal_scatter': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64'],
         'diff': ['f16', 'f32', 'i16', 'i32', 'i64'],
         'dist': ['f32'],
+        'div': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'dot': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'equal': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'erf': ['b8', 'f32', 'i16', 'i32', 'u8'],
@@ -7610,6 +7611,7 @@ class TestConsistency(TestCase):
         'matmul': ['f32'],
         'mm': ['f32'],
         'mv': ['f32'],
+        'mul': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'neg': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.adaptive_max_pool1d': ['f32'],
         'nn.functional.adaptive_max_pool2d': ['f32'],
@@ -7706,7 +7708,7 @@ class TestConsistency(TestCase):
         'square': ['f16', 'f32'],
         'squeeze': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'stack': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'sub': ['f32', 'i16', 'i32', 'i64'],
+        'sub': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'sum_to_size': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'svd': ['f32'],
         't': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -7720,7 +7722,7 @@ class TestConsistency(TestCase):
         'tril_indices': ['i32', 'i64'],
         'triu': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'triu_indices': ['i32', 'i64'],
-        'true_divide': ['b8', 'f16', 'f32', 'i16', 'u8'],
+        'true_divide': ['b8', 'f16', 'f32', 'i16', 'i32', 'u8'],
         'trunc': ['f32'],
         'unbind': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'unflatten': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8015,7 +8017,6 @@ class TestConsistency(TestCase):
         'log_softmaxdtype': None,
         'trapezoid': None,
         'eq': None,
-        'mul': None,
         'inner': None,
         'take_along_dim': None,
 
@@ -8063,9 +8064,6 @@ class TestConsistency(TestCase):
         'int': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int64', 'torch.uint8'],
         'linalg.eigvals': ['torch.float32'],
         'linalg.multi_dot': ['torch.float32'],
-        'logical_and': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        'logical_or': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        'logical_xor': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'logsumexp': ['torch.bool', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'matmul': ['torch.uint8'],
         'mean': ['torch.float16', 'torch.float32'],
@@ -8103,7 +8101,6 @@ class TestConsistency(TestCase):
         'scatter_add': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'scatter': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'short': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        'sub': ['torch.float16', 'torch.uint8'],
         'sum': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'tan': ['torch.float32'],
         'tensor_split': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
@@ -8179,7 +8176,7 @@ class TestConsistency(TestCase):
                 if op.name == "nn.functional.conv2d" and dtype == torch.float32:
                     atol = 1e-4
                     rtol = 3e-5
-                elif op.name == "add" and dtype == torch.float16:
+                elif (op.name == "add" or op.name == "sub") and dtype == torch.float16:
                     atol = 1e-2
                     rtol = 1e-2
                 else:
