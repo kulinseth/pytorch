@@ -47,8 +47,13 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
       cachedGraph = tmpCachedGraph->as<MPSUnaryCachedGraph>();
     }
 
-    Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self);
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output);
+    bool gatherTensorData = true;
+    if (!output.is_contiguous() || output.is_view()) {
+      gatherTensorData = false;
+    }
+
+    Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self, /*mpsShape=*/nullptr, gatherTensorData);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output, /*mpsShape=*/nullptr, false);
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
       selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData()
     };
