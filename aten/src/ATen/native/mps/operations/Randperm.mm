@@ -20,13 +20,17 @@ Tensor& randperm_out_mps(int64_t n, c10::optional<Generator> generator, Tensor& 
   TORCH_CHECK(n >= 0, "n must be non-negative, got", n);
   TORCH_CHECK(!generator.has_value() || (generator.has_value() && result.device() == generator->device()), "Expected a '", result.device(), "' generator device but found '", generator->device(), "'");
   check_supported_max_int_with_precision(n, result);
+
   result.resize_({n});
+
+  if (n == 0) {
+    return result;
+  }
 
   auto uniform_mps = at::native::empty_mps(result.sizes(), kFloat, c10::nullopt, kMPS);
   uniform_mps = at::uniform(uniform_mps, 0.0, 1.0, generator);
 
   MPSStream *stream = getCurrentMPSStream();
-
   struct CachedGraph : public MPSCachedGraph
   {
     CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
@@ -49,9 +53,15 @@ Tensor& randperm_out_mps(int64_t n, c10::optional<Generator> generator, Tensor& 
           newCachedGraph = new CachedGraph(mpsGraph);
 
           newCachedGraph->uniformTensor_ = mpsGraphRankedPlaceHolder(mpsGraph, uniform_mps);
-          newCachedGraph->outputTensor_ = [mpsGraph argSortWithTensor:newCachedGraph->uniformTensor_
-                                                                 axis:0
-                                                                 name:nil];
+          MPSGraphTensor *outputTensor = [mpsGraph argSortWithTensor:newCachedGraph->uniformTensor_
+                                                               axis:0
+                                                               name:nil];
+          if (result.scalar_type() != kInt) {
+            outputTensor = [mpsGraph castTensor:outputTensor
+                                         toType:getMPSDataType(result.scalar_type())
+                                           name:@"castOutput"];
+          }
+          newCachedGraph->outputTensor_ = outputTensor;
         }
         return newCachedGraph;
       });
@@ -61,7 +71,7 @@ Tensor& randperm_out_mps(int64_t n, c10::optional<Generator> generator, Tensor& 
     Placeholder uniformPlaceholder = Placeholder(cachedGraph->uniformTensor_, uniform_mps);
     Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result);
 
-  // Create dictionary of inputs and outputs
+    // Create dictionary of inputs and outputs
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
       uniformPlaceholder.getMPSGraphTensor() : uniformPlaceholder.getMPSGraphTensorData()
     };
