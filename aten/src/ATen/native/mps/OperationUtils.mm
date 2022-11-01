@@ -87,6 +87,30 @@ std::string getMPSTypeString(ScalarType scalar_type) {
   }
 }
 
+std::string scalarToMetalTypeString(const c10::ScalarType& scalar_type) {
+  switch (scalar_type) {
+    case ScalarType::Float:
+      return "float";
+    case ScalarType::Half:
+      return "half";
+    case ScalarType::Int:
+      return "int";
+    case ScalarType::Long:
+      return "long";
+    case ScalarType::Short:
+      return "short";
+    case ScalarType::Char:
+      return "char";
+    case ScalarType::Byte:
+      return "uchar";
+    case ScalarType::Bool:
+      return "bool";
+    default:
+      TORCH_CHECK(false, "Undefined type ", scalar_type);
+      return "Undefined";
+  }
+}
+
 std::string getMPSShapeString(MPSShape* shape) {
     std::string str;
     for(NSNumber *elem in shape) {
