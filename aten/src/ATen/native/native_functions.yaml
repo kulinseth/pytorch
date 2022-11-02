@@ -1777,6 +1777,7 @@
   device_check: NoCheck   # TensorIterator
   dispatch:
     CPU, CUDA: cumsum_out
+    MPS: cumsum_out_mps
 
 - func: cumsum.dimname(Tensor self, Dimname dim, *, ScalarType? dtype=None) -> Tensor
   device_check: NoCheck   # TensorIterator
