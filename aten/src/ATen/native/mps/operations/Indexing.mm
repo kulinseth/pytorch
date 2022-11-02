@@ -214,7 +214,7 @@ static Tensor & masked_select_out_mps_impl(Tensor & result, const Tensor & self,
 static
 Tensor nonzero_fallback(const Tensor& self) {
   TORCH_WARN_ONCE("MPS: nonzero op is supported natively starting from macOS 13.0. ",
-                  "Falling back on CPU. This may have performace implications.");
+                  "Falling back on CPU. This may have performance implications.");
 
   return at::nonzero(self.to("cpu")).clone().to("mps");
 }
