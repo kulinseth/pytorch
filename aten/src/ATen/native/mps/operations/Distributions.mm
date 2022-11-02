@@ -352,9 +352,10 @@ Tensor& randperm_out_mps(int64_t n, c10::optional<Generator> generator, Tensor& 
     return result;
   }
 
-  using namespace mps;
   TORCH_CHECK(n >= 0, "n must be non-negative, got", n);
-  TORCH_CHECK(!generator.has_value() || (generator.has_value() && result.device() == generator->device()), "Expected a '", result.device(), "' generator device but found '", generator->device(), "'");
+  TORCH_CHECK(!generator.has_value() ||
+             (generator.has_value() && result.device() == generator->device()),
+             "Expected a '", result.device(), "' generator device but found '", generator->device(), "'");
   check_supported_max_int_with_precision(n, result);
 
   result.resize_({n});
@@ -369,15 +370,15 @@ Tensor& randperm_out_mps(int64_t n, c10::optional<Generator> generator, Tensor& 
                                                            name:nil];
     if (result.scalar_type() != kInt) {
       argsortTensor = [mpsGraph castTensor:argsortTensor
-                                    toType:getMPSDataType(result.scalar_type())
+                                    toType:mps::getMPSDataType(result.scalar_type())
                                       name:@"castOutput"];
     }
     return argsortTensor;
   };
 
-  return mps::random_mps_impl<double>(result, 0.0, 1.0, c10::nullopt, c10::nullopt,
+  return mps::random_mps_impl<int64_t>(result, 0.0, 1.0, c10::nullopt, c10::nullopt,
                                       MPSGraphRandomDistributionUniform, generator,
-                                      "ranperm_out_mps:" + getTensorsStringKey({result}), random_op_block);
+                                      "ranperm_out_mps:" + mps::getTensorsStringKey({result}), random_op_block);
 }
 
 Tensor& multinomial_with_replacement_mps_kernel(
