@@ -345,7 +345,7 @@ Tensor& exponential_mps_(Tensor& self, double lambda, c10::optional<Generator> g
 Tensor& randperm_out_mps(int64_t n, c10::optional<Generator> generator, Tensor& result) {
   if (!MPSDevice::getInstance()->macOS_13_0()) {
     TORCH_WARN_ONCE("MPS: randperm op is supported natively starting from macOS 13.0. ",
-                    "Falling back on CPU. This may have performace implications.");
+                    "Falling back on CPU. This may have performance implications.");
 
     result = result.to("cpu");
     result = at::randperm_out(result, n).to("mps");
