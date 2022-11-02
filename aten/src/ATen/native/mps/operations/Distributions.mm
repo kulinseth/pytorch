@@ -367,7 +367,6 @@ Tensor& randperm_out_mps(int64_t n, c10::optional<Generator> generator, Tensor& 
     MPSGraphTensor* argsortTensor = [mpsGraph argSortWithTensor:randomTensor
                                                            axis:0
                                                            name:nil];
-
     if (result.scalar_type() != kInt) {
       argsortTensor = [mpsGraph castTensor:argsortTensor
                                     toType:getMPSDataType(result.scalar_type())
@@ -378,7 +377,7 @@ Tensor& randperm_out_mps(int64_t n, c10::optional<Generator> generator, Tensor& 
 
   return mps::random_mps_impl<double>(result, 0.0, 1.0, c10::nullopt, c10::nullopt,
                                       MPSGraphRandomDistributionUniform, generator,
-                                      "exponential_mps_:" + getTensorsStringKey({result}), random_op_block);
+                                      "ranperm_out_mps:" + getTensorsStringKey({result}), random_op_block);
 }
 
 Tensor& multinomial_with_replacement_mps_kernel(
