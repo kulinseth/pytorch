@@ -28,8 +28,8 @@ static std::string getUniqueKey(const ScalarType& dtype, const IntArrayRef& base
 }
 
 // dim arg not supported when non consecutive, ie sorted
-NSArray<MPSGraphTensor*> *buildUniqueGraph(UniqueCachedGraph *uniqueGraph, const bool return_inverse, const bool return_counts, const bool consecutive, c10::optional<int64_t> dimOpt) {
-  int64_t dim = dimOpt.has_value() ? dimOpt.value() : 0;
+NSArray<MPSGraphTensor*> *buildUniqueGraph(const Tensor& self, UniqueCachedGraph *uniqueGraph, const bool return_inverse, const bool return_counts, const bool consecutive, c10::optional<int64_t> dimOpt) {
+  int64_t dim = dimOpt.has_value() ? maybe_wrap_dim(dimOpt.value(), self.dim()) : 0;
 
   MPSGraph *graph = uniqueGraph->graph();
   MPSGraphTensor *inputTensor = uniqueGraph->inputTensor_;
@@ -213,12 +213,9 @@ static UniqueCachedGraph* getUniqueGraph(const Tensor& self, const bool return_i
            // Workaround for MPSShaderLibrary bug
            // TODO: Remove once https://github.com/pytorch/pytorch/issues/82305 is resolved
            auto inputType = getMPSScalarType(self.scalar_type());
-           if (inputType ==  MPSDataTypeUInt8) {
-               inputType =  MPSDataTypeInt8;
-           }
            newCachedGraph->inputTensor_ = mpsGraphRankedPlaceHolder(mpsGraph, inputType, getMPSShape(self.sizes()));
 
-           NSArray<MPSGraphTensor *> *outputTensors = buildUniqueGraph(newCachedGraph, return_inverse, return_counts, consecutive, dim);
+           NSArray<MPSGraphTensor *> *outputTensors = buildUniqueGraph(self, newCachedGraph, return_inverse, return_counts, consecutive, dim);
 
            newCachedGraph->outputTensor_ = outputTensors[0];
            newCachedGraph->inverseIndicesTensor_ = outputTensors[1];
@@ -234,7 +231,8 @@ static UniqueCachedGraph* getUniqueGraph(const Tensor& self, const bool return_i
 }
 
 void runUniqueGraph(UniqueCachedGraph *uniqueGraph, const Tensor& input, Tensor& output,
-                    Tensor& inverse_indices, Tensor& counts, Tensor& length){
+                    Tensor& inverse_indices, Tensor& counts, Tensor& length,
+                    bool return_inverse, bool return_counts){
   Placeholder inputPlaceholder = Placeholder(uniqueGraph->inputTensor_, input);
   NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
     inputPlaceholder.getMPSGraphTensor() : inputPlaceholder.getMPSGraphTensorData(),
@@ -247,12 +245,12 @@ void runUniqueGraph(UniqueCachedGraph *uniqueGraph, const Tensor& input, Tensor&
               forKey:outputPlaceholder.getMPSGraphTensor()];
   [results setObject:lengthPlaceholder.getMPSGraphTensorData()
               forKey:lengthPlaceholder.getMPSGraphTensor()];
-  if (inverse_indices.sizes().size() != 0) {
+  if (return_inverse) {
     Placeholder inverseIndicesPlaceholder = Placeholder(uniqueGraph->inverseIndicesTensor_, inverse_indices);
     [results setObject:inverseIndicesPlaceholder.getMPSGraphTensorData()
                 forKey:inverseIndicesPlaceholder.getMPSGraphTensor()];
   }
-  if (counts.sizes().size() != 0) {
+  if (return_counts) {
     Placeholder countsPlaceholder = Placeholder(uniqueGraph->countsTensor_, counts);
     [results setObject:countsPlaceholder.getMPSGraphTensorData()
                 forKey:countsPlaceholder.getMPSGraphTensor()];
@@ -276,10 +274,12 @@ _unique_impl_mps(const Tensor& self, const bool return_inverse, const bool retur
   IntArrayRef outputShape = IntArrayRef(totalElems);
   IntArrayRef inverseIndicesShape = input.sizes();
   IntArrayRef countsShape = IntArrayRef(totalElems);
+  int64_t dim = dimOpt.has_value() ? maybe_wrap_dim(dimOpt.value(), self.dim()) : 0;
+
   if (dimOpt.has_value()) {
     outputShape = input.sizes();
-    inverseIndicesShape = IntArrayRef(input.sizes()[dimOpt.value()]);
-    countsShape = IntArrayRef(input.sizes()[dimOpt.value()]);
+    inverseIndicesShape = IntArrayRef(input.sizes()[dim]);
+    countsShape = IntArrayRef(input.sizes()[dim]);
   }
   if (!return_inverse)
     inverseIndicesShape = {};
@@ -291,15 +291,17 @@ _unique_impl_mps(const Tensor& self, const bool return_inverse, const bool retur
   Tensor counts = at::native::empty_mps(countsShape, ScalarType::Long, c10::nullopt, kMPS);
   Tensor length = at::native::empty_mps({1}, ScalarType::Int, c10::nullopt, kMPS);
 
-  if (input.numel() == 0)
+  if (input.numel() == 0) {
     return std::make_tuple(output, inverse_indices, counts);
+  }
 
   mps::UniqueCachedGraph *uniqueGraph = mps::getUniqueGraph(input, return_inverse, return_counts, consecutive, dimOpt);
-  mps::runUniqueGraph(uniqueGraph, input, output, inverse_indices, counts, length);
+  mps::runUniqueGraph(uniqueGraph, input, output, inverse_indices, counts, length, return_inverse, return_counts);
 
   int64_t lengthScalar = length.item<int64_t>() + 1; // length actually holds max index, add 1
-  int64_t dim = dimOpt.has_value() ? dimOpt.value() : 0;
-  output = at::slice(output, dim, 0, lengthScalar);
+  if (output.sizes().size() != 0) {
+    output = at::slice(output, dim, 0, lengthScalar);
+  }
   if (return_counts)
     counts = at::slice(counts, 0, 0, lengthScalar);
 
