@@ -41,7 +41,7 @@ from torch.testing._internal.common_nn import NNTestCase
 import numpy as np
 import torch
 import torch.utils._pytree as pytree
-from itertools import product
+from itertools import permutations, product
 
 
 # Copied from `test_ops.py` for the purposes of duplicating `test_numpy_ref`
