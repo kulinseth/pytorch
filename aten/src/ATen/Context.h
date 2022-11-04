@@ -132,8 +132,9 @@ class TORCH_API Context {
 
   // Note [Disabling Fused SDP Kernels]
   // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-  // Flash SDP kernels are enabled by default. However, they can be disabled
-  // by setting at::globalContext().setUserEnabledFlashSDP(false) flag.
+  // Flash and Memory Efficient SDP kernels are enabled by default.
+  // However, they can be disabled by setting
+  // at::globalContext().setUserEnabledFlashSDP(false) flag.
   // This is useful for debugging purposes. For example, if you want to
   // compare the performance of the flash SDP kernels with the unfused
   // kernel, you can disable the flash SDP kernels. By disabling
@@ -142,6 +143,9 @@ class TORCH_API Context {
   // at::globalContext().setUserEnabledMathSDP(false) flag.
   void setSDPUseFlash(bool);
   bool userEnabledFlashSDP() const;
+
+  void setSDPUseMemEfficient(bool);
+  bool userEnabledMemEfficientSDP() const;
 
   void setSDPUseMath(bool);
   bool userEnabledMathSDP() const;
@@ -274,6 +278,7 @@ class TORCH_API Context {
   bool _deterministic_algorithms = false;
   bool _deterministic_algorithms_warn_only = false;
   bool enabled_flashSDP = true;
+  bool enabled_mem_efficientSDP = true;
   bool enabled_mathSDP = true;
 #ifdef USE_ROCM
   bool benchmark_cudnn = true;

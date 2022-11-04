@@ -87,6 +87,30 @@ std::string getMPSTypeString(ScalarType scalar_type) {
   }
 }
 
+std::string scalarToMetalTypeString(const c10::ScalarType& scalar_type) {
+  switch (scalar_type) {
+    case ScalarType::Float:
+      return "float";
+    case ScalarType::Half:
+      return "half";
+    case ScalarType::Int:
+      return "int";
+    case ScalarType::Long:
+      return "long";
+    case ScalarType::Short:
+      return "short";
+    case ScalarType::Char:
+      return "char";
+    case ScalarType::Byte:
+      return "uchar";
+    case ScalarType::Bool:
+      return "bool";
+    default:
+      TORCH_CHECK(false, "Undefined type ", scalar_type);
+      return "Undefined";
+  }
+}
+
 std::string getMPSShapeString(MPSShape* shape) {
     std::string str;
     for(NSNumber *elem in shape) {
@@ -166,13 +190,23 @@ void printTensorNDArray(const Tensor& t) {
   C10_CLANG_DIAGNOSTIC_POP()
 }
 
-Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src, MPSShape *mpsShape) : _tensor(src)
+MPSNDArray* ndArrayFromTensor(const Tensor& tensor, MPSShape *shape, MPSDataType mpsType)
+{
+  id<MTLBuffer> buffer = getMTLBufferStorage(tensor);
+  MPSGraphTensorData* tmpGraphTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer:buffer
+                                                                                    shape:shape
+                                                                                 dataType:mpsType] autorelease];
+
+  return [tmpGraphTensorData mpsndarray];
+}
+
+Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src, MPSShape *mpsShape, bool gatherTensorData) : _tensor(src)
 {
   TORCH_CHECK(src.is_mps(), "Placeholder storage has not been allocated on MPS device!");
   // extract the pointer to MTLBuffer from the Tensor's storage
   id<MTLBuffer> srcBuf = getMTLBufferStorage(src);
   // a view tensor could be contiguous (e.g., slice ops) or non-contiguous (e.g., transpose())
-  if (src.is_view() || !src.is_contiguous()) {
+  if (!src.is_contiguous() && gatherTensorData) {
      Tensor emptyShell = Tensor();
     // use "_tensor" from Placeholder to retain view's output during its usage in other ops
     _tensor = gatherViewTensor(src, emptyShell);
@@ -183,18 +217,25 @@ Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src, MPSS
     }
     srcBuf = getMTLBufferStorage(_tensor);
   }
+
   // tensor.numel() could be zero, but tensor is valid as long as the buffer size is non-zero.
   // if buffer size is zero in here, it's not a user error. It could be a missing check for
   // tensor.numel() == 0 in our internal implementations of ops.
   TORCH_INTERNAL_ASSERT([srcBuf length] > 0, "Placeholder tensor is empty!");
-
   const MPSDataType mpsDataType = _tensor.dim() == 0 ? getMPSScalarType(_tensor.scalar_type()) : getMPSDataType(_tensor.scalar_type());
-  if (!mpsShape)
-    mpsShape = getMPSShape(_tensor);
 
-  _value = [[[MPSGraphTensorData alloc] initWithMTLBuffer:srcBuf
-                                                    shape:mpsShape
-                                                 dataType:mpsDataType] autorelease];
+  if (src.is_view() && src.is_contiguous() && src.storage_offset()) {
+    _value = getMPSGraphTensorDataForView(src, mpsShape, mpsDataType);
+  } else {
+    if (!mpsShape) {
+      mpsShape = getMPSShape(_tensor);
+    }
+
+    _value = [[[MPSGraphTensorData alloc] initWithMTLBuffer:srcBuf
+                                                      shape:mpsShape
+                                                   dataType:mpsDataType] autorelease];
+  }
+
   TORCH_INTERNAL_ASSERT(_value);
   _placeholder = mpsGraphTensor;
 }

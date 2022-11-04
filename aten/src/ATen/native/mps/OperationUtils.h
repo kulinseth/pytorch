@@ -43,12 +43,14 @@ MPSDataType getMPSDataType(ScalarType scalar_type);
 MPSDataType getMPSScalarType(ScalarType scalar_type);
 MPSScalar   getMPSScalar(const Scalar& scalar, ScalarType type);
 std::string getMPSTypeString(ScalarType scalar_type);
+std::string scalarToMetalTypeString(const c10::ScalarType& scalar_type);
 std::string getMPSShapeString(MPSShape* shape);
 std::string getTensorsStringKey(const TensorList& tensors, bool use_scalar_value = false);
 std::string getArrayRefString(const IntArrayRef s);
 // use has_storage() on the returned tensor to determine if src actually is a view
 Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst);
 Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output, id<MTLBuffer> updatesBuffer = nil);
+MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mpsShape, const MPSDataType mpsDataType);
 
 MPSShape* getMPSShape(const Tensor& t);
 MPSShape* getMPSShape(IntArrayRef sizes);
@@ -62,7 +64,7 @@ class Placeholder {
  public:
   Placeholder() : _placeholder(nullptr), _value(nullptr), _tensor(Tensor()) {}
   Placeholder(MPSGraphTensor* mpsGraphTensor) : _placeholder(mpsGraphTensor), _value(nullptr), _tensor(Tensor()) {}
-  Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& self, MPSShape *mpsShape = nullptr);
+  Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& self, MPSShape *mpsShape = nullptr, bool gatherTensorData = true);
   MPSGraphTensor* getMPSGraphTensor() {
     return _placeholder;
   }
@@ -87,6 +89,7 @@ MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, MPSScalar&
 
 MPSGraph* make_mps_graph();
 void printTensorNDArray(const Tensor& t);
+MPSNDArray* ndArrayFromTensor(const Tensor& tensor, MPSShape *shape, MPSDataType mpsType);
 
 MPSGraphTensor* mpsGraphUnrankedPlaceHolder(MPSGraph *mpsGraph, MPSDataType dataType);
 MPSGraphTensor* mpsGraphRankedPlaceHolder(MPSGraph *mpsGraph, MPSDataType dataType, MPSShape* mpsShape);
