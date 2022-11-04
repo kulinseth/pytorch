@@ -8657,6 +8657,7 @@ class TestConsistency(TestCase):
 
         # Functions that hard crash
         'nn.functional.nll_loss': [torch.float32],
+        'nn.functional.padreflect': [torch.float32], 'nn.functional.padreplicate': [torch.float32],
         'std': [torch.float16],
         'stft': [torch.float32], 'var': [torch.float16],
         # + forward when requires_grad=True or running backward
