@@ -472,8 +472,8 @@ void impl_func_norm_mps(
   @autoreleasepool {
     NSString* ns_key = [[axes valueForKey:@"description"] componentsJoinedByString:@","];
       string keepdim_info = (keepdim) ? "keepdim=1" : "keepdim=0";
-      string op_key = cdist ? native_mps::getTensorsStringKey({input_tensor, other_tensor}) : native_mps::getMPSTypeString(input_t.scalar_type());
-      string key =  string("norm_out_mps:") + [ns_key UTF8String] + ":" + op_key + ":p" + to_string(p) + ":" + keepdim_info;
+      string tensor_key = cdist ? native_mps::getTensorsStringKey({input_tensor, other_tensor}) : mps::getTensorsStringKey({input_t});
+      string key =  string("norm_out_mps:") + [ns_key UTF8String] + ":" + tensor_key + ":p" + to_string(p) + ":" + keepdim_info;
 
     auto cachedGraph = cache_->LookUpAs<CachedGraph>(key);
 
@@ -489,8 +489,7 @@ void impl_func_norm_mps(
           if (cdist) {
             newCachedGraph->inputTensor_ = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, input_tensor);
             newCachedGraph->otherTensor_ = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, other_tensor);
-          }
-          else {
+          } else {
             newCachedGraph->inputTensor_ = native_mps::mpsGraphUnrankedPlaceHolder(mpsGraph, native_mps::getMPSDataType(input_t.scalar_type()));
           }
 

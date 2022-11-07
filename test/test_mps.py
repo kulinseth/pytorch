@@ -435,18 +435,6 @@ class TestMPS(TestCase):
 
         _test_euclidean_large_cdist((2000, 5))
 
-    # [MPS TODO]: requires `aten::_cdist_backward``
-    # def test_cdist_grad_p_lt_1_no_nan(self, device="mps"):
-    #     for p in [0.99, 0.7, 0.5, 0.1, 0.01]:
-    #         x = torch.randn(1, 2, device=device)
-    #         y = x.clone().detach() + torch.tensor([[1., 0.]], device=device)
-    #         x.requires_grad = True
-    #         y.requires_grad = True
-    #         result = torch.cdist(x, y, p=p)
-    #         result.backward(torch.ones_like(result))
-    #         self.assertFalse(torch.isnan(x.grad).any())
-    #         self.assertFalse(torch.isnan(y.grad).any())
-
     def test_cdist_same_inputs(self, device="mps"):
         # Test to detect issues in cdist gradient calculation
         # When the distances are 0
