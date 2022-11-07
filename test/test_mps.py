@@ -7963,7 +7963,7 @@ class TestConsistency(TestCase):
         'nn.functional.upsample_bilinear': ['f32'],
         'norm': ['f32', 'f16'],
         'positive': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'pow': ['f16', 'f32'],
+        'pow': ['f16'],
         'rad2deg': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'real': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'reciprocal': ['b8', 'f16', 'f32', 'i16', 'i32', 'u8'],
@@ -8358,7 +8358,7 @@ class TestConsistency(TestCase):
         'nn.functional.triplet_margin_with_distance_loss': ['torch.uint8'],
         'nn.functional.upsample_nearest': ['torch.float32'],
         'normal': ['torch.float16', 'torch.float32', 'torch.float16', 'torch.float32'],
-        'pow': ['torch.int16', 'torch.int32', 'torch.uint8'], # pow() with integer input may return wrong results
+        'pow': ['torch.float32', 'torch.int16', 'torch.int32', 'torch.uint8'], # pow() with integer input may return wrong results
         'prod': ['torch.bool', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'put': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'rand_like': ['torch.float16', 'torch.float32'],
@@ -8439,10 +8439,10 @@ class TestConsistency(TestCase):
                 cpu_out = op(*cpu_args, **cpu_kwargs)
                 mps_out = op(*mps_args, **mps_kwargs)
 
-                if dtype == torch.float32:
+                if op.name == "nn.functional.conv2d" and dtype == torch.float32:
                     atol = 1e-4
-                    rtol = 1e-4
-                elif dtype == torch.float16:
+                    rtol = 3e-5
+                elif (op.name == "add" or op.name == "sub") and dtype == torch.float16:
                     atol = 1e-2
                     rtol = 1e-2
                 else:
