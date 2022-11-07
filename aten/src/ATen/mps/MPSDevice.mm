@@ -27,7 +27,7 @@ MPSDevice* MPSDevice::getInstance() {
   return mps_device.get();
 }
 
-bool MPSDevice::macOS_13_0() {
+bool MPSDevice::macOS_13_0_or_newer() {
   return _macos_13_0_or_newer;
 }
 

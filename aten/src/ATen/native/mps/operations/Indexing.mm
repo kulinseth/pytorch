@@ -220,7 +220,7 @@ Tensor nonzero_fallback(const Tensor& self) {
 }
 
 Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
-  if (!MPSDevice::getInstance()->macOS_13_0()) {
+  if (!MPSDevice::getInstance()->macOS_13_0_or_newer()) {
       Tensor out_fallback = nonzero_fallback(self);
       at::native::resize_output(out_, out_fallback.sizes());
       out_.copy_(out_fallback.to("mps"));
@@ -388,7 +388,7 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
 }
 
 Tensor nonzero_mps(const Tensor& self){
-  if (!MPSDevice::getInstance()->macOS_13_0()) {
+  if (!MPSDevice::getInstance()->macOS_13_0_or_newer()) {
     return nonzero_fallback(self);
   }
 
@@ -714,7 +714,7 @@ Tensor & masked_fill__mps(Tensor& self, const Tensor & mask, const Scalar& value
 
   MPSStream* stream = getCurrentMPSStream();
   @autoreleasepool {
-    string key = "masked_fill" + getTensorsStringKey({self, mask}) + ":" + std::to_string(value.toDouble());
+    string key = "masked_fill" + getTensorsStringKey({self, *b_mask}) + ":" + std::to_string(value.toDouble());
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
     if(!cachedGraph) {
       MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
@@ -726,19 +726,23 @@ Tensor & masked_fill__mps(Tensor& self, const Tensor & mask, const Scalar& value
           newCachedGraph = new CachedGraph(mpsGraph);
 
           MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, self);
-          MPSGraphTensor* maskTensor = mpsGraphRankedPlaceHolder(mpsGraph, mask);
+          MPSGraphTensor* maskTensor = mpsGraphRankedPlaceHolder(mpsGraph, *b_mask);
           MPSDataType valueType = getMPSScalarType(value.type());
+          MPSDataType inputDataType = getMPSScalarType(self.scalar_type());
 
           // constantWithScalar doesn't like Bool constants getting created so
-          // mapping them to int8
-          if (valueType == MPSDataTypeBool) {
+          // mapping them to int8.
+          // Starting with macOS 13.0, this cast is not needed anymore
+          if (valueType == MPSDataTypeBool && !MPSDevice::getInstance()->macOS_13_0_or_newer()) {
             valueType = MPSDataTypeInt8;
           }
-          MPSGraphTensor* valueTensor =  [mpsGraph constantWithScalar:value.to<double>()
-                                                            dataType:valueType];
+
+          MPSGraphTensor* valueTensor =
+                  [mpsGraph constantWithScalar:inputDataType == MPSDataTypeBool ? !!value.to<double>() : value.to<double>()
+                                      dataType:valueType];
           valueTensor = [mpsGraph castTensor:valueTensor
-                                          toType:getMPSDataType(self.scalar_type())
-                                           name : @"castTensorEq"];
+                                      toType:inputDataType
+                                        name:@"castTensorEq"];
 
           MPSGraphTensor* outputTensor = [mpsGraph selectWithPredicateTensor:maskTensor
                                                         truePredicateTensor:valueTensor
@@ -755,7 +759,7 @@ Tensor & masked_fill__mps(Tensor& self, const Tensor & mask, const Scalar& value
     }
 
     Placeholder selfPlaceholder   = Placeholder(cachedGraph->inputTensor_, self);
-    Placeholder maskPlaceholder   = Placeholder(cachedGraph->maskTensor_, mask);
+    Placeholder maskPlaceholder   = Placeholder(cachedGraph->maskTensor_, *b_mask);
     Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, self);
 
     // Create dictionary of inputs and outputs
