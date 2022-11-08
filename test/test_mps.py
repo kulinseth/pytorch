@@ -8028,7 +8028,7 @@ class TestConsistency(TestCase):
         'nonzero': ['f32', 'i16', 'i32', 'i64'],
         'cross': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'linalg.cross': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-		'unique_consecutive': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'unique_consecutive': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.nll_loss': ['f32'],
         'byte': ['b8', 'i16', 'i32', 'i64', 'u8'],
         }
