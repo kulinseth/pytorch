@@ -5028,6 +5028,24 @@ class TestNLLLoss(TestCase):
         helper((2, 8, 4, 5), diag=-2)
         helper((2, 8, 4, 5), diag=-3)
 
+    # Test inverse
+    def test_inverse(self):
+        def helper(n, dtype):
+            cpu_input = torch.randn(n, n, dtype=dtype, device='cpu')
+            mps_input = cpu_input.to('mps')
+
+            cpu_result = torch.linalg.inv(cpu_input)
+            mps_result = torch.linalg.inv(mps_input)
+            self.assertEqual(cpu_result, mps_result)
+        
+        for dtype in [torch.float32, torch.int32, torch.int64]:
+            helper(2,2, dtype)
+            helper(2,3, dtype)
+            helper(0,2, dtype)
+            helper(0,0, dtype)
+            helper(3,8, dtype)
+            helper(8,3, dtype)
+
     # Test tril
     def test_tril(self):
         def helper(shape, diag=0):
