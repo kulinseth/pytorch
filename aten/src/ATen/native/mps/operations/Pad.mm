@@ -13,7 +13,7 @@ Tensor& pad_out_template(Tensor &output, const Tensor &input_, IntArrayRef paddi
                          MPSGraphPaddingMode mode, double constantValue, const string op_name)
 {
   const int padding_size = (int) padding.size();
-  const int padding_dim = padding_size / 2; // either 1D, 2D, or 3D
+  int padding_dim = padding_size / 2; // either 1D, 2D, or 3D
 
   TORCH_CHECK(padding_size == 2 || padding_size == 4 || padding_size == 6,
               "invalid padding argument of size ", padding_size);
@@ -23,33 +23,44 @@ Tensor& pad_out_template(Tensor &output, const Tensor &input_, IntArrayRef paddi
 
   int64_t nbatch = 1;
   int64_t ndims = input_.ndimension();
+
+  TORCH_CHECK(ndims >= (int64_t)padding_dim, "Length of pad should be no more than twice the number of "
+              "dimensions of the input. Pad length is ", padding_size, "while the input has ", ndims, "dimensions.");
+
   // number of input dims with ConstantPad could be less than 2
-  int dim_w = ndims > 1 ? padding_dim : 0;
+  int dim_w = padding_dim;
   int dim_h = padding_dim - 1;
   int dim_d = padding_dim - 2;
   int dim_slices = 0;
 
-  if (!is_backward_pass && ndims > 1) {
+  if (!is_backward_pass && mode != MPSGraphPaddingModeConstant && ndims > padding_dim) {
     bool valid_dims = input_.size(1) != 0 && input_.size(padding_dim) != 0;
     TORCH_CHECK((ndims == 1 + padding_dim && valid_dims) ||
                 (ndims == 2 + padding_dim && valid_dims && input_.size(1 + padding_dim) != 0),
                 "3D or 4D (batch mode) tensor expected for input, but got: ", input_);
   }
 
-  if (ndims == 2 + padding_dim) {
-    nbatch = input_.size(0);
-    dim_w++;
-    dim_h++;
-    dim_d++;
+  if (ndims == padding_dim) {
+    dim_w--;
+    dim_h--;
+    dim_d--;
+  } else if (ndims > padding_dim + 1) {
+    const int dim_diff = (int)ndims - padding_dim - 1;
+    // this virtually inflates the padding with zeros if ndims > padding_dim + 2
+    padding_dim += dim_diff - 1;
+    dim_w += dim_diff;
+    dim_h += dim_diff;
+    dim_d += dim_diff;
     dim_slices++;
+    nbatch = input_.size(0);
   }
 
   int64_t pad_l = padding[0];
   int64_t pad_r = padding[1];
-  int64_t pad_t = padding_dim > 1 ? padding[2] : 0;
-  int64_t pad_b = padding_dim > 1 ? padding[3] : 0;
-  int64_t pad_front = padding_dim > 2 ? padding[4] : 0;
-  int64_t pad_back  = padding_dim > 2 ? padding[5] : 0;
+  int64_t pad_t = padding_size > 2 ? padding[2] : 0;
+  int64_t pad_b = padding_size > 2 ? padding[3] : 0;
+  int64_t pad_front = padding_size > 4 ? padding[4] : 0;
+  int64_t pad_back  = padding_size > 4 ? padding[5] : 0;
 
   int64_t nplane = input_.size(dim_slices);
   int64_t input_w = input_.size(dim_w);
@@ -86,25 +97,26 @@ Tensor& pad_out_template(Tensor &output, const Tensor &input_, IntArrayRef paddi
       "input (H: ", input_h, ", W: ", input_w, ") is too small. Calculated "
       "output H: ", output_h, " W: ", output_w);
 
-    if (ndims == 1 + padding_dim) {
-      if (padding_dim == 3)
-        output.resize_({nplane, output_d, output_h, output_w});
-      else if (padding_dim == 2)
-        output.resize_({nplane, output_h, output_w});
-      else
-        output.resize_({nplane, output_w});
-    } else {
-      if (padding_dim == 3)
-        output.resize_({nbatch, nplane, output_d, output_h, output_w});
-      else if (padding_dim == 2)
-        output.resize_({nbatch, nplane, output_h, output_w});
-      else if (ndims > 1)
-        output.resize_({nbatch, nplane, output_w});
-      else
-        output.resize_({output_w});
-    }
-    if (output.numel() == 0 || input_.numel() == 0)
+    std::vector<int64_t> outputSizes;
+    outputSizes.insert(outputSizes.begin(), output_w);
+    if (padding_dim >= 2)
+      outputSizes.insert(outputSizes.begin(), output_h);
+    if (padding_dim >= 3)
+      outputSizes.insert(outputSizes.begin(), output_d);
+    if (ndims >= 1 + padding_dim)
+      outputSizes.insert(outputSizes.begin(), nplane);
+    if (ndims >= 2 + padding_dim)
+      outputSizes.insert(outputSizes.begin(), nbatch);
+
+    output.resize_(outputSizes);
+
+    if (output.numel() == 0) {
       return output;
+    }
+    if (input_.numel() == 0) {
+      output.fill_(constantValue);
+      return output;
+    }
     input = input_.contiguous();
   } else {
     TORCH_CHECK(output_w == grad_output_.size(dim_w),
@@ -113,6 +125,9 @@ Tensor& pad_out_template(Tensor &output, const Tensor &input_, IntArrayRef paddi
       TORCH_CHECK(output_h == grad_output_.size(dim_h),
         "gradOutput height unexpected. Expected: ", output_h, ", Got: ", grad_output_.size(dim_h));
     }
+    output.resize_as_(input);
+    if (output.numel() == 0 || grad_output_.numel() == 0)
+      return output;
     grad_output = grad_output_.contiguous();
   }
 
@@ -139,10 +154,8 @@ Tensor& pad_out_template(Tensor &output, const Tensor &input_, IntArrayRef paddi
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
 
   @autoreleasepool {
-    string key = op_name + getTensorsStringKey({input, grad_output}) +
-                           ":L" + to_string(pad_l)     + ":R" + to_string(pad_r) +
-                           ":T" + to_string(pad_t)     + ":B" + to_string(pad_b) +
-                           ":F" + to_string(pad_front) + ":K" + to_string(pad_back);
+    string key = op_name + getTensorsStringKey({input, grad_output, output}) + ":[" +
+                           getArrayRefString(padding) + "]:" + std::to_string(constantValue);
 
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
     if(!cachedGraph) {
