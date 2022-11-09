@@ -8339,7 +8339,7 @@ class TestConsistency(TestCase):
         'logspace': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'logsumexp': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'lt': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'masked_fill': ['f16', 'i16', 'i32', 'i64'],
+        'masked_fill': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked_select': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'matmul': ['f32'],
         'maximum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8460,7 +8460,7 @@ class TestConsistency(TestCase):
         'vsplit': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'vstack': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'zero_': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'where': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'where': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nonzero': ['f32', 'i16', 'i32', 'i64'],
         'cross': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'linalg.cross': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8662,8 +8662,6 @@ class TestConsistency(TestCase):
     # All the entries in this list should be removed
     BLOCKLIST = {
         # Functions that hang
-        'einsum': ['f32'],
-        'masked_fill': [torch.bool, torch.uint8, torch.float32], 'where': [torch.bool],
         # + forward when requires_grad=True or running backward
         'masked.mean': [torch.bool, torch.float16],
         'masked.prod': [torch.bool],
