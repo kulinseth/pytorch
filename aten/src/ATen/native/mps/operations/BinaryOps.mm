@@ -77,6 +77,10 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
           if (isIntegralType(common_dtype, true) && isFloatingType(output.scalar_type())) {
             common_dtype = output_.scalar_type();
           }
+          TORCH_CHECK(!((self.scalar_type() == ScalarType::Long) &&
+                        (op_name == "power" || op_name == "atan2")),
+                        "MPS does not support ", op_name, " op with int64 input");
+
           if (self.scalar_type() != common_dtype) {
             primaryCastTensor = castMPSTensor(mpsGraph, newCachedGraph->primaryTensor, common_dtype);
           }

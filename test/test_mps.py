@@ -8020,7 +8020,7 @@ class TestConsistency(TestCase):
         'special.ndtr': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'split': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'sqrt': ['b8', 'f32', 'i16', 'i32', 'u8'],
-        'square': ['f16', 'f32'],
+        'square': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'squeeze': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'stack': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'sub': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8267,7 +8267,6 @@ class TestConsistency(TestCase):
         'nn.functional.softplus': [torch.float32],
         'pow': [torch.int64],
         'sigmoid': [torch.int64],
-        'square': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8],  # moved from section below
         'unique': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nonzero': [torch.uint8, torch.float16],
 
