@@ -1,7 +1,4 @@
 #include <ATen/ATen.h>
-#include <ATen/Tensor.h>
-#include <ATen/Utils.h>
-#include <ATen/mps/MPSStream.h>
 #include <ATen/native/mps/OperationUtils.h>
 #include <torch/library.h>
 #include <c10/util/Optional.h>
@@ -75,7 +72,6 @@ TORCH_IMPL_FUNC(linalg_inv_ex_out_mps)(const Tensor& A, bool check_errors, const
         if (!isContiguous) {
             result.copy_(output);
         }
-
     }
 }
 }
