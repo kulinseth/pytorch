@@ -310,7 +310,7 @@ _unique_impl_mps(const Tensor& self, const bool return_inverse, const bool retur
 
 std::tuple<Tensor, Tensor, Tensor>
 unique_consecutive_mps(const Tensor& self, const bool return_inverse, const bool return_counts, c10::optional<int64_t> dim) {
-  if (!MPSDevice::getInstance()->macOS_13_0()) {
+  if (!MPSDevice::getInstance()->macOS_13_0_or_newer()) {
     TORCH_WARN_ONCE("MPS: unique_consecutive op is supported natively starting from macOS 13.0. ",
                     "Falling back on CPU. This may have performace implications.");
     return at::unique_consecutive(self.to("cpu"), return_inverse, return_counts, dim);
@@ -321,7 +321,7 @@ unique_consecutive_mps(const Tensor& self, const bool return_inverse, const bool
 
 std::tuple<Tensor, Tensor, Tensor>
 unique_dim_consecutive_mps(const Tensor& self, int64_t dim, const bool return_inverse, const bool return_counts) {
-  if (!MPSDevice::getInstance()->macOS_13_0()) {
+  if (!MPSDevice::getInstance()->macOS_13_0_or_newer()) {
     TORCH_WARN_ONCE("MPS: unique_dim_consecutive op is supported natively starting from macOS 13.0. ",
                     "Falling back on CPU. This may have performace implications.");
     return at::unique_dim_consecutive(self.to("cpu"), dim, return_inverse, return_counts);
@@ -332,7 +332,7 @@ unique_dim_consecutive_mps(const Tensor& self, int64_t dim, const bool return_in
 
 std::tuple<Tensor, Tensor, Tensor>
 _unique2_mps(const Tensor& self, const bool sorted, const bool return_inverse, const bool return_counts) {
-  if (!MPSDevice::getInstance()->macOS_13_0()) {
+  if (!MPSDevice::getInstance()->macOS_13_0_or_newer()) {
     TORCH_WARN_ONCE("MPS: _unique2 op is supported natively starting from macOS 13.0. ",
                     "Falling back on CPU. This may have performace implications.");
     return at::_unique2(self.to("cpu"), sorted, return_inverse, return_counts);

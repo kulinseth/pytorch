@@ -60,7 +60,7 @@ class TORCH_API MPSDevice {
 
   MTLFunction_t metalIndexingFunction(const std::string &kernel, MTLFunctionConstantValues_t constantValues);
 
-  bool macOS_13_0();
+  bool macOS_13_0_or_newer();
 
   ~MPSDevice();
 
