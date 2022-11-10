@@ -8440,7 +8440,7 @@ class TestConsistency(TestCase):
         'tensordot': ['f32'],
         'tile': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'topk': ['f32'],
-        'trapz': ['f16', 'f32', 'i16', 'i32', 'i64'],
+        'trapz': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'tril': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'tril_indices': ['i32', 'i64'],
         'triu': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8474,7 +8474,6 @@ class TestConsistency(TestCase):
         'masked.prod': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.sum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.nll_loss': ['f32'],
-        'byte': ['b8', 'i16', 'i32', 'i64', 'u8'],
     }
 
 
@@ -8747,19 +8746,16 @@ class TestConsistency(TestCase):
         'take_along_dim': None,
 
         # New block list ops that need investigation
-        '__rpow__': ['torch.float32', 'torch.int16', 'torch.int32', 'torch.uint8'],
         'as_strided_scatter': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'atan2': ['torch.bool', 'torch.int16', 'torch.int32', 'torch.uint8'], # atan2() may generate NAN in output
         'byte': ['torch.float16', 'torch.float32'],
         'char': ['torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64'],
         'diff': ['torch.bool', 'torch.uint8'],
-        'empty_like': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'float': ['torch.int64'],
         'gather': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'half': ['torch.bool', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'index_put': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'int': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int64', 'torch.uint8'],
-        'new_empty': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'nn.functional.adaptive_avg_pool1d': ['torch.float32'],
         'nn.functional.adaptive_avg_pool2d': ['torch.float32'],
         'nn.functional.avg_pool1d': ['torch.float32', 'torch.int64'],
@@ -8767,22 +8763,15 @@ class TestConsistency(TestCase):
         'nn.functional.bilinear': ['torch.float32'],
         'nn.functional.conv_transpose2d': ['torch.float32'],
         'nn.functional.cosine_embedding_loss': ['torch.uint8'],
-        'nn.functional.dropout2d': ['torch.float32'],
-        'nn.functional.dropout3d': ['torch.float32'],
-        'nn.functional.dropout': ['torch.float32'],
         'nn.functional.interpolate': ['torch.float32', 'torch.float32', 'torch.float32'],
         'nn.functional.max_pool1d': ['torch.float32'],
         'nn.functional.max_pool2d': ['torch.float32'],
         'nn.functional.upsample_nearest': ['torch.float32'],
-        'pow': ['torch.int16', 'torch.int32', 'torch.uint8'], # pow() with integer input may return wrong results
-        'put': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'scatter_add': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'scatter': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'short': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'tensor_split': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'topk': ['torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        'trapz': ['torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        'nn.functional.local_response_norm': ['torch.int64'],
 
         # failures due to lack of op implementation on MPS backend
         'linalg.eig': ['torch.float32'],
@@ -8795,6 +8784,11 @@ class TestConsistency(TestCase):
         'fft.rfft2': ['torch.bool', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'fft.rfft': ['torch.bool', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'fft.rfftn': ['torch.bool', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
+        'put': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
+
+        # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
+        'pow': ['torch.int16', 'torch.int32', 'torch.uint8'],
+        '__rpow__': ['torch.int16', 'torch.int32', 'torch.uint8'],
 
         # failures due to unsupported data types on MPS backend
         'matmul': ['torch.uint8'], # MPS device does not support mm for non-float inputs
@@ -8806,6 +8800,12 @@ class TestConsistency(TestCase):
         'randn_like': ['torch.float16', 'torch.float32'],
         'bernoulli': ['torch.float32'],
         'normal': ['torch.float16', 'torch.float32', 'torch.float16', 'torch.float32'],
+        'nn.functional.dropout': ['torch.float32'],
+        'nn.functional.dropout2d': ['torch.float32'],
+        'nn.functional.dropout3d': ['torch.float32'],
+         # these fill tensors with uninitialized data, causing mismatch with CPU
+        'new_empty': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
+        'empty_like': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
 
         # failures due to shape and type issues in ReduceOps
         'amax': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
@@ -8828,6 +8828,7 @@ class TestConsistency(TestCase):
         'nn.functional.gelu': ['torch.float32'],
         'pow': ['torch.float32'],
         'tan': ['torch.float32'],
+        '__rpow__': ['torch.float32'],
     }
 
     # Those ops worked on MacOS12, but broken on MacOS13
