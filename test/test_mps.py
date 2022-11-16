@@ -8439,6 +8439,7 @@ class TestConsistency(TestCase):
         'tan': ['b8', 'i16', 'i32', 'u8'],
         'tanh': ['b8', 'f32', 'i16', 'i32', 'u8'],
         'tensordot': ['f32'],
+        'tensor_split': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'tile': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'topk': ['f32'],
         'trapz': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8663,10 +8664,9 @@ class TestConsistency(TestCase):
         'masked.sum': [torch.bool],
 
         # Functions that hard crash
-        'nn.functional.padreflect': [torch.float32], # negative padding may cause GPU reset
-        'nn.functional.padreplicate': [torch.float32],
         'std': [torch.float16],
-        'stft': [torch.float32], 'var': [torch.float16],
+        'stft': [torch.float32],
+        'var': [torch.float16],
         # + forward when requires_grad=True or running backward
         'nn.functional.embedding': [torch.float32, torch.float16],
         'index_select': [torch.float16],
@@ -8709,6 +8709,7 @@ class TestConsistency(TestCase):
         'addr': ['torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'diag': ['torch.int64'],
         'diagflat': ['torch.int64'],
+        'index_put': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
 
         # Functions that are flaky
         # These are detected as "ok" by the expect case but actually fail to run sometimes
@@ -8749,7 +8750,6 @@ class TestConsistency(TestCase):
         # New block list ops that need investigation
         'as_strided_scatter': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'atan2': ['torch.bool', 'torch.int16', 'torch.int32', 'torch.uint8'], # atan2() may generate NAN in output
-        'index_put': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'nn.functional.adaptive_avg_pool1d': ['torch.float32'],
         'nn.functional.adaptive_avg_pool2d': ['torch.float32'],
         'nn.functional.avg_pool1d': ['torch.float32', 'torch.int64'],
@@ -8761,8 +8761,9 @@ class TestConsistency(TestCase):
         'nn.functional.max_pool1d': ['torch.float32'],
         'nn.functional.max_pool2d': ['torch.float32'],
         'nn.functional.upsample_nearest': ['torch.float32'],
-        'tensor_split': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'topk': ['torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
+        'nn.functional.padreflect': [torch.float32], # negative padding may cause GPU reset
+        'nn.functional.padreplicate': [torch.float32],
 
         # failures due to lack of op implementation on MPS backend
         'linalg.eig': ['torch.float32'],
@@ -8889,6 +8890,10 @@ class TestConsistency(TestCase):
                 cpu_kwargs = cpu_sample.kwargs
                 mps_args = [mps_sample.input] + list(mps_sample.args)
                 mps_kwargs = mps_sample.kwargs
+
+                # for tensor_split(), the second tensor arg ("tensor_indices_or_sections") must be on CPU only
+                if (op.name == "tensor_split" and isinstance(mps_args[1], torch.Tensor)):
+                    mps_args[1] = cpu_args[1]
 
                 cpu_out = op(*cpu_args, **cpu_kwargs)
                 mps_out = op(*mps_args, **mps_kwargs)
