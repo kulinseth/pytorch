@@ -226,6 +226,9 @@ Tensor mps_convolution_backward_input(
   checkAllSameType(c, {grad_output, weight});
   checkAllSameGPU(c, {grad_output, weight});
   auto memory_format = grad_output_t.suggest_memory_format();
+  bool is_channels_last = (memory_format == at::MemoryFormat::ChannelsLast);
+  MPSShape* weightShape = get_mps_conv_shape(weight_t, is_channels_last);
+  MPSShape* gradOutputShape = get_mps_conv_shape(grad_output_t, is_channels_last);
   auto grad_input_t = at::empty(
                     input_size,
                     grad_output->scalar_type(),
@@ -291,8 +294,8 @@ Tensor mps_convolution_backward_input(
                                       padding[1], padding[0],
                                       memory_format, groups);
 
-          MPSGraphTensor* gradOutputTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, grad_output_t);
-          MPSGraphTensor* weightTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, weight_t);
+          MPSGraphTensor* gradOutputTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, native_mps::getMPSScalarType(grad_output_t.scalar_type()), gradOutputShape);
+          MPSGraphTensor* weightTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, native_mps::getMPSScalarType(weight_t.scalar_type()), weightShape);
 
           MPSGraphTensor* gradInputTensor = [mpsGraph convolution2DDataGradientWithIncomingGradientTensor:gradOutputTensor
                                                                                             weightsTensor:weightTensor
