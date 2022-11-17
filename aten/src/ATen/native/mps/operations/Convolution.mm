@@ -273,7 +273,6 @@ Tensor mps_convolution_backward_input(
                                                    + to_string(groups) + ":" +  mem_format_key
                                                    + getTensorsStringKey({grad_output_t, weight_t}) + ":"
                                                    + string([ns_shape_key UTF8String]);
-    std::cout << "Conv grad input key " << key << std::endl;
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
 
     if(!cachedGraph) {
