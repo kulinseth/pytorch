@@ -443,7 +443,6 @@ bool canSliceViewTensor(const Tensor& src, MPSShape *mpsShape) {
   int src_ndim_base = src_base_shape.size();
   std::vector<int64_t> src_view_shape = getViewShape(src, mpsShape);
   int src_ndim_view = src_view_shape.size();
-  std::cout << src_ndim_base << " " << src_ndim_view << std::endl;
   if (src_ndim_base == src_ndim_view) {
     for (const auto i : c10::irange(src_ndim_base)) {
       if (src_view_shape[i] > src_base_shape[i]) {
