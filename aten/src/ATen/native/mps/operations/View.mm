@@ -417,22 +417,47 @@ MPSGraphTensor* asStridedLayer_pattern(MPSGraph *graph, MPSGraphTensor *inputTen
   return outputTensor;
 }
 
-MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mpsShape, const MPSDataType mpsDataType) {
-  IntArrayRef src_base_shape = get_buffer_shape(src.storage().data());
-  std::vector<int64_t> src_view_shape;
+static
+std::vector<int64_t> getViewShape(const Tensor& src, MPSShape *mpsShape) {
   bool hasMPSShape = (mpsShape != nil);
-  int src_ndim_base = src_base_shape.size();
-  int src_ndim_view = 0;
+  std::vector<int64_t> src_view_shape;
   if (hasMPSShape) {
-    src_ndim_view = [mpsShape count];
-    src_view_shape.reserve(src_ndim_view);
+    int src_ndim_view = [mpsShape count];
+    src_view_shape.resize(src_ndim_view);
     for (const auto i : c10::irange(src_ndim_view)) {
       src_view_shape[i] = [mpsShape[i] intValue];
     }
   } else {
-    src_ndim_view = src.dim();
     src_view_shape = src.sizes().vec();
   }
+
+  return src_view_shape;
+}
+
+bool canSliceViewTensor(const Tensor& src, MPSShape *mpsShape) {
+  if (!src.is_view()) {
+    return false;
+  }
+
+  IntArrayRef src_base_shape = get_buffer_shape(src.storage().data());
+  int src_ndim_base = src_base_shape.size();
+  std::vector<int64_t> src_view_shape = getViewShape(src, mpsShape);
+  int src_ndim_view = src_view_shape.size();
+  if (src_ndim_base == src_ndim_view) {
+    for (const auto i : c10::irange(src_ndim_base)) {
+      if (src_view_shape[i] > src_base_shape[i]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mpsShape, const MPSDataType mpsDataType) {
+  IntArrayRef src_base_shape = get_buffer_shape(src.storage().data());
+  int src_ndim_base = src_base_shape.size();
+  std::vector<int64_t> src_view_shape = getViewShape(src, mpsShape);
+  int src_ndim_view = src_view_shape.size();
 
   MPSNDArray *srcTensorNDArrayView = nil;
   MPSNDArrayDescriptor *srcTensorNDArrayDesc = nil;
