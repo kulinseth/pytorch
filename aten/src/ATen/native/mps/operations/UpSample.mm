@@ -9,7 +9,6 @@ namespace mps {
 
 // Upsampling operations (1D/2D forward and backward)
 // supported resize_mode: 'nearest' | 'bilinear' | 'nearest-exact'
-// returns false in case of an error that requires falling back to CPU implementation
 void upsample_out_template(const Tensor& input,
                            IntArrayRef output_size,
                            c10::optional<IntArrayRef> input_size_opt, // only used for backward pass
@@ -104,7 +103,6 @@ void upsample_out_template(const Tensor& input,
           }
           if (is_macOS_13_0_or_newer) {
             if (!is_backward_pass) {
-              // TODO: check if scale factor and align corner are passed at the same time
               if (scaleOffsetTensor && !align_corners) {
                 if (resizeMode == MPSGraphResizeNearest) {
                   newCachedGraph->outputTensor = [mpsGraph resizeNearestWithTensor: newCachedGraph->inputTensor
@@ -173,7 +171,7 @@ void upsample_out_template(const Tensor& input,
                 }
               }
             }
-          } else { // if macOS version < 13.0
+          } else { // if macOS version < 13.0 (for backwards compatibility)
             if (!is_backward_pass) {
               newCachedGraph->outputTensor = [mpsGraph resizeTensor: newCachedGraph->inputTensor
                                                          sizeTensor: newCachedGraph->outputSizeTensor
@@ -198,7 +196,7 @@ void upsample_out_template(const Tensor& input,
     }
     MPSNDArrayDescriptor *sizeDesc = [MPSNDArrayDescriptor descriptorWithDataType: MPSDataTypeInt32 shape: @[@(2)]];
     MPSNDArray *sizeNDArray = [[[MPSNDArray alloc] initWithDevice: stream->device() descriptor: sizeDesc] autorelease];
-    [sizeNDArray writeBytes: (int32_t[]) {(int32_t)(output_height), (int32_t)(output_width)} strideBytes: nil];
+    [sizeNDArray writeBytes: (int32_t[]) {(int32_t)output_height, (int32_t)output_width} strideBytes: nil];
     MPSGraphTensorData* sizeTensorData = [[[MPSGraphTensorData alloc] initWithMPSNDArray: sizeNDArray] autorelease];
 
     Placeholder inputPlaceholder  = Placeholder(cachedGraph->inputTensor, input);
