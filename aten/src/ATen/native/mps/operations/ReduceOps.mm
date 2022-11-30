@@ -717,7 +717,6 @@ Tensor std_var_common_impl_mps(
 
   bool use_correction = !(correction.has_value() && correction.value() == 0);
   const auto correction_value = correction.value_or(1);
-
   int64_t correction_n = 1;
 
   native_mps::MPSGraphCache* cache_ = native_mps::MPSGraphCache::getInstance();
