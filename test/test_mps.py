@@ -1882,8 +1882,7 @@ class TestNLLLoss(TestCase):
 
         output_cpu = F.nll_loss(input, target, reduction=reduction)
         output_mps = F.nll_loss(input_mps, target_mps, reduction=reduction)
-        # TODO(#38095): Replace assertEqualIgnoreType. See issue #38095
-        self.assertEqualIgnoreType(output_cpu, output_mps.to('cpu'))
+        self.assertEqual(output_cpu, output_mps.to('cpu'))
 
         output_cpu.sum().backward()
         output_mps.sum().backward()
@@ -1902,8 +1901,7 @@ class TestNLLLoss(TestCase):
 
         output_cpu = F.nll_loss(input, target, reduction=reduction)
         output_mps = F.nll_loss(input_mps, target_mps, reduction=reduction)
-        # TODO(#38095): Replace assertEqualIgnoreType. See issue #38095
-        self.assertEqualIgnoreType(output_cpu, output_mps.to('cpu'))
+        self.assertEqual(output_cpu, output_mps.to('cpu'))
 
         output_cpu.sum().backward()
         output_mps.sum().backward()
