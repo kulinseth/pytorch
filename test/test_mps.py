@@ -8300,6 +8300,8 @@ class TestConsistency(TestCase):
         'linalg.cross': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'unique_consecutive': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.nll_loss': ['f32'],
+        'std': ['f16','f32'],
+        'var': ['f16','f32'],
     }
 
 
@@ -8485,9 +8487,7 @@ class TestConsistency(TestCase):
         'masked.sum': [torch.bool],
 
         # Functions that hard crash
-        'std': [torch.float16],
         'stft': [torch.float32],
-        'var': [torch.float16],
         # + forward when requires_grad=True or running backward
         '__rpow__': [torch.int64],
         'masked.std': [torch.int32],
