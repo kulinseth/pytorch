@@ -4256,6 +4256,8 @@ class TestNLLLoss(TestCase):
         helper((2, 1, 6, 8), 2, nn.ReplicationPad2d)
         # verify if a change in shape of padding would cause problems with graph caching
         helper((2, 1, 6, 8), (2, 4, 3, 5), nn.ReplicationPad2d)
+        # negative padding
+        helper((1, 3, 4, 4), (-1, 1, -2, 1), nn.ReplicationPad2d)
         # Constant Pad 2D
         helper((2, 1, 6, 8), (2, 4, 3, 5), nn.ConstantPad2d)
         # input size < pad size
@@ -4275,7 +4277,6 @@ class TestNLLLoss(TestCase):
         helper((2, 4, 6, 8, 4), (1, 3, 3, 5, 3, 4), nn.ReplicationPad3d)
         # Constant Pad 3D
         helper((2, 4, 6, 8, 4), (1, 3, 3, 5, 3, 4), nn.ConstantPad3d)
-
 
     # Test stack forward
     def test_stack(self):
@@ -8108,7 +8109,7 @@ class TestConsistency(TestCase):
         'combinations': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'conj': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'conj_physical': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'constant_pad_nd': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'constant_pad_nd': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'contiguous': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'corrcoef': ['f32'],
         'cos': ['b8', 'f32', 'i16', 'i32', 'u8', 'i64'],
@@ -8216,6 +8217,9 @@ class TestConsistency(TestCase):
         'nn.functional.normalize': ['f32'],
         'nn.functional.pad': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.padcircular': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'nn.functional.padconstant': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'nn.functional.padreflect': ['f32'],
+        'nn.functional.padreplicate': ['f32'],
         'nn.functional.pairwise_distance': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.poisson_nll_loss': ['f32', 'i16', 'i32', 'u8'],
         'nn.functional.prelu': ['f32'],
@@ -8510,9 +8514,6 @@ class TestConsistency(TestCase):
         'unique': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nonzero': [torch.uint8, torch.float16],
 
-        # ALLOW_LIST doesn't know about variants
-        'nn.functional.padconstant': None,
-
         # These were moved from ALLOWLIST to BLOCK as they are not working
         # locally
         'diag': ['torch.int64'],
@@ -8569,8 +8570,6 @@ class TestConsistency(TestCase):
         'nn.functional.max_pool2d': ['torch.float32'],
         'nn.functional.upsample_nearest': ['torch.float32'],
         'topk': ['torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        'nn.functional.padreflect': [torch.float32], # negative padding may cause GPU reset
-        'nn.functional.padreplicate': [torch.float32],
 
         # failures due to lack of op implementation on MPS backend
         'linalg.eig': ['torch.float32'],

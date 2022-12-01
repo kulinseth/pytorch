@@ -131,17 +131,34 @@ Tensor& pad_out_template(Tensor &output, const Tensor &input_, IntArrayRef paddi
     grad_output = grad_output_.contiguous();
   }
 
+  const uint32_t dims_mask = (1U << ndims) - 1;
+  uint32_t startMask = dims_mask, endMask = dims_mask;
   std::vector<NSNumber*> leftPadVec(ndims, @(0));
   std::vector<NSNumber*> rightPadVec(ndims, @(0));
-  leftPadVec [ndims - 1] = @(pad_l);
-  rightPadVec[ndims - 1] = @(pad_r);
-  if (padding_dim >= 2) {
-    leftPadVec [ndims - 2] = @(pad_t);
-    rightPadVec[ndims - 2] = @(pad_b);
-  }
-  if (padding_dim >= 3) {
-    leftPadVec [ndims - 3] = @(pad_front);
-    rightPadVec[ndims - 3] = @(pad_back);
+  std::vector<NSNumber*> startsVec(ndims, @(0));
+  std::vector<NSNumber*> endsVec(ndims, @(0));
+  std::vector<NSNumber*> stridesVec(ndims, @(1));
+
+  for (int64_t pdim = 0; pdim < padding_size / 2; pdim++) {
+    const int64_t leftIdx  = pdim * 2;
+    const int64_t rightIdx = pdim * 2 + 1;
+    const int64_t padIdx = ndims - pdim - 1;
+
+    leftPadVec [padIdx] = @(padding[leftIdx]);
+    rightPadVec[padIdx] = @(padding[rightIdx]);
+    // workaround for negative padding issue in backward pass
+    if (is_backward_pass) {
+      if (padding[leftIdx] < 0) {
+        leftPadVec[padIdx] = @(0);
+        startsVec[padIdx] = @(-padding[leftIdx]);
+        startMask &= ~(1U << padIdx);
+      }
+      if (padding[rightIdx] < 0) {
+        rightPadVec[padIdx] = @(0);
+        endsVec[padIdx] = @(input.size(padIdx) + padding[rightIdx]);
+        endMask &= ~(1U << padIdx);
+      }
+    }
   }
   MPSShape *leftPadding  = [NSArray arrayWithObjects:leftPadVec.data() count:ndims];
   MPSShape *rightPadding = [NSArray arrayWithObjects:rightPadVec.data() count:ndims];
@@ -157,33 +174,55 @@ Tensor& pad_out_template(Tensor &output, const Tensor &input_, IntArrayRef paddi
     string key = op_name + getTensorsStringKey({input, grad_output, output}) + ":[" +
                            getArrayRefString(padding) + "]:" + std::to_string(constantValue);
 
-    CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
+    CachedGraph* cachedGraph = cache_->LookUpAs<CachedGraph>(key);
     if(!cachedGraph) {
-      cachedGraph = static_cast<CachedGraph*>(cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
+      cachedGraph = cache_->CreateCachedGraphAs<CachedGraph>(key, ^ MPSCachedGraph * () {
         CachedGraph *newCachedGraph = nil;
         @autoreleasepool {
-            MPSGraph* mpsGraph = make_mps_graph();
-            newCachedGraph = new CachedGraph(mpsGraph);
-            newCachedGraph->inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, input);
-            if (!is_backward_pass) {
-              newCachedGraph->outputTensor = [mpsGraph padTensor:newCachedGraph->inputTensor
-                                                 withPaddingMode:mode
-                                                     leftPadding:leftPadding
-                                                    rightPadding:rightPadding
-                                                   constantValue:constantValue
-                                                            name:nil];
+          MPSGraph* mpsGraph = make_mps_graph();
+          newCachedGraph = new CachedGraph(mpsGraph);
+          newCachedGraph->inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, input);
+
+          if (!is_backward_pass) {
+            // workaround for Bool type assert with Constant padding (only needed for forward pass)
+            const bool needsBoolCast = mode == MPSGraphPaddingModeConstant && input.scalar_type() == ScalarType::Bool;
+            MPSGraphTensor *inputTensorCast = !needsBoolCast ? newCachedGraph->inputTensor :
+                                              castMPSTensor(mpsGraph, newCachedGraph->inputTensor, ScalarType::Byte);
+            MPSGraphTensor *outputTensor = [mpsGraph padTensor:inputTensorCast
+                                               withPaddingMode:mode
+                                                   leftPadding:leftPadding
+                                                  rightPadding:rightPadding
+                                                 constantValue:constantValue
+                                                          name:nil];
+            newCachedGraph->outputTensor = needsBoolCast ? castMPSTensor(mpsGraph, outputTensor, ScalarType::Bool) : outputTensor;
+          } else {
+            newCachedGraph->gradOutputTensor = mpsGraphRankedPlaceHolder(mpsGraph, grad_output);
+            MPSGraphTensor *padGradTensor = [mpsGraph padGradientWithIncomingGradientTensor:newCachedGraph->gradOutputTensor
+                                                                               sourceTensor:newCachedGraph->inputTensor
+                                                                                paddingMode:mode
+                                                                                leftPadding:leftPadding
+                                                                               rightPadding:rightPadding
+                                                                                       name:nil];
+
+            // workaround for negative padding issue with padGradientWithIncomingGradientTensor()
+            const bool needsSliceGradient = startMask != dims_mask || endMask != dims_mask;
+            if (needsSliceGradient) {
+              newCachedGraph->outputTensor = [mpsGraph sliceGradientTensor:padGradTensor
+                                                          fwdInShapeTensor:[mpsGraph shapeOfTensor:newCachedGraph->inputTensor name:nil]
+                                                                    starts:[NSArray arrayWithObjects:startsVec.data()  count:ndims]
+                                                                      ends:[NSArray arrayWithObjects:endsVec.data()    count:ndims]
+                                                                   strides:[NSArray arrayWithObjects:stridesVec.data() count:ndims]
+                                                                 startMask:startMask
+                                                                   endMask:endMask
+                                                               squeezeMask:0
+                                                                      name:nil];
             } else {
-              newCachedGraph->gradOutputTensor = mpsGraphRankedPlaceHolder(mpsGraph, grad_output);
-              newCachedGraph->outputTensor = [mpsGraph padGradientWithIncomingGradientTensor:newCachedGraph->gradOutputTensor
-                                                                                sourceTensor:newCachedGraph->inputTensor
-                                                                                 paddingMode:mode
-                                                                                 leftPadding:leftPadding
-                                                                                rightPadding:rightPadding
-                                                                                        name:nil];
+              newCachedGraph->outputTensor = padGradTensor;
             }
+          }
         }
         return newCachedGraph;
-      }));
+      });
     }
     Placeholder inputPlaceholder  = Placeholder(cachedGraph->inputTensor, input);
     Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor, output);
