@@ -236,7 +236,6 @@ TORCH_IMPL_FUNC(cat_out_mps)
     return t.dim() == 1 && at::native::size(t, 0) == 0;
   };
 
-  const Tensor* notSkippedTensor = NULL; // non-owning reference
 
   // Check for type promotion
   TORCH_CHECK(
@@ -260,10 +259,11 @@ TORCH_IMPL_FUNC(cat_out_mps)
   }
   at::assert_no_internal_overlap(out);
 
+  Tensor notSkippedTensor;
   // Indices of tensors to be skipped because they're empty
   std::vector<int64_t> skipped_tensor_indices;
   // Tensors to be read
-  std::vector<const Tensor*> input_tensors;
+  std::vector<Tensor> input_tensors;
   int tensor_idx = 0;
   for(const Tensor& t : materialized_inputs) {
     if(t.numel() == 0 || should_skip(t)) {
@@ -271,14 +271,14 @@ TORCH_IMPL_FUNC(cat_out_mps)
       tensor_idx++;
       continue;
     }
-    input_tensors.push_back(&t);
+    input_tensors.push_back(t);
     // TODO: Is this OK?
-    notSkippedTensor = &t;
+    notSkippedTensor = t;
     tensor_idx++;
   }
 
   // If all inputs are empty tensors, return an empty tensor
-  if (notSkippedTensor == NULL) {
+  if (!notSkippedTensor.defined()) {
     return;
   }
 
@@ -290,17 +290,17 @@ TORCH_IMPL_FUNC(cat_out_mps)
 
   for (const Tensor& t : inputs) {
     TORCH_CHECK(
-        t.device() == notSkippedTensor->device(),
+        t.device() == notSkippedTensor.device(),
         "torch.cat(): all input tensors must be on the same device. Received ",
         t.device(),
         " and ",
-        notSkippedTensor->device());
+        notSkippedTensor.device());
   }
 
   TORCH_CHECK(
-      out.device() == notSkippedTensor->device(),
+      out.device() == notSkippedTensor.device(),
       "torch.cat(): all input tensors and out must be on the same device, but inputs are on ",
-      notSkippedTensor->device(),
+      notSkippedTensor.device(),
       " and out is on ",
       out.device());
 
@@ -308,7 +308,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
   // // TODO: Factor out `compute_output_memory_format`
   // c10::MemoryFormat memory_format = compute_output_memory_format(inputs);
 
-  std::vector<int64_t> size(notSkippedTensor->sizes().vec());
+  std::vector<int64_t> size(notSkippedTensor.sizes().vec());
 
   // Compute size of the result in the cat dimension
   int64_t cat_dim_size = 0;
@@ -318,7 +318,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
       continue;
     }
     // TODO: Factor out `check_shape_except_dim`
-    check_shape_except_dim(*notSkippedTensor, tensor, dimension, idx);
+    check_shape_except_dim(notSkippedTensor, tensor, dimension, idx);
     cat_dim_size += at::native::size(tensor, dimension);
     idx++;
   }
@@ -341,8 +341,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
   struct CachedGraph : public MPSCachedGraph
   {
     CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
-    // TODO: Free this when no longer needed globally
-    MPSGraphTensor** inputMPSGraphTensors_ = nil;
+    std::vector<MPSGraphTensor*> inputTensors_;
     MPSGraphTensor* outputTensor_ = nil;
   };
 
@@ -368,49 +367,34 @@ TORCH_IMPL_FUNC(cat_out_mps)
         CachedGraph *newCachedGraph = nil;
 
         @autoreleasepool {
-          // Initialize graph
           MPSGraph *mpsGraph = make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          // Create placeholders
           auto len_tensor_array = inputs.size() - skipped_tensor_indices.size();
-          std::vector<MPSGraphTensor*> inputMPSGraphTensors(len_tensor_array);
-          std::vector<MPSGraphTensor*> castInputMPSGraphTensors(len_tensor_array);
+          std::vector<MPSGraphTensor*> castInputTensors(len_tensor_array);
+          newCachedGraph->inputTensors_.reserve(len_tensor_array);
 
-          int graph_tensor_idx = 0;
-          for(const Tensor* tensor : input_tensors) {
-            inputMPSGraphTensors[graph_tensor_idx] = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(tensor->scalar_type()) );
-            if(getMPSDataType(result_type(inputs)) == MPSDataTypeBool) {
-              castInputMPSGraphTensors[graph_tensor_idx] = [mpsGraph castTensor:inputMPSGraphTensors[graph_tensor_idx]
-                                                                           toType:MPSDataTypeFloat32
-                                                                             name:[NSString stringWithFormat:@"castInput%@", [NSNumber numberWithInt:graph_tensor_idx]]];
+          for (const auto idx : c10::irange(len_tensor_array)) {
+            newCachedGraph->inputTensors_[idx] = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input_tensors[idx].scalar_type()));
+            if (input_tensors[idx].scalar_type() != result_type(inputs)) {
+              castInputTensors[idx] = [mpsGraph castTensor:newCachedGraph->inputTensors_[idx]
+                                                    toType:getMPSDataType(result_type(inputs))
+                                                      name:@"castInput"];
+            } else {
+              castInputTensors[idx] = newCachedGraph->inputTensors_[idx];
             }
-            else {
-              if(tensor->scalar_type() != result_type(inputs))
-                castInputMPSGraphTensors[graph_tensor_idx] = [mpsGraph castTensor:inputMPSGraphTensors[graph_tensor_idx]
-                                                                           toType:getMPSDataType(result_type(inputs))
-                                                                             name:[NSString stringWithFormat:@"castInput%@", [NSNumber numberWithInt:graph_tensor_idx]]];
-              else
-                castInputMPSGraphTensors[graph_tensor_idx] = inputMPSGraphTensors[graph_tensor_idx];
-            }
-            graph_tensor_idx++;
           }
 
-          auto inputTensorsArray = [NSArray arrayWithObjects:castInputMPSGraphTensors.data()
+          auto inputTensorsArray = [NSArray arrayWithObjects:castInputTensors.data()
                                                        count:len_tensor_array];
-          // Use concatTensors to concatenate
           MPSGraphTensor* outputTensor = [mpsGraph concatTensors:inputTensorsArray
                                                        dimension:dimension // Maybe convert this from int64_t -> int32
                                                             name:nil];
-          // FIXME: this is leaking.
-          newCachedGraph->inputMPSGraphTensors_ = (MPSGraphTensor**)malloc(len_tensor_array * sizeof(MPSGraphTensor*));
-
-          for(int i = 0; i < len_tensor_array; i++)
-            newCachedGraph->inputMPSGraphTensors_[i] = inputMPSGraphTensors[i];
-          if(getMPSDataType(result_type(inputs)) == MPSDataTypeBool)
+          if(getMPSDataType(result_type(inputs)) == MPSDataTypeBool) {
             outputTensor = [mpsGraph castTensor:outputTensor
                                          toType:MPSDataTypeBool
                                            name:@"outputTensor"];
+          }
           newCachedGraph->outputTensor_ = outputTensor;
         }
         return newCachedGraph;
@@ -423,7 +407,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
     int t_idx = 0;
     for(const Tensor& tensor : materialized_inputs) {
       if(std::find(skipped_tensor_indices.begin(), skipped_tensor_indices.end(), i) == skipped_tensor_indices.end()) {
-        Placeholder currentInputPlaceholder = Placeholder(cachedGraph->inputMPSGraphTensors_[t_idx], tensor);
+        Placeholder currentInputPlaceholder = Placeholder(cachedGraph->inputTensors_[t_idx], tensor);
         inputPlaceholders.push_back(currentInputPlaceholder);
         t_idx++;
       }
