@@ -845,9 +845,10 @@ Tensor std_var_common_impl_mps(
   @autoreleasepool {
     string op_key = (stdVarType == STANDARD_DEVIATION) ? "std_mps" : "var_mps";
     NSString* ns_key = [[axes valueForKey:@"description"] componentsJoinedByString:@","];
+    string bessel_corrected = (use_correction && correction_value) ? "unbiased " : "biased ";
     string use_dim_info = (use_dim) ? "use_dim=1:" + to_string(dim_value.size()) : "use_dim=0";
     string keepdim_info = (keepdim) ? "keepdim=1" : "keepdim=0";
-    string key = op_key + use_dim_info + ":" + keepdim_info + ":" + string([ns_key UTF8String]) + ":" + native_mps::getTensorsStringKey(input_t) + ":" + bessel_corrected;
+    string key = op_key + use_dim_info + ":" + keepdim_info + ":" + string([ns_key UTF8String]) + ":" + native_mps::getTensorsStringKey(input_t) + ":" + bessel_corrected + std::to_string(correction_value);
 
     auto cachedGraph = cache_->LookUpAs<CachedGraph>(key);
     // Initialize once if configuration not found in cache
