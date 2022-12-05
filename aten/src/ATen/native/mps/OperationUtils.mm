@@ -111,6 +111,31 @@ std::string scalarToMetalTypeString(const c10::ScalarType& scalar_type) {
   }
 }
 
+
+NSArray<NSNumber*>* getTensorAxes(const Tensor& t) {
+  int64_t ndim = t.dim();
+  auto axes = [NSMutableArray<NSNumber*> arrayWithCapacity:ndim];
+  for (const auto i: c10::irange(ndim)) {
+    axes[i] = [NSNumber numberWithInteger:i];
+  }
+  return axes;
+}
+
+NSArray<NSNumber*>* getTensorAxes(const Tensor& t, at::OptionalIntArrayRef dim) {
+  if (dim.has_value() && dim.value().size() != 0) {
+    IntArrayRef dimValues = dim.value();
+    int ndim = dimValues.size();
+    auto axes = [NSMutableArray<NSNumber*> arrayWithCapacity:ndim];
+    for (const auto i: c10::irange(ndim)) {
+      axes[i] = [NSNumber numberWithInteger:dimValues[i]];
+    }
+
+    return axes;
+  }
+
+  return getTensorAxes(t);
+}
+
 std::string getMPSShapeString(MPSShape* shape) {
     std::string str;
     for(NSNumber *elem in shape) {
@@ -207,7 +232,7 @@ Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src, MPSS
   id<MTLBuffer> srcBuf = getMTLBufferStorage(src);
   bool sliceViewTensor = canSliceViewTensor(src, mpsShape);
   // a view tensor could be contiguous (e.g., slice ops) or non-contiguous (e.g., transpose())
-  if ((!src.is_contiguous() || (src.is_view() && src.storage_offset() && !sliceViewTensor)) && gatherTensorData) {
+  if ((!src.is_contiguous() || (src.is_view())) && gatherTensorData) {
      Tensor emptyShell = Tensor();
     // use "_tensor" from Placeholder to retain view's output during its usage in other ops
     _tensor = gatherViewTensor(src, emptyShell);
@@ -226,7 +251,7 @@ Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src, MPSS
   const MPSDataType mpsDataType = dataType != MPSDataTypeInvalid ? dataType :
                       _tensor.dim() == 0 ? getMPSScalarType(_tensor.scalar_type()) : getMPSDataType(_tensor.scalar_type());
 
-  if (src.is_view() && src.is_contiguous() && src.storage_offset() && sliceViewTensor) {
+  if (src.is_view() && src.is_contiguous() && src.storage_offset() && sliceViewTensor && 0) {
     _value = getMPSGraphTensorDataForView(src, mpsShape, mpsDataType);
   } else {
     if (!mpsShape) {
