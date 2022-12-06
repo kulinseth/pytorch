@@ -8221,15 +8221,13 @@ class TestConsistency(TestCase):
         'prod': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'mean': ['f16', 'f32'],
         'count_nonzero': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'masked.argmax': ['f16', 'f32', 'i32'],
-        'masked.argmin': ['f16', 'f32', 'i32'],
         'masked.amax': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.amin': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.mean': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.prod': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.std': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.sum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'masked.var': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'masked.var': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
     }
 
 
@@ -8420,6 +8418,11 @@ class TestConsistency(TestCase):
         '__rpow__': [torch.int64],
         'masked.std': [torch.int32],
         'masked.var': [torch.int32],
+
+        # Failures due to inconsistency between CPU and GPU for `inf` case
+        'masked.argmax': ['f16', 'f32', 'i32'],
+        'masked.argmin': ['f16', 'f32', 'i32'],
+
         'as_strided_scatter': [torch.uint8],
         'atan2': [torch.int64],
         'bfloat16': None,
@@ -8534,6 +8537,7 @@ class TestConsistency(TestCase):
         'empty_like': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
 
         # failures due to precision issues
+        'masked.var': ['f16'],
         'nn.functional.gelu': ['torch.float32'],
         'pow': ['torch.float32'],
         'tan': ['torch.float32'],

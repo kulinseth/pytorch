@@ -74,7 +74,7 @@ Tensor repeat_mps(const Tensor& self, IntArrayRef repeats) {
   auto stream = at::mps::getCurrentMPSStream();
 
   @autoreleasepool {
-    string key = "repeat_mps:" + getTensorsStringKey(self) + getArrayRefString(repeats);
+    string key = "repeat_mps:" + getTensorsStringKey(self) + ":" + getArrayRefString(repeats);
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
 
     if(!cachedGraph) {
