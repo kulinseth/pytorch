@@ -124,10 +124,11 @@ NSArray<NSNumber*>* getTensorAxes(const Tensor& t) {
 NSArray<NSNumber*>* getTensorAxes(const Tensor& t, at::OptionalIntArrayRef dim) {
   if (dim.has_value() && dim.value().size() != 0) {
     IntArrayRef dimValues = dim.value();
-    int ndim = dimValues.size();
+    int64_t ndim = dimValues.size();
     auto axes = [NSMutableArray<NSNumber*> arrayWithCapacity:ndim];
+    int64_t tensor_ndim = t.sizes().size();
     for (const auto i: c10::irange(ndim)) {
-      axes[i] = [NSNumber numberWithInteger:dimValues[i]];
+      axes[i] = [NSNumber numberWithInteger:maybe_wrap_dim(dimValues[i], tensor_ndim)];
     }
 
     return axes;
