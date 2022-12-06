@@ -1,18 +1,10 @@
 //  Copyright © 2022 Apple Inc.
 
-#include <ATen/ATen.h>
 #include <ATen/MemoryOverlap.h>
-#include <ATen/Tensor.h>
-#include <ATen/TensorUtils.h>
-#include <ATen/Utils.h>
 #include <ATen/WrapDimUtils.h>
-#include <ATen/mps/MPSStream.h>
 #include <ATen/native/TypeProperties.h>
 #include <ATen/native/TensorShape.h>
 #include <ATen/native/mps/OperationUtils.h>
-#include <c10/core/MemoryFormat.h>
-#include <c10/util/Optional.h>
-#include <torch/library.h>
 
 namespace at {
 namespace native {
@@ -209,13 +201,6 @@ inline c10::MemoryFormat compute_output_memory_format(const TensorList &inputs) 
   return format.value();
 }
 
-//Tensor cat_mps(TensorList inputs, int64_t dimension) {
-  //ScalarType high_type = result_type(inputs);
-  //Tensor out = at::empty({0}, inputs.front().options().dtype(high_type));
-  //at::native::cat_out_mps(inputs, dimension, out);
-  //return out;
-//}
-
 TORCH_IMPL_FUNC(cat_out_mps)
       (const ITensorListRef& inputs,
        int64_t dimension,
@@ -251,7 +236,6 @@ TORCH_IMPL_FUNC(cat_out_mps)
     return t.dim() == 1 && at::native::size(t, 0) == 0;
   };
 
-  const Tensor* notSkippedTensor = NULL; // non-owning reference
 
   // Check for type promotion
   TORCH_CHECK(
@@ -275,10 +259,11 @@ TORCH_IMPL_FUNC(cat_out_mps)
   }
   at::assert_no_internal_overlap(out);
 
+  Tensor notSkippedTensor;
   // Indices of tensors to be skipped because they're empty
   std::vector<int64_t> skipped_tensor_indices;
   // Tensors to be read
-  std::vector<const Tensor*> input_tensors;
+  std::vector<Tensor> input_tensors;
   int tensor_idx = 0;
   for(const Tensor& t : materialized_inputs) {
     if(t.numel() == 0 || should_skip(t)) {
@@ -286,14 +271,14 @@ TORCH_IMPL_FUNC(cat_out_mps)
       tensor_idx++;
       continue;
     }
-    input_tensors.push_back(&t);
+    input_tensors.push_back(t);
     // TODO: Is this OK?
-    notSkippedTensor = &t;
+    notSkippedTensor = t;
     tensor_idx++;
   }
 
   // If all inputs are empty tensors, return an empty tensor
-  if (notSkippedTensor == NULL) {
+  if (!notSkippedTensor.defined()) {
     return;
   }
 
@@ -305,17 +290,17 @@ TORCH_IMPL_FUNC(cat_out_mps)
 
   for (const Tensor& t : inputs) {
     TORCH_CHECK(
-        t.device() == notSkippedTensor->device(),
+        t.device() == notSkippedTensor.device(),
         "torch.cat(): all input tensors must be on the same device. Received ",
         t.device(),
         " and ",
-        notSkippedTensor->device());
+        notSkippedTensor.device());
   }
 
   TORCH_CHECK(
-      out.device() == notSkippedTensor->device(),
+      out.device() == notSkippedTensor.device(),
       "torch.cat(): all input tensors and out must be on the same device, but inputs are on ",
-      notSkippedTensor->device(),
+      notSkippedTensor.device(),
       " and out is on ",
       out.device());
 
@@ -323,7 +308,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
   // // TODO: Factor out `compute_output_memory_format`
   // c10::MemoryFormat memory_format = compute_output_memory_format(inputs);
 
-  std::vector<int64_t> size(notSkippedTensor->sizes().vec());
+  std::vector<int64_t> size(notSkippedTensor.sizes().vec());
 
   // Compute size of the result in the cat dimension
   int64_t cat_dim_size = 0;
@@ -333,7 +318,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
       continue;
     }
     // TODO: Factor out `check_shape_except_dim`
-    check_shape_except_dim(*notSkippedTensor, tensor, dimension, idx);
+    check_shape_except_dim(notSkippedTensor, tensor, dimension, idx);
     cat_dim_size += at::native::size(tensor, dimension);
     idx++;
   }
@@ -356,8 +341,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
   struct CachedGraph : public MPSCachedGraph
   {
     CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
-    // TODO: Free this when no longer needed globally
-    MPSGraphTensor** inputMPSGraphTensors_ = nil;
+    std::vector<MPSGraphTensor*> inputTensors_;
     MPSGraphTensor* outputTensor_ = nil;
   };
 
@@ -383,49 +367,34 @@ TORCH_IMPL_FUNC(cat_out_mps)
         CachedGraph *newCachedGraph = nil;
 
         @autoreleasepool {
-          // Initialize graph
           MPSGraph *mpsGraph = make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          // Create placeholders
           auto len_tensor_array = inputs.size() - skipped_tensor_indices.size();
-          std::vector<MPSGraphTensor*> inputMPSGraphTensors(len_tensor_array);
-          std::vector<MPSGraphTensor*> castInputMPSGraphTensors(len_tensor_array);
+          std::vector<MPSGraphTensor*> castInputTensors(len_tensor_array);
+          newCachedGraph->inputTensors_.reserve(len_tensor_array);
 
-          int graph_tensor_idx = 0;
-          for(const Tensor* tensor : input_tensors) {
-            inputMPSGraphTensors[graph_tensor_idx] = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(tensor->scalar_type()) );
-            if(getMPSDataType(result_type(inputs)) == MPSDataTypeBool) {
-              castInputMPSGraphTensors[graph_tensor_idx] = [mpsGraph castTensor:inputMPSGraphTensors[graph_tensor_idx]
-                                                                           toType:MPSDataTypeFloat32
-                                                                             name:[NSString stringWithFormat:@"castInput%@", [NSNumber numberWithInt:graph_tensor_idx]]];
+          for (const auto idx : c10::irange(len_tensor_array)) {
+            newCachedGraph->inputTensors_[idx] = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input_tensors[idx].scalar_type()));
+            if (input_tensors[idx].scalar_type() != result_type(inputs)) {
+              castInputTensors[idx] = [mpsGraph castTensor:newCachedGraph->inputTensors_[idx]
+                                                    toType:getMPSDataType(result_type(inputs))
+                                                      name:@"castInput"];
+            } else {
+              castInputTensors[idx] = newCachedGraph->inputTensors_[idx];
             }
-            else {
-              if(tensor->scalar_type() != result_type(inputs))
-                castInputMPSGraphTensors[graph_tensor_idx] = [mpsGraph castTensor:inputMPSGraphTensors[graph_tensor_idx]
-                                                                           toType:getMPSDataType(result_type(inputs))
-                                                                             name:[NSString stringWithFormat:@"castInput%@", [NSNumber numberWithInt:graph_tensor_idx]]];
-              else
-                castInputMPSGraphTensors[graph_tensor_idx] = inputMPSGraphTensors[graph_tensor_idx];
-            }
-            graph_tensor_idx++;
           }
 
-          auto inputTensorsArray = [NSArray arrayWithObjects:castInputMPSGraphTensors.data()
+          auto inputTensorsArray = [NSArray arrayWithObjects:castInputTensors.data()
                                                        count:len_tensor_array];
-          // Use concatTensors to concatenate
           MPSGraphTensor* outputTensor = [mpsGraph concatTensors:inputTensorsArray
                                                        dimension:dimension // Maybe convert this from int64_t -> int32
                                                             name:nil];
-
-          newCachedGraph->inputMPSGraphTensors_ = (MPSGraphTensor**)malloc(len_tensor_array * sizeof(MPSGraphTensor*));
-
-          for(int i = 0; i < len_tensor_array; i++)
-            newCachedGraph->inputMPSGraphTensors_[i] = inputMPSGraphTensors[i];
-          if(getMPSDataType(result_type(inputs)) == MPSDataTypeBool)
+          if(getMPSDataType(result_type(inputs)) == MPSDataTypeBool) {
             outputTensor = [mpsGraph castTensor:outputTensor
                                          toType:MPSDataTypeBool
                                            name:@"outputTensor"];
+          }
           newCachedGraph->outputTensor_ = outputTensor;
         }
         return newCachedGraph;
@@ -438,7 +407,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
     int t_idx = 0;
     for(const Tensor& tensor : materialized_inputs) {
       if(std::find(skipped_tensor_indices.begin(), skipped_tensor_indices.end(), i) == skipped_tensor_indices.end()) {
-        Placeholder currentInputPlaceholder = Placeholder(cachedGraph->inputMPSGraphTensors_[t_idx], tensor);
+        Placeholder currentInputPlaceholder = Placeholder(cachedGraph->inputTensors_[t_idx], tensor);
         inputPlaceholders.push_back(currentInputPlaceholder);
         t_idx++;
       }
@@ -459,308 +428,6 @@ TORCH_IMPL_FUNC(cat_out_mps)
   }
 
 }
-
-void upsample_backward_out_mps(const Tensor& grad_output,
-                               IntArrayRef output_size,
-                               IntArrayRef input_size,
-                               c10::optional<double> scales_h,
-                               c10::optional<double> scales_w,
-                               const Tensor& grad_input,
-                               MPSGraphResizeMode requested_mode,
-                               bool requested_align_corners
-                               )
-{
-    using namespace mps;
-    int64_t input_dims = input_size.size();
-
-    TORCH_CHECK((input_dims == 4),
-            "NCHW tensor expected for input");
-
-    struct CachedGraph : public MPSCachedGraph {
-        CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
-        MPSGraphTensor *gradInputTensor = nil, *gradOutputTensor = nil;
-    };
-    MPSGraphCache* cache_ = MPSGraphCache::getInstance();
-    /* sizes */
-    int64_t output_height = output_size[0];
-    int64_t output_width = output_size[1];
-
-    int64_t input_n = input_size[0];
-    int64_t input_c = input_size[1];
-    int64_t input_height = input_size[2];
-    int64_t input_width = input_size[3];
-
-    @autoreleasepool {
-      MPSShape* output_shape = getMPSShape(grad_output);
-      string key = string("upsample_backward:") + mps::getMPSShapeString(output_shape) + ":" +
-                             getMPSTypeString(grad_output.scalar_type()) +
-                             ":oh" + to_string(output_height) + ":ow" + to_string(output_width) +
-                             ":ih" + to_string(input_height) + ":iw" + to_string(input_width) +
-                             ":mode" + to_string(requested_mode);
-
-      CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
-      if(!cachedGraph) {
-        cachedGraph = static_cast<CachedGraph*>(cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
-
-          CachedGraph *newCachedGraph = nil;
-          @autoreleasepool {
-              MPSGraph* mpsGraph = make_mps_graph();
-              newCachedGraph = new CachedGraph(mpsGraph);
-
-              newCachedGraph->gradOutputTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSDataType(grad_input.scalar_type()), output_shape);
-              MPSGraphTensor * shapeTensor = [mpsGraph constantWithScalar:0
-                                                                    shape:@[[NSNumber numberWithLong: input_n],
-                                                                            [NSNumber numberWithLong: input_c],
-                                                                            [NSNumber numberWithLong:input_height],
-                                                                            [NSNumber numberWithLong:input_width]]
-                                                                 dataType:getMPSDataType(grad_output.scalar_type())];
-
-              newCachedGraph->gradInputTensor  = [mpsGraph resizeWithGradientTensor: newCachedGraph->gradOutputTensor
-                                                                           input: shapeTensor
-                                                                            mode: requested_mode
-                                                                    centerResult: true
-                                                                    alignCorners: requested_align_corners
-                                                                        layout: MPSGraphTensorNamedDataLayoutNCHW
-                                                                            name: nil];
-
-          }
-          return newCachedGraph;
-        }));
-      }
-      Placeholder gradOutputPlaceholder  = Placeholder(cachedGraph->gradOutputTensor, grad_output);
-      Placeholder gradInputPlaceholder = Placeholder(cachedGraph->gradInputTensor, grad_input);
-
-      NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
-          gradOutputPlaceholder.getMPSGraphTensor() : gradOutputPlaceholder.getMPSGraphTensorData(),
-      };
-      NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
-          gradInputPlaceholder.getMPSGraphTensor() : gradInputPlaceholder.getMPSGraphTensorData()
-      };
-      runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
-    }
-}
-
-TORCH_IMPL_FUNC(_upsample_nearest_exact2d_backward_out_mps) (
-    const Tensor& grad_output,
-    IntArrayRef output_size,
-    IntArrayRef input_size,
-    c10::optional<double> scales_h,
-    c10::optional<double> scales_w,
-    const Tensor& grad_input)
-{
-    upsample_backward_out_mps(grad_output, output_size, input_size, scales_h, scales_w, grad_input, MPSGraphResizeNearest, false);
-}
-
-TORCH_IMPL_FUNC(upsample_nearest2d_backward_out_mps) (
-    const Tensor& grad_output,
-    IntArrayRef output_size,
-    IntArrayRef input_size,
-    c10::optional<double> scales_h,
-    c10::optional<double> scales_w,
-    const Tensor& grad_input)
-{
-    upsample_backward_out_mps(grad_output, output_size, input_size, scales_h, scales_w, grad_input, MPSGraphResizeNearest, false);
-}
-
-TORCH_IMPL_FUNC(upsample_bilinear2d_backward_out_mps) (
-    const Tensor& grad_output,
-    IntArrayRef output_size,
-    IntArrayRef input_size,
-    bool align_corners,
-    c10::optional<double> scales_h,
-    c10::optional<double> scales_w,
-    const Tensor& grad_input)
-{
-    upsample_backward_out_mps(grad_output, output_size, input_size, scales_h, scales_w, grad_input, MPSGraphResizeBilinear, align_corners);
-}
-
-void upsample_out_mps(const Tensor& input,
-                      IntArrayRef output_size,
-                      c10::optional<double> scales_h,
-                      c10::optional<double> scales_w,
-                      const Tensor& output,
-                      MPSGraphResizeMode requested_mode,
-                      bool requested_align_corners)
-{
-    // Get stream
-    using namespace mps;
-    struct CachedGraph : public MPSCachedGraph {
-        CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
-        MPSGraphTensor *inputTensor = nil, *outputTensor = nil;
-    };
-    MPSGraphCache* cache_ = MPSGraphCache::getInstance();
-
-    /* sizes */
-    int64_t output_height = output_size[0];
-    int64_t output_width = output_size[1];
-    @autoreleasepool {
-      MPSShape* input_shape = getMPSShape(input);
-      string key = string("upsample_2d:") + mps::getMPSShapeString(input_shape) + ":" +
-                             getMPSTypeString(input.scalar_type()) +
-                             ":h" + to_string(output_height) + ":w" + to_string(output_width) +
-                             ":mode" + to_string(requested_mode);
-
-      CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
-      if(!cachedGraph) {
-        cachedGraph = static_cast<CachedGraph*>(cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
-
-          CachedGraph *newCachedGraph = nil;
-
-          @autoreleasepool {
-              MPSGraph* mpsGraph = make_mps_graph();
-              newCachedGraph = new CachedGraph(mpsGraph);
-
-              newCachedGraph->inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSDataType(input.scalar_type()), input_shape);
-              newCachedGraph->outputTensor = [mpsGraph resizeTensor:newCachedGraph->inputTensor
-                                                               size:@[ @(output_height), @(output_width)]
-                                                               mode:requested_mode
-                                                               centerResult: true
-                                                               alignCorners: requested_align_corners
-                                                               layout: MPSGraphTensorNamedDataLayoutNCHW
-                                                               name:nil];
-          }
-          return newCachedGraph;
-        }));
-      }
-      Placeholder inputPlaceholder  = Placeholder(cachedGraph->inputTensor, input);
-      Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor, output);
-
-      NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
-          inputPlaceholder.getMPSGraphTensor() : inputPlaceholder.getMPSGraphTensorData(),
-      };
-      NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
-          outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
-      };
-      runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
-    }
-}
-
-TORCH_IMPL_FUNC(_upsample_nearest_exact2d_out_mps) (
-    const Tensor& input,
-    IntArrayRef output_size,
-    c10::optional<double> scales_h,
-    c10::optional<double> scales_w,
-    const Tensor& output)
-{
-    // Note: this differs from the CPU implementation in the way
-    // ties are resolved wrt to nearest mostly in cases where the scale
-    // is not an integer.
-    // Example:
-    // For upsampling from (2, 5) to (2, 16)
-    // MPS:
-    // tensor([[[[0., 0., 0., 0., 1., 1., 1., 2., 2., 2., 3., 3., 3., 4., 4., 4.],
-    // [5., 5., 5., 5., 6., 6., 6., 7., 7., 7., 8., 8., 8., 9., 9., 9.]]]])
-    // CPU:
-    // tensor([[[[0., 0., 0., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 4., 4., 4.],
-    // [5., 5., 5., 6., 6., 6., 7., 7., 7., 7., 8., 8., 8., 9., 9., 9.]]]])
-    using namespace mps;
-    upsample_out_mps(input, output_size, scales_h, scales_w, output, MPSGraphResizeNearest, false);
-}
-
-
-TORCH_IMPL_FUNC(upsample_nearest2d_out_mps) (
-    const Tensor& input,
-    IntArrayRef output_size,
-    c10::optional<double> scales_h,
-    c10::optional<double> scales_w,
-    const Tensor& output)
-{
-    // Note: this differs from the CPU implementation in the way
-    // ties are resolved wrt to nearest mostly in cases where the scale
-    // is not an integer.
-    // Example:
-    // For upsampling from (2, 5) to (2, 16)
-    // MPS:
-    // tensor([[[[0., 0., 0., 0., 1., 1., 1., 2., 2., 2., 3., 3., 3., 4., 4., 4.],
-    // [5., 5., 5., 5., 6., 6., 6., 7., 7., 7., 8., 8., 8., 9., 9., 9.]]]])
-    // CPU:
-    // tensor([[[[0., 0., 0., 1., 1., 1., 2., 2., 2., 2., 3., 3., 3., 4., 4., 4.],
-    // [5., 5., 5., 6., 6., 6., 7., 7., 7., 7., 8., 8., 8., 9., 9., 9.]]]])
-    using namespace mps;
-    upsample_out_mps(input, output_size, scales_h, scales_w, output, MPSGraphResizeNearest, false);
-}
-
-TORCH_IMPL_FUNC(upsample_bilinear2d_out_mps) (
-    const Tensor& input,
-    IntArrayRef output_size,
-    bool align_corners,
-    c10::optional<double> scales_h,
-    c10::optional<double> scales_w,
-    const Tensor& output)
-{
-    using namespace mps;
-    upsample_out_mps(input, output_size, scales_h, scales_w, output, MPSGraphResizeBilinear, align_corners);
-}
-
-void upsample1d_out_mps(const Tensor& input,
-                      IntArrayRef output_size,
-                      c10::optional<double> scales,
-                      const Tensor& output,
-                      MPSGraphResizeMode requested_mode)
-{
-    // Get stream
-    using namespace mps;
-    using CachedGraph = MPSUnaryCachedGraph;
-    MPSGraphCache* cache_ = MPSGraphCache::getInstance();
-
-    /* sizes */
-    int64_t out_size = output_size[0];
-    @autoreleasepool {
-      MPSShape* input_shape = getMPSShape(input);
-      string key = string("upsample_1d:") + mps::getMPSShapeString(input_shape) + ":" +
-                             getMPSTypeString(input.scalar_type()) +
-                             ":size" + to_string(out_size) +
-                             ":mode" + to_string(requested_mode);
-
-      CachedGraph* cachedGraph = cache_->LookUpAs<CachedGraph>(key);
-      if(!cachedGraph) {
-        cachedGraph = static_cast<CachedGraph*>(cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
-
-          CachedGraph *newCachedGraph = nil;
-
-          @autoreleasepool {
-              MPSGraph* mpsGraph = make_mps_graph();
-              newCachedGraph = new CachedGraph(mpsGraph);
-
-              newCachedGraph->inputTensor_ = mpsGraphRankedPlaceHolder(mpsGraph, getMPSDataType(input.scalar_type()), input_shape);
-              newCachedGraph->outputTensor_ = [mpsGraph resizeTensor:newCachedGraph->inputTensor_
-                                                               size:@[ @(out_size), @(1)]
-                                                               mode:requested_mode
-                                                               centerResult: true
-                                                               alignCorners: true
-                                                               layout: MPSGraphTensorNamedDataLayoutCHW
-                                                               name:nil];
-          }
-          return newCachedGraph;
-        }));
-      }
-      Placeholder inputPlaceholder  = Placeholder(cachedGraph->inputTensor_, input);
-      Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output);
-
-      NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
-          inputPlaceholder.getMPSGraphTensor() : inputPlaceholder.getMPSGraphTensorData(),
-      };
-      NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
-          outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
-      };
-      runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
-    }
-}
-
-
-TORCH_IMPL_FUNC(upsample_nearest1d_out_mps) (
-    const Tensor& input,
-    IntArrayRef output_size,
-    c10::optional<double> scales,
-    const Tensor& output)
-{
-    using namespace mps;
-    upsample1d_out_mps(input, output_size, scales, output, MPSGraphResizeNearest);
-}
-
-
-
-
 
 } // namespace native
 } // namespace at
