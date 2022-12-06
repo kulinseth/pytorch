@@ -754,7 +754,7 @@ Tensor std_var_common_impl_mps(
     unsigned int curr_i = 0;
     for (const int i : c10::irange(num_input_dims)) {
       bool found = false;
-      for (const int j c10::irange(num_reduce_dims)) {
+      for (const int j : c10::irange(num_reduce_dims)) {
         if (i == dim_value[j]) {
             found = true;
             break;
