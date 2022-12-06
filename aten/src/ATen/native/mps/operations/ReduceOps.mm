@@ -32,25 +32,6 @@ enum MPSReductionType {
   COUNT_NONZERO
 };
 
-IntArrayRef getOutputShape(const Tensor& self, IntArrayRef dims) {
-  int64_t shape_size = dims.size() == 0 ? 0 : self.sizes().size() - dims.size();
-  int out_shape = std::max(shape_size, 0LL);
-  std::vector<int64_t> output_shape(out_shape);
-  std::vector<int64_t> dims_vec = dims.vec();
-  std::for_each(dims_vec.begin(), dims_vec.end(), [&](int64_t &n){ n = maybe_wrap_dim(n, self); });
-
-  if (out_shape != 0) {
-    int out_dim = 0;
-    for (const auto self_dim: c10::irange((self.sizes().size()))) {
-      if (std::find(dims_vec.begin(), dims_vec.end(), self_dim) == dims_vec.end()) {
-        output_shape[out_dim++] = (self.sizes()[self_dim]);
-      }
-    }
-  }
-
-  return IntArrayRef(output_shape);
-}
-
 void set_apparent_shapes(NSMutableArray<NSNumber*> * &apparent_out_shape,
                          NSMutableArray<NSNumber*> * &apparent_in_shape,
                          int64_t num_reduce_dims,
@@ -371,10 +352,23 @@ Tensor prod_mps(const Tensor &self, c10::optional<ScalarType> opt_dtype) {
 
 
 Tensor count_nonzero_mps(const Tensor& self, IntArrayRef dims){
-  IntArrayRef output_shape = getOutputShape(self, dims);
+  int64_t shape_size = dims.size() == 0 ? 0 : self.sizes().size() - dims.size();
+  int64_t out_shape = std::max(shape_size, 0LL);
+  std::vector<int64_t> output_shape(out_shape);
+  std::vector<int64_t> dims_vec = dims.vec();
+  std::for_each(dims_vec.begin(), dims_vec.end(), [&](int64_t &n){ n = maybe_wrap_dim(n, self); });
+
+  if (out_shape != 0) {
+    int out_dim = 0;
+    for (const auto self_dim: c10::irange((self.sizes().size()))) {
+      if (std::find(dims_vec.begin(), dims_vec.end(), self_dim) == dims_vec.end()) {
+        output_shape[out_dim++] = (self.sizes()[self_dim]);
+      }
+    }
+  }
 
   Tensor output_t = at::native::empty_mps(
-                      output_shape,
+                      IntArrayRef(output_shape),
                       ScalarType::Long,
                       c10::nullopt,
                       kMPS,
