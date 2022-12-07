@@ -362,7 +362,6 @@ bool is2D)
                                                    reductionToString(reduction) + ":" +
                                                    getTensorsStringKey({input, target, weight, total_weight});
         CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
-        std::cout << key << std::endl;
         if(!cachedGraph) {
             MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
 
