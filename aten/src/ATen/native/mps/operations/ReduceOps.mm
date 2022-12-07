@@ -180,11 +180,12 @@ void reduction_out_mps(
   @autoreleasepool {
     std::string dtype_str = dtype.has_value() ? mps::getMPSTypeString(dtype.value()) : "";
     NSString* ns_key = [[wrappedAxes valueForKey:@"description"] componentsJoinedByString:@","];
-    string key = func_name                                + ":" +
-                 string([ns_key UTF8String])              + ":" +
-                 native_mps::getTensorsStringKey(input_t) + ":" +
-                 std::to_string(keepdim)                  + ":" +
-                 std::to_string(reduction_type)           + ":" +
+    string key = func_name                                 + ":" +
+                 string([ns_key UTF8String])               + ":" +
+                 native_mps::getTensorsStringKey(input_t)  + ":" +
+                 std::to_string(keepdim)                   + ":" +
+                 std::to_string(reduction_type)            + ":" +
+                 native_mps::getTensorsStringKey(output_t) + ":" +
                  dtype_str;
     using CachedGraph = native_mps::MPSUnaryCachedGraph;
     auto cachedGraph = cache_->LookUpAs<CachedGraph>(key);
