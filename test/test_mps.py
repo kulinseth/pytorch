@@ -8314,6 +8314,19 @@ class TestConsistency(TestCase):
         'nn.functional.nll_loss': ['f32'],
         'std': ['f16','f32'],
         'var': ['f16','f32'],
+        'amax': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'amin': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'sum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'prod': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'mean': ['f16', 'f32'],
+        'count_nonzero': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'masked.amax': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'masked.amin': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'masked.mean': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'masked.prod': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'masked.std': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'masked.sum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'masked.var': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
     }
 
 
@@ -8504,6 +8517,11 @@ class TestConsistency(TestCase):
         '__rpow__': [torch.int64],
         'masked.std': [torch.int32],
         'masked.var': [torch.int32],
+
+        # Failures due to inconsistency between CPU and GPU for `inf` case
+        'masked.argmax': ['f16', 'f32', 'i32'],
+        'masked.argmin': ['f16', 'f32', 'i32'],
+
         'as_strided_scatter': [torch.uint8],
         'atan2': [torch.int64],
         'bfloat16': None,
@@ -8616,24 +8634,8 @@ class TestConsistency(TestCase):
         'new_empty': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'empty_like': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
 
-        # failures due to shape and type issues in ReduceOps
-        'amax': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        'amin': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        'sum': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        'prod': ['torch.bool', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        'mean': ['torch.float16', 'torch.float32'],
-        'count_nonzero': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        '_masked.argmax': ['torch.float16', 'torch.float32', 'torch.int32'],
-        '_masked.argmin': ['torch.float16', 'torch.float32', 'torch.int32'],
-        '_masked.amax': ['torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        '_masked.amin': ['torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        '_masked.mean': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        '_masked.prod': ['torch.bool', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        '_masked.std': ['torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        '_masked.sum': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        '_masked.var': ['torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-
         # failures due to precision issues
+        'masked.var': ['f16'],
         'nn.functional.gelu': ['torch.float32'],
         'pow': ['torch.float32'],
         'tan': ['torch.float32'],
