@@ -307,7 +307,7 @@ TORCH_IMPL_FUNC(avg_pool2d_out_mps) (
   };
   mps::pool2d_template(input, output, c10::nullopt, c10::nullopt, {kH, kW}, {dH, dW},
                        {padH, padW}, {1, 1}, ceil_mode, divisor, pooling_op_block,
-                       std::string("avg_pool2d") + (count_include_pad ? "_include_pad:" : ":") + std::to_string(divisor));
+                       std::string("avg_pool2d") + (count_include_pad ? "_include_pad" : ""));
 }
 
 TORCH_IMPL_FUNC(avg_pool2d_backward_out_mps) (
