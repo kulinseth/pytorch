@@ -339,9 +339,9 @@ MPSGraphTensor* castMPSTensor(MPSGraph *mpsGraph, MPSGraphTensor* tensor, Scalar
 }
 
 MPSGraphTensor* convertNHWCtoNCHW(MPSGraph *mpsGraph, MPSGraphTensor* tensor) {
-  // TODO: use transposeTensor(permutation:) to avoid passing negative dims to NSUInteger args
-  return [mpsGraph transposeTensor:[mpsGraph transposeTensor:tensor dimension:-1 withDimension:-2 name:nil]
-                         dimension:-2 withDimension:-3 name: nil];
+  TORCH_INTERNAL_ASSERT(tensor.shape.count == 4, "Tensor must have 4 dimensions!");
+  return [mpsGraph transposeTensor:[mpsGraph transposeTensor:tensor dimension:3 withDimension:2 name:nil]
+                         dimension:2 withDimension:1 name: nil];
 }
 
 string get_mem_format_string(c10::MemoryFormat memory_format) {
