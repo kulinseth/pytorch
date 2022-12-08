@@ -2398,6 +2398,20 @@ class TestSmoothL1Loss(TestCase):
 
 
 class TestNLLLoss(TestCase):
+    def test_nll2d_loss_backward(self, device='mps'):
+        a = torch.randn(3, 5, requires_grad=True, device=device)
+        b = torch.tensor([1, 0, 4], device=device)
+        loss = nn.NLLLoss()
+        out = loss(a, b)
+        self.assertIsNone(out.grad_fn._saved_weight)
+        loss = nn.NLLLoss(weight=torch.ones((5,), device=device))
+        out = loss(a, b)
+        self.assertEqual(out.grad_fn._saved_weight, torch.ones((5,)))
+
+        out.sum().backward()
+        with self.assertRaisesRegex(RuntimeError, "after they have already been freed"):
+            out.grad_fn._saved_weight
+
     def test_nll_loss_mismatched_batch(self, device='mps'):
         x = torch.randn((10, 3), requires_grad=True, device=device)
         # t should have size (10,)
