@@ -340,13 +340,17 @@ Tensor mps_convolution_backward_input(
 }
 
 Tensor mps_convolution_backward_weights(
-    IntArrayRef weight_size, const Tensor& grad_output_t, const Tensor& input_t,
+    IntArrayRef weight_size, const Tensor& grad_output_, const Tensor& input_,
     IntArrayRef padding, IntArrayRef stride, IntArrayRef dilation, int64_t groups, bool bias_defined) {
   namespace native_mps = at::native::mps;
   using namespace mps;
   CheckedFrom c = "mps_convolution_backward_weights";
-  auto memory_format = input_t.suggest_memory_format();
+  auto memory_format = input_.suggest_memory_format();
   bool is_channels_last = (memory_format == at::MemoryFormat::ChannelsLast);
+
+  auto grad_output_t = grad_output_.to(memory_format);
+  auto input_t = input_.to(memory_format);
+
   MPSShape* inputShape = get_mps_conv_shape(input_t, is_channels_last);
   MPSShape* gradOutputShape = get_mps_conv_shape(grad_output_t, is_channels_last);
 
@@ -358,7 +362,13 @@ Tensor mps_convolution_backward_weights(
   checkAllSameType(c, {grad_output, input});
   checkAllSameGPU(c, {grad_output, input});
 
-  auto grad_weight_t = at::empty(weight_size, grad_output_t.options(), c10::nullopt);
+  auto grad_weight_t = at::empty(
+                          weight_size,
+                          grad_output_t.scalar_type(),
+                          c10::nullopt,
+                          kMPS,
+                          c10::nullopt,
+                          memory_format);
   TensorArg grad_weight{ grad_weight_t, "result", 0 };
 
   convolution_shape_check(c, input, grad_weight, grad_output, padding, stride, dilation, groups);
