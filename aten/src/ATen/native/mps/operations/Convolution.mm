@@ -41,7 +41,7 @@ void fill_conv_desc(MPSGraphConvolution2DOpDescriptor* descriptor_,
 
 static
 MPSShape* get_mps_conv_shape(const Tensor& tensor, bool is_channels_last) {
-  if (is_channels_last) {
+  if (is_channels_last && tensor.is_contiguous() && !tensor.is_view()) {
     const auto tensorSizes = tensor.sizes();
     const NSUInteger N = tensorSizes[0];
     const NSUInteger C = tensorSizes[1];
@@ -269,6 +269,7 @@ Tensor mps_convolution_backward_input(
     }
 
     MPSShape* gradOutputShape = get_mps_conv_shape(grad_output_t, is_channels_last);
+    MPSShape* mps_input_shape = getMPSShape(input_size);
     NSString* ns_shape_key = [[gradOutputShape valueForKey:@"description"] componentsJoinedByString:@","];
     string key = "mps_convolution_backward_input:" + to_string(stride[0]) + ":" + to_string(stride[1]) + ":"
                                                    + to_string(dilation[0]) + ":" + to_string(dilation[1]) + ":"
@@ -297,7 +298,7 @@ Tensor mps_convolution_backward_input(
           MPSGraphTensor* weightTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, weight_t);
 
           MPSGraphTensor *gradOutputTensorTranspose = gradOutputTensor;
-          if (is_channels_last) {
+          if (is_channels_last && grad_output_t.is_contiguous() && !grad_output_t.is_view()) {
             // NHWC -> NCHW
             gradOutputTensorTranspose = [mpsGraph transposeTensor: [mpsGraph transposeTensor:gradOutputTensor dimension:-1 withDimension:-2 name:nil]
                                            dimension: -2
@@ -307,7 +308,7 @@ Tensor mps_convolution_backward_input(
 
           MPSGraphTensor* gradInputTensor = [mpsGraph convolution2DDataGradientWithIncomingGradientTensor:gradOutputTensorTranspose
                                                                                             weightsTensor:weightTensor
-                                                                                              outputShape:gradOutputShape
+                                                                                              outputShape:mps_input_shape
                                                                              forwardConvolutionDescriptor:descriptor_
                                                                                                      name:nil];
 
