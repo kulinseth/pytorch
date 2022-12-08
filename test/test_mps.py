@@ -8001,8 +8001,8 @@ class TestConsistency(TestCase):
         '__ror__': ['b8', 'i16', 'i32', 'i64', 'u8'],
         '__rpow__': ['f16'],
         '__rxor__': ['b8', 'i16', 'i32', 'i64', 'u8'],
-        'masked.argmax': ['i16', 'i64', 'u8'],
-        'masked.argmin': ['i16', 'i64', 'u8'],
+        'masked.argmax': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'masked.argmin': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.log_softmax': ['f32'],
         'masked.logaddexp': ['f32'],
         'masked.logsumexp': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8459,10 +8459,6 @@ class TestConsistency(TestCase):
         '__rpow__': [torch.int64],
         'masked.std': [torch.int32],
         'masked.var': [torch.int32],
-
-        # Failures due to inconsistency between CPU and GPU for `inf` case
-        'masked.argmax': ['f16', 'f32', 'i32'],
-        'masked.argmin': ['f16', 'f32', 'i32'],
 
         'as_strided_scatter': [torch.uint8],
         'atan2': [torch.int64],

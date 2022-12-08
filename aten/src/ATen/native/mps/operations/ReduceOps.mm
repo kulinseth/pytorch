@@ -1620,8 +1620,13 @@ void argmax_argmin_out_mps
                                                           toType:MPSDataTypeInt64
                                                             name:@"castOutputTensor"];
 
+            MPSGraphTensor* outputClampedTensor = [mpsGraph clampWithTensor:outputTensor
+                                                             minValueTensor:[mpsGraph constantWithScalar:0 dataType:MPSDataTypeInt64]
+                                                             maxValueTensor:[mpsGraph constantWithScalar:LLONG_MAX dataType:MPSDataTypeInt64]
+                                                                       name: nil];
+
             newCachedGraph->inputTensor_ = inputTensor;
-            newCachedGraph->outputTensor_ = outputTensor;
+            newCachedGraph->outputTensor_ = outputClampedTensor;
           }
           return newCachedGraph;
         });
