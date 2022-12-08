@@ -356,19 +356,12 @@ bool is2D)
         MPSShape* weight_shape = getMPSShape(weight);
         MPSShape* total_weight_shape = getMPSShape(total_weight);
 
-        NSString* ns_shape_key = [[input_shape valueForKey:@"description"] componentsJoinedByString:@","];
-
         string key = "nllnd_loss_backward_impl:" + to_string(numClasses) + ":" +
                                                    to_string(ignore_index) + ":" +
                                                    to_string(isWeightsArrayValid) + ":" +
                                                    reductionToString(reduction) + ":" +
-                                                   [ns_shape_key UTF8String] + ":" +
-                                                   getMPSTypeString(input.scalar_type()) + ":" +
-                                                   getMPSTypeString(target.scalar_type()) + ":" +
-                                                   getMPSTypeString(weight.scalar_type()) + ":" +
-                                                   getMPSTypeString(total_weight.scalar_type());
+                                                   getTensorsStringKey({input, target, weight, total_weight});
         CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
-
         if(!cachedGraph) {
             MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
 
@@ -408,12 +401,11 @@ bool is2D)
                     }
 
                     float onValue = -1.0f;
+                    auto target_axis = target.defined() ? target.dim() : 1;
 
-                    MPSGraphTensor *oneHotTensor;
-
-                    oneHotTensor = [mpsGraph oneHotWithIndicesTensor:udpatedTargetTensor
+                    MPSGraphTensor *oneHotTensor = [mpsGraph oneHotWithIndicesTensor:udpatedTargetTensor
                                                                depth:numClasses
-                                                                axis:1
+                                                                axis:target_axis
                                                             dataType:inputTensor.dataType
                                                              onValue:onValue
                                                             offValue:0.0f
