@@ -6926,16 +6926,14 @@ class TestConvolutionMPS(TestCase):
             res_cpu = res_cpu.sum().backward()
             res_mps = res_mps.sum().backward()
 
-            print(conv_cpu.weight.grad)
-            print(conv_mps.weight.grad)
             self.assertEqual(conv_cpu.weight.grad, conv_mps.weight.grad, rtol=2.6e-05, atol=2e-04)
             self.assertEqual(x_cpu.grad, x_mps.grad)
 
-        # helper(shape=(1, 176, 1))
-        # helper(shape=(2, 12, 1))
-        # helper(shape=(3, 176, 1))
-        # helper(shape=(4, 376, 1))
-        # helper(shape=(1024, 376, 9), in_channels=9, out_channels=1, groups=1)
+        helper(shape=(1, 176, 1))
+        helper(shape=(2, 12, 1))
+        helper(shape=(3, 176, 1))
+        helper(shape=(4, 376, 1))
+        helper(shape=(1024, 376, 9), in_channels=9, out_channels=1, groups=1)
         helper(shape=(1024, 376, 9), in_channels=9, out_channels=9, groups=3)
 
     def test_conv1d_contiguous(self):
