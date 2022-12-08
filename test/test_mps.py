@@ -350,16 +350,16 @@ class TestMPS(TestCase):
 
     def test_cdist_large(self, device="mps"):
         for cm in ['use_mm_for_euclid_dist_if_necessary', 'use_mm_for_euclid_dist', 'donot_use_mm_for_euclid_dist']:
-            x = torch.randn(1000, 10, device=device)
-            y = torch.randn(1000, 10, device=device)
+            x = torch.randn(100, 10, device=device)
+            y = torch.randn(100, 10, device=device)
             actual = torch.cdist(x, y, p=2, compute_mode=cm)
             expected = self._brute_cdist(x, y, p=2)
             self.assertEqual(expected, actual)
 
     def test_cdist_large_batch(self, device="mps"):
         for cm in ['use_mm_for_euclid_dist_if_necessary', 'use_mm_for_euclid_dist', 'donot_use_mm_for_euclid_dist']:
-            x = torch.randn(4, 3, 1000, 10, device=device)
-            y = torch.randn(4, 3, 1000, 10, device=device)
+            x = torch.randn(4, 3, 100, 10, device=device)
+            y = torch.randn(4, 3, 100, 10, device=device)
             actual = torch.cdist(x, y, p=2, compute_mode=cm)
             expected = self._brute_cdist(x, y, p=2)
             self.assertEqual(expected, actual)
@@ -460,10 +460,10 @@ class TestMPS(TestCase):
         return torch.norm(x[..., None, :] - y[..., None, :, :], p=p, dim=-1)
 
     def test_cdist_norm(self, device="mps"):
-        for r1 in [3, 4, 5, 6]:
-            for m in [2, 3, 4, 10]:
-                for r2 in [4, 6, 7, 8]:
-                    for p in [0, 1, 2, 3, 1.5, 2.5, float('inf')]:
+        for r1 in [3, 4]:
+            for m in [2, 3]:
+                for r2 in [4, 6]:
+                    for p in [0, 1, 1.5, 2.5, float('inf')]:
                         x = torch.randn(r1, m, device=device)
                         y = torch.randn(r2, m, device=device)
                         if p == 2:
@@ -477,10 +477,10 @@ class TestMPS(TestCase):
                             self.assertEqual(expected, actual)
 
     def test_cdist_norm_batch(self, device="mps"):
-        for r1 in [3, 4, 5, 6]:
-            for m in [2, 3, 4, 10]:
-                for r2 in [4, 6, 7, 8]:
-                    for p in [0, 1, 2, 3, 1.5, 2.5, float('inf')]:
+        for r1 in [3, 4]:
+            for m in [2, 3]:
+                for r2 in [4, 6]:
+                    for p in [0, 3, 1.5, 2.5, float('inf')]:
                         x = torch.randn(2, 3, 6, r1, m, device=device)
                         y = torch.randn(2, 3, 6, r2, m, device=device)
                         if p == 2:
