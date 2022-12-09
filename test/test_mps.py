@@ -8613,7 +8613,6 @@ class TestConsistency(TestCase):
         'take_along_dim': None,
 
         # New block list ops that need investigation
-        'as_strided_scatter': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'nn.functional.bilinear': ['torch.float32'],
         'nn.functional.conv_transpose2d': ['torch.float32'],
         'nn.functional.interpolate': ['torch.float32'],
@@ -8670,6 +8669,8 @@ class TestConsistency(TestCase):
          # these fill tensors with uninitialized data, causing mismatch with CPU
         'new_empty': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'empty_like': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
+        # problem 103190467, as_strided_scatter has non-deterministic behavior when the update indices are not unique
+        'as_strided_scatter': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
 
         # failures due to precision issues
         'masked.var': ['f16'],
