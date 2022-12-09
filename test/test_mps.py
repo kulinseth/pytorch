@@ -8261,6 +8261,8 @@ class TestConsistency(TestCase):
         'nn.functional.linear': ['f32'],
         'nn.functional.local_response_norm': ['f32', 'i64'],
         'nn.functional.margin_ranking_loss': ['f32', 'i16', 'i32', 'i64', 'u8'],
+        'nn.functional.max_pool1d': ['f32'],
+        'nn.functional.max_pool2d': ['f32'],
         'nn.functional.mse_loss': ['f16', 'f32'],
         'nn.functional.normalize': ['f32'],
         'nn.functional.pad': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8621,16 +8623,9 @@ class TestConsistency(TestCase):
 
         # New block list ops that need investigation
         'as_strided_scatter': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        'atan2': ['torch.bool', 'torch.int16', 'torch.int32', 'torch.uint8'], # atan2() may generate NAN in output
-        'nn.functional.adaptive_avg_pool1d': ['torch.float32'],
-        'nn.functional.adaptive_avg_pool2d': ['torch.float32'],
-        'nn.functional.avg_pool1d': ['torch.float32', 'torch.int64'],
-        'nn.functional.avg_pool2d': ['torch.float32', 'torch.int64'],
         'nn.functional.bilinear': ['torch.float32'],
         'nn.functional.conv_transpose2d': ['torch.float32'],
         'nn.functional.interpolate': ['torch.float32'],
-        'nn.functional.max_pool1d': ['torch.float32'],
-        'nn.functional.max_pool2d': ['torch.float32'],
         'topk': ['torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
 
         # failures due to lack of op implementation on MPS backend
@@ -8645,6 +8640,16 @@ class TestConsistency(TestCase):
         'fft.rfft': ['torch.bool', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'fft.rfftn': ['torch.bool', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'put': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
+
+        # failure due to issue: atan2() may generate NAN in output with
+        'atan2': ['torch.bool', 'torch.int16', 'torch.int32', 'torch.uint8'],
+
+        # failures due to issue #103039644: Wrong results from avgPooling2DWithSourceTensor()
+        # when both ceilMode and includeZeroPadToAverage are True
+        'nn.functional.avg_pool1d': ['torch.float32', 'torch.int64'],
+        'nn.functional.avg_pool2d': ['torch.float32', 'torch.int64'],
+        'nn.functional.adaptive_avg_pool1d': ['torch.float32'],
+        'nn.functional.adaptive_avg_pool2d': ['torch.float32'],
 
         # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
         'pow': ['torch.int16', 'torch.int32', 'torch.uint8'],
