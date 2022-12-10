@@ -468,7 +468,7 @@ Tensor& nan_to_num_out_mps(const Tensor& self,
                                                               secondaryTensor: [mpsGraph constantWithScalar: 0.0 dataType: self_dtype]
                                                                          name: nil];
           // the cast is a workaround for the issue #103149520 (crash when bool and fp16 passed to binary ops)
-          MPSGraphTensor* isNegInfTensor = [mpsGraph logicalANDWithPrimaryTensor: [mpsGraph castTensor: subZeroTensor toType: self_dtype name: nil]
+          MPSGraphTensor* isNegInfTensor = [mpsGraph logicalANDWithPrimaryTensor: [mpsGraph castTensor: subZeroTensor toType: self_dtype name: @"castTensor"]
                                                                  secondaryTensor: [mpsGraph isInfiniteWithTensor: nanFreeTensor name:nil]
                                                                             name: nil];
           MPSGraphTensor* negInfFreeTensor = [mpsGraph selectWithPredicateTensor: isNegInfTensor

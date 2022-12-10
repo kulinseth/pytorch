@@ -329,9 +329,6 @@ TORCH_IMPL_FUNC(prod_out_mps)
     bool keepdim,
     c10::optional<ScalarType> dtype,
     const Tensor& output_t) {
-
-    int64_t dims[1] = {dim};
-
   int64_t dims[1] = {dim};
   reduction_out_mps(input_t, IntArrayRef(dims, 1), keepdim, dtype, output_t, MPSReductionType::PROD, "prod_out_mps");
 }
@@ -432,7 +429,7 @@ void impl_func_norm_mps(
   const OptionalScalarRef& opt_p,
   IntArrayRef dim,
   bool keepdim,
-  optional<ScalarType> opt_dtype,
+  c10::optional<ScalarType> opt_dtype,
   const Tensor& output_t,
   bool cdist = false,
   c10::optional<IntArrayRef> input_broadcasted_shape = c10::nullopt,
