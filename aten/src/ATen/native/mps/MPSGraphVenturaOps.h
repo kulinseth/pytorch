@@ -19,15 +19,18 @@ typedef NS_ENUM(NSUInteger, MPSGraphResizeNearestRoundingMode)
 };
 #endif
 
-- (MPSGraphTensor *)cumulativeSumWithTensor:(MPSGraphTensor *)tensor
+- (MPSGraphTensor * _Nonnull)cumulativeSumWithTensor:(MPSGraphTensor * _Nonnull)tensor
                                        axis:(NSInteger)axis
-                                       name:(NSString *)name;
+                                       name:(NSString * _Nullable)name;
 
-- (MPSGraphTensor *)sortWithTensor:(MPSGraphTensor *)tensor
+- (MPSGraphTensor * _Nonnull)sortWithTensor:(MPSGraphTensor * _Nonnull)tensor
                                        axis:(NSInteger)axis
-                                       name:(NSString *)name;
+                                       name:(NSString * _Nullable)name;
 
-- (MPSGraphTensor *)argSortWithTensor:(MPSGraphTensor *)tensor
+- (MPSGraphTensor * _Nonnull)argSortWithTensor:(MPSGraphTensor * _Nonnull)tensor
                                        axis:(NSInteger)axis
-                                       name:(NSString *)name;
+                                       name:(NSString * _Nullable)name;
+
+- (MPSGraphTensor * _Nonnull)inverseOfTensor:(MPSGraphTensor * _Nonnull) inputTensor
+                                       name:(NSString * _Nullable)name;
 @end
