@@ -3,6 +3,10 @@
 
 // TODO: Remove me when moved to MacOS 13
 @interface MPSGraph (VenturaOps)
+
+#if !defined(__MAC_13_0) && \
+    (!defined(MAC_OS_X_VERSION_13_0) || (MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_13_0))
+
 API_AVAILABLE(macos(13.0))
 typedef NS_ENUM(NSUInteger, MPSGraphResizeNearestRoundingMode)
 {
@@ -13,6 +17,7 @@ typedef NS_ENUM(NSUInteger, MPSGraphResizeNearestRoundingMode)
     MPSGraphResizeNearestRoundingModeRoundToEven       =  4L,
     MPSGraphResizeNearestRoundingModeRoundToOdd        =  5L,
 };
+#endif
 
 - (MPSGraphTensor *)cumulativeSumWithTensor:(MPSGraphTensor *)tensor
                                        axis:(NSInteger)axis

@@ -872,6 +872,7 @@ Tensor std_var_common_impl_mps(
         }
         return newCachedGraph;
       });
+    cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
   }
 
     auto inputPlaceholder = Placeholder(cachedGraph->inputTensor_, input_t);
