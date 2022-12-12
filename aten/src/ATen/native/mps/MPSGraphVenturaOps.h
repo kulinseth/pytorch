@@ -19,27 +19,9 @@ typedef NS_ENUM(NSUInteger, MPSGraphResizeNearestRoundingMode)
 };
 #endif
 
-- (MPSGraphTensor *)cumulativeSumWithTensor:(MPSGraphTensor *)tensor
-                                       axis:(NSInteger)axis
-                                       name:(NSString *)name;
-
-#if !defined(__MAC_13_0) && \
-    (!defined(MAC_OS_X_VERSION_13_0) || (MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_13_0))
-
-typedef NS_ENUM(NSUInteger, MPSGraphResizeNearestRoundingMode)
-{
-    MPSGraphResizeNearestRoundingModeRoundPreferCeil   =  0L,
-    MPSGraphResizeNearestRoundingModeRoundPreferFloor  =  1L,
-    MPSGraphResizeNearestRoundingModeCeil              =  2L,
-    MPSGraphResizeNearestRoundingModeFloor             =  3L,
-    MPSGraphResizeNearestRoundingModeRoundToEven       =  4L,
-    MPSGraphResizeNearestRoundingModeRoundToOdd        =  5L,
-};
-#endif
-
 - (MPSGraphTensor * _Nonnull)cumulativeSumWithTensor:(MPSGraphTensor * _Nonnull)tensor
-                                                axis:(NSInteger)axis
-                                                name:(NSString * _Nullable)name;
+                                       axis:(NSInteger)axis
+                                       name:(NSString * _Nullable)name;
 
 - (MPSGraphTensor * _Nonnull)sortWithTensor:(MPSGraphTensor * _Nonnull)tensor
                                        axis:(NSInteger)axis
