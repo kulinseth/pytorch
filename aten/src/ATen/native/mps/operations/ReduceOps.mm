@@ -605,24 +605,25 @@ void impl_func_norm_mps(
   }
 }
 
-TORCH_IMPL_FUNC(norm_out_mps)
-(const Tensor& self,
- const OptionalScalarRef opt_p,
- IntArrayRef dim,
- bool keepdim,
- const Tensor& result) {
-  impl_func_norm_mps(self, self, opt_p, dim, keepdim, c10::nullopt, result, /*cdist=*/false);
-}
 
-TORCH_IMPL_FUNC(norm_dtype_out_mps)
-(const Tensor& self,
- const OptionalScalarRef opt_p,
- IntArrayRef dim,
- bool keepdim,
- ScalarType dtype,
- const Tensor& result) {
-  impl_func_norm_mps(self, self, opt_p, dim, keepdim, dtype, result, /*cdist=*/false);
-}
+//TORCH_IMPL_FUNC(norm_out_mps)
+//(const Tensor& self,
+// const OptionalScalarRef opt_p,
+// IntArrayRef dim,
+// bool keepdim,
+// const Tensor& result) {
+//  impl_func_norm_mps(self, self, opt_p, dim, keepdim, c10::nullopt, result, /*cdist=*/false);
+//}
+//
+//TORCH_IMPL_FUNC(norm_dtype_out_mps)
+//(const Tensor& self,
+// const OptionalScalarRef opt_p,
+// IntArrayRef dim,
+// bool keepdim,
+// ScalarType dtype,
+// const Tensor& result) {
+//  impl_func_norm_mps(self, self, opt_p, dim, keepdim, dtype, result, /*cdist=*/false);
+//}
 
 Tensor _cdist_forward_mps(const Tensor& x1, const Tensor& x2, const double p, c10::optional<int64_t> compute_mode) {
   using namespace mps;
