@@ -711,10 +711,18 @@ Tensor & masked_fill__mps(Tensor& self, const Tensor & mask, const Scalar& value
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
 
   MPSDataType inputDataType = getMPSScalarType(self.scalar_type());
+  MPSDataType maskDataType = getMPSScalarType(b_mask->scalar_type());
   // Workaround for `selectWithPredicateTensor` on macOS Monterey when bool data type may cause a hang
   // The issue is fixed in macOS Ventura (13.0)
+  if (!MPSDevice::getInstance()->macOS_13_0_or_newer()) {
+     if (self.scalar_type() == kBool) {
+      inputDataType = MPSDataTypeInt8;
+     }
+     if (mask.scalar_type() == kBool) {
+      maskDataType = MPSDataTypeInt8;
+     }
+  }
   if (self.scalar_type() == kBool && mask.scalar_type() == kBool && !MPSDevice::getInstance()->macOS_13_0_or_newer()) {
-    inputDataType = MPSDataTypeInt8;
   }
 
   MPSStream* stream = getCurrentMPSStream();
@@ -732,7 +740,7 @@ Tensor & masked_fill__mps(Tensor& self, const Tensor & mask, const Scalar& value
           newCachedGraph = new CachedGraph(mpsGraph);
 
           MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, inputDataType, getMPSShape(self));
-          MPSGraphTensor* maskTensor = mpsGraphRankedPlaceHolder(mpsGraph, *b_mask);
+          MPSGraphTensor* maskTensor = mpsGraphRankedPlaceHolder(mpsGraph, maskDataType, getMPSShape(*b_mask));
           MPSGraphTensor* valueTensor = mpsGraphScalarPlaceHolder(mpsGraph, value);
 
           MPSDataType valueType = getMPSScalarType(value.type());
@@ -757,8 +765,10 @@ Tensor & masked_fill__mps(Tensor& self, const Tensor & mask, const Scalar& value
       });
     }
 
-    Placeholder selfPlaceholder   = Placeholder(cachedGraph->inputTensor_, self, nullptr, true, inputDataType);
-    Placeholder maskPlaceholder   = Placeholder(cachedGraph->maskTensor_, *b_mask);
+    Placeholder selfPlaceholder   = Placeholder(
+      cachedGraph->inputTensor_, self, /*mpsShape*/nullptr, /*gatherTensorData=*/true, inputDataType);
+    Placeholder maskPlaceholder   = Placeholder(
+      cachedGraph->maskTensor_, *b_mask, /*mpsShape*/nullptr, /*gatherTensorData=*/true, maskDataType);
     Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, self);
 
     // Create dictionary of inputs and outputs
