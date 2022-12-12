@@ -4885,7 +4885,7 @@
   structured_inherits: TensorIteratorBase
   dispatch:
     CPU, CUDA: sigmoid_out
-    MPS: sigmoid_out_mps
+    #MPS: sigmoid_out_mps
   tags: pointwise
 
 - func: logit(Tensor self, float? eps=None) -> Tensor
@@ -6179,14 +6179,14 @@
   device_check: NoCheck   # TensorIterator
   dispatch:
     CPU, CUDA: norm_dtype_out
-    MPS: norm_dtype_out_mps
+    #MPS: norm_dtype_out_mps
 
 - func: norm.out(Tensor self, Scalar? p, int[1] dim, bool keepdim=False, *, Tensor(a!) out) -> Tensor(a!)
   structured: True
   device_check: NoCheck   # TensorIterator
   dispatch:
     CPU, CUDA: norm_out
-    MPS: norm_out_mps
+    #MPS: norm_out_mps
 
 # These four redispatch in their implementation, so OK to be CompositeImplicitAutograd
 - func: norm.names_ScalarOpt_dim_dtype(Tensor self, Scalar? p, Dimname[1] dim, bool keepdim, *, ScalarType dtype) -> Tensor
@@ -9394,7 +9394,7 @@
   dispatch:
     CPU: topk_out_cpu
     CUDA: topk_out_cuda
-    MPS: topk_out_mps
+    #MPS: topk_out_mps
 
 - func: topk(Tensor self, int k, int dim=-1, bool largest=True, bool sorted=True) -> (Tensor values, Tensor indices)
   variants: method, function
@@ -9473,7 +9473,7 @@
   structured_inherits: TensorIteratorBase
   dispatch:
     CPU, CUDA: pow_Tensor_Tensor_out
-    MPS: pow_tensor_tensor_out_mps
+    #MPS: pow_tensor_tensor_out_mps
   tags: pointwise
 
 - func: pow.Tensor_Tensor(Tensor self, Tensor exponent) -> Tensor
@@ -9501,7 +9501,7 @@
   dispatch:
     CPU, CUDA: pow_Tensor_Scalar_out
     SparseCPU, SparseCUDA: pow_out_sparse_scalar
-    MPS: pow_tensor_scalar_out_mps
+    #MPS: pow_tensor_scalar_out_mps
   tags: pointwise
 
 - func: pow.Tensor_Scalar(Tensor self, Scalar exponent) -> Tensor
