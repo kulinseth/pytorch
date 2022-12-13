@@ -1402,53 +1402,53 @@ Tensor& smooth_l1_loss_backward_out_mps(
 }
 
 // NLLLoss
-TORCH_IMPL_FUNC(nll_loss_backward_out_mps)
-(const Tensor& grad_output,
- const Tensor& self,
- const Tensor& target,
- OptionalTensorRef weight_opt,
- int64_t reduction,
- int64_t ignore_index,
- const Tensor& total_weight,
- const Tensor& grad_input
-)
-{
-    const Tensor& weight = weight_opt.getTensorRef();
+//TORCH_IMPL_FUNC(nll_loss_backward_out_mps)
+//(const Tensor& grad_output,
+// const Tensor& self,
+// const Tensor& target,
+// OptionalTensorRef weight_opt,
+// int64_t reduction,
+// int64_t ignore_index,
+// const Tensor& total_weight,
+// const Tensor& grad_input
+//)
+//{
+//    const Tensor& weight = weight_opt.getTensorRef();
+//
+//    mps::nllnd_loss_backward_impl((Tensor &)grad_input,
+//                             grad_output,
+//                             self,
+//                             target,
+//                             weight,
+//                             reduction,
+//                             ignore_index,
+//                             total_weight,
+//                             false);
+//    return;
+//}
 
-    mps::nllnd_loss_backward_impl((Tensor &)grad_input,
-                             grad_output,
-                             self,
-                             target,
-                             weight,
-                             reduction,
-                             ignore_index,
-                             total_weight,
-                             false);
-    return;
-}
-
-TORCH_IMPL_FUNC(nll_loss_forward_out_mps)
-(const Tensor& self,
- const Tensor& target,
- const OptionalTensorRef weight_opt,
- int64_t reduction,
- int64_t ignore_index,
- const Tensor& output,
- const Tensor& total_weight) {
-
-    const Tensor& weight = weight_opt.getTensorRef();
-
-    mps::nllnd_loss_forward_impl((Tensor &)output,
-                            (Tensor &)total_weight,
-                             self,
-                             target,
-                             weight,
-                             reduction,
-                             ignore_index,
-                             false);
-
-    return;
-}
+//TORCH_IMPL_FUNC(nll_loss_forward_out_mps)
+//(const Tensor& self,
+// const Tensor& target,
+// const OptionalTensorRef weight_opt,
+// int64_t reduction,
+// int64_t ignore_index,
+// const Tensor& output,
+// const Tensor& total_weight) {
+//
+//    const Tensor& weight = weight_opt.getTensorRef();
+//
+//    mps::nllnd_loss_forward_impl((Tensor &)output,
+//                            (Tensor &)total_weight,
+//                             self,
+//                             target,
+//                             weight,
+//                             reduction,
+//                             ignore_index,
+//                             false);
+//
+//    return;
+//}
 
 inline void check_inputs_nll_loss2d(
     const Tensor& input,
