@@ -8908,6 +8908,9 @@ class TestConsistency(TestCase):
                       op.name == "masked.var" or op.name == "nn.functional.huber_loss") and dtype == torch.float16:
                     atol = 1e-2
                     rtol = 1e-2
+                elif (op.name == "masked.mean"):
+                    atol = 7e-4
+                    rtol = 2e-3
                 else:
                     atol = None
                     rtol = None
