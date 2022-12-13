@@ -220,7 +220,7 @@ Tensor nonzero_fallback(const Tensor& self) {
 }
 
 Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
-  if (!MPSDevice::getInstance()->macOS_13_0_or_newer()) {
+  if (!is_macos_13_or_newer()) {
       Tensor out_fallback = nonzero_fallback(self);
       at::native::resize_output(out_, out_fallback.sizes());
       out_.copy_(out_fallback.to("mps"));
@@ -388,7 +388,7 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
 }
 
 Tensor nonzero_mps(const Tensor& self){
-  if (!MPSDevice::getInstance()->macOS_13_0_or_newer()) {
+  if (!is_macos_13_or_newer()) {
     return nonzero_fallback(self);
   }
 
@@ -714,7 +714,7 @@ Tensor & masked_fill__mps(Tensor& self, const Tensor & mask, const Scalar& value
   MPSDataType maskDataType = getMPSScalarType(b_mask->scalar_type());
   // Workaround for `selectWithPredicateTensor` on macOS Monterey where bool data type may cause a hang
   // The issue is fixed in macOS Ventura (13.0)
-  if (!MPSDevice::getInstance()->macOS_13_0_or_newer()) {
+  if (!is_macos_13_or_newer()) {
      if (self.scalar_type() == kBool) {
       inputDataType = MPSDataTypeInt8;
      }

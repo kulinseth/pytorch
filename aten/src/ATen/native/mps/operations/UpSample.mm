@@ -46,7 +46,7 @@ void upsample_out_template(const Tensor& input,
     AT_ERROR("Unsupported resize mode ", resize_mode_str);
   }
 
-  const bool is_macOS_13_0_or_newer = MPSDevice::getInstance()->macOS_13_0_or_newer();
+  const bool is_macOS_13_0_or_newer = is_macos_13_or_newer();
   const int64_t output_width  = output_size.size() > 1 ? output_size[1] : output_size[0];
   const int64_t output_height = output_size.size() > 1 ? output_size[0] : 1;
   const float scale_w = (scale_w_opt.has_value() && scale_w_opt.value() > 0.) ? static_cast<float>(scale_w_opt.value()) : 0.;
@@ -218,7 +218,7 @@ void upsample_out_template(const Tensor& input,
 
 static bool check_mps_compatibility(c10::optional<double> scale)
 {
-  static const bool is_macOS_13_0_or_newer = MPSDevice::getInstance()->macOS_13_0_or_newer();
+  static const bool is_macOS_13_0_or_newer = is_macos_13_or_newer();
   // passing scale factors to MPS's resize APIs is not supported on macOS < 13
   if (!is_macOS_13_0_or_newer && scale.has_value() && scale.value() > 0.) {
     TORCH_WARN_ONCE("MPS: passing scale factor to upsample ops is supported natively starting from macOS 13.0. ",
