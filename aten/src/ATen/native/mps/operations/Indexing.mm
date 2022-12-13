@@ -722,8 +722,6 @@ Tensor & masked_fill__mps(Tensor& self, const Tensor & mask, const Scalar& value
       maskDataType = MPSDataTypeInt8;
      }
   }
-  if (self.scalar_type() == kBool && mask.scalar_type() == kBool && !MPSDevice::getInstance()->macOS_13_0_or_newer()) {
-  }
 
   MPSStream* stream = getCurrentMPSStream();
   MPSScalar valueScalar = getMPSScalar(value, value.type());
