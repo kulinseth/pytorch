@@ -71,6 +71,12 @@ TORCH_LIBRARY_IMPL(aten, MPS, m) {
   m.impl("sgn.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("cumsum.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("_cdist_forward", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("nll_loss_forward.output", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("nll_loss_backward.grad_input", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("nll_loss2d_forward.output", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("nll_loss2d_forward", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("nll_loss2d_backward.grad_input", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("nll_loss2d_backward", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
 }
 
 } // namespace at
