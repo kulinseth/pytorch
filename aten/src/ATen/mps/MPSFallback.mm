@@ -68,6 +68,9 @@ TORCH_LIBRARY_IMPL(aten, MPS, m) {
   m.impl("sigmoid.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("pow.Tensor_Tensor_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("pow.Tensor_Scalar_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("sgn.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("cumsum.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("_cdist_forward", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
 }
 
 } // namespace at
