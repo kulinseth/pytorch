@@ -397,7 +397,7 @@
   structured_inherits: TensorIteratorBase
   dispatch:
     CPU, CUDA: sgn_out
-    MPS: sgn_out_mps
+    #MPS: sgn_out_mps
     SparseCPU, SparseCUDA: sgn_sparse_out
     SparseCsrCPU, SparseCsrCUDA: sgn_sparse_csr_out
   tags: pointwise
@@ -1862,7 +1862,7 @@
   device_check: NoCheck   # TensorIterator
   dispatch:
     CPU, CUDA: cumsum_out
-    MPS: cumsum_out_mps
+    #MPS: cumsum_out_mps
 
 - func: cumsum.dimname(Tensor self, Dimname dim, *, ScalarType? dtype=None) -> Tensor
   device_check: NoCheck   # TensorIterator
@@ -4088,7 +4088,7 @@
 - func: _cdist_forward(Tensor x1, Tensor x2, float p, int? compute_mode) -> Tensor
   dispatch:
     CPU, CUDA: _cdist_forward
-    MPS: _cdist_forward_mps
+    #MPS: _cdist_forward_mps
   autogen: _cdist_forward.out
 
 - func: _cdist_backward(Tensor grad, Tensor x1, Tensor x2, float p, Tensor cdist) -> Tensor
