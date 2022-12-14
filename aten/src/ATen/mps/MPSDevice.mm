@@ -27,10 +27,6 @@ MPSDevice* MPSDevice::getInstance() {
   return mps_device.get();
 }
 
-bool MPSDevice::macOS_13_0_or_newer() {
-  return _macos_13_0_or_newer;
-}
-
 id<MTLFunction> MPSDevice::metalIndexingFunction(const std::string& kernel, MTLFunctionConstantValues* constantValues) {
   TORCH_INTERNAL_ASSERT_DEBUG_ONLY(_mtl_device);
   NSError* error = nil;
