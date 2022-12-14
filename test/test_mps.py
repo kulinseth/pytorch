@@ -8595,8 +8595,6 @@ class TestConsistency(TestCase):
         'min': [torch.int64],
         'max': [torch.int64],
 
-        'as_strided_scatter': [torch.uint8],
-
         # Functions that are flaky
         # These are detected as "ok" by the expect case but actually fail to run sometimes
         'softmaxwith_dtype': None,
