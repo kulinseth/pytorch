@@ -1294,7 +1294,7 @@ Tensor min_max_mps
   (const Tensor& input_t,
    MPSReductionType reduction_type,
    const std::string& func_name) {
-  TORCH_INTERNAL_ASSERT(input_t.scalar_type() != ScalarType::Long, "min/max not supported for Long dtype on MPS");
+  TORCH_CHECK(input_t.scalar_type() != ScalarType::Long, "MPS does not support min/max ops with int64 input");
 
   namespace native_mps = at::native::mps;
   using CachedGraph = native_mps::MPSUnaryCachedGraph;
@@ -1389,7 +1389,7 @@ void min_max_out_mps
   const Tensor& indices_t,
   MPSReductionType reduction_type,
   const std::string& func_name) {
-    TORCH_INTERNAL_ASSERT(input_t.scalar_type() != ScalarType::Long, "min/max not supported for Long dtype on MPS");
+    TORCH_CHECK(input_t.scalar_type() != ScalarType::Long, "MPS does not support min/max ops with int64 input");
 
     namespace native_mps = at::native::mps;
 
@@ -1796,7 +1796,7 @@ Tensor median_mps(const Tensor& input_t) {
         return at::median(input_t.to("cpu"));
   }
 
-    TORCH_INTERNAL_ASSERT(input_t.scalar_type() != ScalarType::Long, "median not supported for Long dtype on MPS");
+    TORCH_CHECK(input_t.scalar_type() != ScalarType::Long, "MPS does not support median op with int64 input");
 
     namespace native_mps = at::native::mps;
     using CachedGraph = native_mps::MPSUnaryCachedGraph;
@@ -2020,7 +2020,7 @@ TORCH_API ::std::tuple<at::Tensor &,at::Tensor &> median_out_mps
     at::Tensor & values,
     at::Tensor & indices){
 
-  TORCH_INTERNAL_ASSERT(input_t.scalar_type() != ScalarType::Long, "median not supported for Long dtype on MPS");
+  TORCH_CHECK(input_t.scalar_type() != ScalarType::Long, "MPS does not support median ops with int64 input");
 
   namespace native_mps = at::native::mps;
     int64_t dim_ = maybe_wrap_dim(dim, input_t.dim());
