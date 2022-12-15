@@ -280,6 +280,9 @@ TORCH_IMPL_FUNC(sgn_out_mps) (const Tensor& self, const Tensor& output)
 {
     using namespace mps;
 
+    if (self.numel() == 0)
+      return;
+
     if (!output.is_same_size(self)) {
       output.resize_(self.sizes());
     }
@@ -310,7 +313,7 @@ TORCH_IMPL_FUNC(sgn_out_mps) (const Tensor& self, const Tensor& output)
             MPSGraph* mpsGraph = make_mps_graph();
             newCachedGraph = new MPSUnaryCachedGraph(mpsGraph);
             newCachedGraph->inputTensor_ = mpsGraphRankedPlaceHolder(mpsGraph, realInput);
-              MPSGraphTensor* sgnTensor;
+              MPSGraphTensor* sgnTensor = nullptr;
               if (self.is_complex()) {
                 NSArray<MPSGraphTensor*>* complexNumberComponents = [mpsGraph splitTensor:newCachedGraph->inputTensor_
                                                               numSplits: 2
@@ -326,7 +329,7 @@ TORCH_IMPL_FUNC(sgn_out_mps) (const Tensor& self, const Tensor& output)
 
                 MPSGraphTensor* complexZeroTensor = [mpsGraph constantWithScalar:0.0
                                                               shape: newCachedGraph->inputTensor_.shape
-                                                              dataType:realPartTensor.dataType];                
+                                                              dataType:realPartTensor.dataType];
 
                 MPSGraphTensor* isRealZero = [mpsGraph equalWithPrimaryTensor:realPartTensor
                                                               secondaryTensor:zeroTensor
