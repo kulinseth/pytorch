@@ -8269,7 +8269,7 @@ class TestConsistency(TestCase):
         'asin': ['b8', 'f32', 'i16', 'i32', 'u8'],
         'asinh': ['b8', 'f32', 'i16', 'i32', 'u8'],
         'atan': ['b8', 'f32', 'i16', 'i32', 'u8'],
-        'atan2': ['f32'],
+        'atan2': ['f32', 'i64'],
         'atanh': ['b8', 'f32', 'i16', 'i32', 'u8'],
         'atleast_1d': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'atleast_2d': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8373,12 +8373,12 @@ class TestConsistency(TestCase):
         'masked_select': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'matmul': ['f32'],
         'maximum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'max': ['b8', 'f16', 'f32', 'i16', 'i32', 'u8'],
+        'max': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'maxreduction_with_dim': ['b8', 'f16', 'f32', 'i16', 'i32', 'u8'],
         'maxreduction_no_dim': ['b8', 'f16', 'f32', 'i16', 'i32', 'u8'],
         'maxbinary': ['b8', 'f16', 'f32', 'i16', 'i32', 'u8'],
         'minimum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'min': ['b8', 'f16', 'f32', 'i16', 'i32', 'u8'],
+        'min': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'minreduction_with_dim': ['f16', 'f32', 'i32'],
         'minreduction_no_dim': ['b8', 'f16', 'f32', 'i16', 'i32', 'u8'],
         'minbinary': ['b8', 'f16', 'f32', 'i16', 'i32', 'u8'],
@@ -8419,6 +8419,7 @@ class TestConsistency(TestCase):
         'nn.functional.margin_ranking_loss': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.mse_loss': ['f16', 'f32'],
         'nn.functional.normalize': ['f32'],
+        'nn.functional.one_hot': ['i64'],
         'nn.functional.pad': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.padcircular': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.pairwise_distance': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8434,7 +8435,7 @@ class TestConsistency(TestCase):
         'nn.functional.soft_margin_loss': ['f32'],
         'nn.functional.softmin': ['f32'],
         'nn.functional.softplus': ['f32'],
-        'nn.functional.softsign': ['f16', 'f32', 'i16', 'u8'],
+        'nn.functional.softsign': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.tanhshrink': ['f32', 'i16', 'i32', 'u8'],
         'nn.functional.threshold': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.triplet_margin_loss': ['f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8460,7 +8461,7 @@ class TestConsistency(TestCase):
         'select_scatter': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'sgn': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'short': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'sigmoid': ['b8', 'f16', 'f32', 'i16', 'i32', 'u8'],
+        'sigmoid': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'sign': ['b8', 'f16', 'f32', 'i16', 'i32', 'u8', 'i64'],
         'sin': ['b8', 'f32', 'i16', 'i32', 'u8'],
         'sinh': ['b8', 'f32', 'i16', 'i32', 'u8'],
@@ -8715,17 +8716,7 @@ class TestConsistency(TestCase):
         'norm': [torch.float16],
         'minreduction_with_dim': [torch.bool, torch.int16, torch.uint8],
         'maxreduction_with_dim': [torch.bool, torch.int16, torch.uint8],
-
-        # MPS kernels with no support for int64 inputs
-        'atan2': [torch.int64],
-        'pow': [torch.int64],
-        'sigmoid': [torch.int64],
         'square': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'dot': [torch.int64],
-        'nn.functional.one_hot': [torch.int64],
-        'min': [torch.int64],
-        'max': [torch.int64],
-
         # Functions that are flaky
         # These are detected as "ok" by the expect case but actually fail to run sometimes
         'softmaxwith_dtype': None,
@@ -8769,8 +8760,8 @@ class TestConsistency(TestCase):
         'nn.functional.conv_transpose3d': [torch.int64, torch.float32],
 
         # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
-        'pow': ['torch.int16', 'torch.int32', 'torch.uint8'],
-        '__rpow__': ['torch.int16', 'torch.int32', 'torch.uint8'],
+        'pow': ['torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
+        '__rpow__': ['torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
 
         # failures due to unsupported data types on MPS backend
         'matmul': ['torch.uint8'], # MPS device does not support mm for non-float inputs
