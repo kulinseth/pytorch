@@ -186,6 +186,7 @@ static void pool2d_template(const Tensor& input, const Tensor& output,
       divisor_scalar = getMPSScalar(divisor.value(), output.scalar_type());
       feeds[cachedGraph->divisorTensor] = getMPSGraphTensorFromScalar(mpsStream, divisor_scalar);
     }
+
     runMPSGraph(mpsStream, cachedGraph->graph(), feeds, results);
   }
 }
