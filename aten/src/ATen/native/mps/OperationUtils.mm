@@ -70,19 +70,19 @@ std::string getMPSTypeString(ScalarType scalar_type, bool short_name) {
     case ScalarType::Float:
       return short_name ? "f32" : "Float32";
     case ScalarType::Half:
-      return short_name ? "f16" :"Float16";
+      return short_name ? "f16" : "Float16";
     case ScalarType::Int:
-      return short_name ? "i32" :"Int32";
+      return short_name ? "i32" : "Int32";
     case ScalarType::Long:
-      return short_name ? "i64" :"Int64";
+      return short_name ? "i64" : "Int64";
     case ScalarType::Short:
-      return short_name ? "i16" :"Int16";
+      return short_name ? "i16" : "Int16";
     case ScalarType::Char:
-      return short_name ? "i8" :"Int8";
+      return short_name ? "i8" : "Int8";
     case ScalarType::Byte:
-      return short_name ? "u8" :"UInt8";
+      return short_name ? "u8" : "UInt8";
     case ScalarType::Bool:
-      return short_name ? "b8" :"Bool";
+      return short_name ? "b8" : "Bool";
     default:
       return "Undefined";
   }

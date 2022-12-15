@@ -293,9 +293,10 @@ TORCH_IMPL_FUNC(cat_out_mps)
   @autoreleasepool {
     string key = "cat_out_mps:" + to_string(dimension) + getTensorsStringKey(input_tensors, /*short_dtype*/true) + ":" +
                  (memory_format == MemoryFormat::ChannelsLast ? "NHWC" : "NCHW");
-    CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
+
+    CachedGraph* cachedGraph = cache_->LookUpAs<CachedGraph>(key);
     if(!cachedGraph) {
-      MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
+      cachedGraph = cache_->CreateCachedGraphAs<CachedGraph>(key, ^ MPSCachedGraph * () {
         CachedGraph *newCachedGraph = nil;
 
         @autoreleasepool {
@@ -337,7 +338,6 @@ TORCH_IMPL_FUNC(cat_out_mps)
         }
         return newCachedGraph;
       });
-      cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
 
     std::vector<Placeholder> inputPlaceholders;
