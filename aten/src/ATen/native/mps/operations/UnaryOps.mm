@@ -29,7 +29,7 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
   }
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
-    string key = op_name + getTensorsStringKey({self, output}, /*use_scalar_value*/ false);
+    string key = op_name + getTensorsStringKey({self, output});
     auto cachedGraph = cache_->LookUpAs<MPSUnaryCachedGraph>(key);
 
     if(!cachedGraph) {
