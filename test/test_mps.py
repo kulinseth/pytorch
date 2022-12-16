@@ -8820,6 +8820,13 @@ class TestConsistency(TestCase):
         'dot': [torch.int64],
     }
 
+    FP16_LOW_PRECISION_LIST = {
+        "add", "sub",
+        "__rdiv__", "__rmul__",
+        "nn.functional.huber_loss",
+        "true_divide"
+    }
+
     # Used for accept mode only
     NEW_ALLOW_LIST = defaultdict(list)
     NEW_ALLOW_LIST_GRAD = defaultdict(list)
@@ -8895,6 +8902,9 @@ class TestConsistency(TestCase):
                       op.name == "masked.var" or op.name == "nn.functional.huber_loss") and dtype == torch.float16:
                     atol = 1e-2
                     rtol = 1e-2
+                elif (op.name in self.FP16_LOW_PRECISION_LIST) and dtype == torch.float16:
+                    atol = 1e-2
+                    rtol = 1e-2
                 elif (op.name == "masked.mean"):
                     atol = 7e-4
                     rtol = 2e-3
@@ -8956,7 +8966,7 @@ class TestConsistency(TestCase):
                 cpu_grad_inputs = torch.autograd.grad(diff_cpu_out, diff_cpu_arg, grad_outputs=cpu_grad_outputs, allow_unused=True)
                 mps_grad_inputs = torch.autograd.grad(diff_mps_out, diff_mps_arg, grad_outputs=mps_grad_outputs, allow_unused=True)
 
-                self.assertEqual(cpu_grad_inputs, mps_grad_inputs)
+                self.assertEqual(cpu_grad_inputs, mps_grad_inputs, atol=atol, rtol=rtol)
             except Exception as e:
                 if not generate_new_truth:
                     raise e
