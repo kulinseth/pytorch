@@ -72,6 +72,16 @@ Tensor repeat_mps(const Tensor& self, IntArrayRef repeats) {
   }
 
   auto stream = at::mps::getCurrentMPSStream();
+  auto inputDataType = getMPSDataType(expanded_tensor.scalar_type());
+  auto outputDataType = getMPSDataType(result.scalar_type());
+  if (!is_macos_13_or_newer()) {
+     if (expanded_tensor.scalar_type() == kBool) {
+      inputDataType = MPSDataTypeInt8;
+     }
+     if (result.scalar_type() == kBool) {
+      outputDataType = MPSDataTypeInt8;
+     }
+  }
 
   @autoreleasepool {
     string key = "repeat_mps:" + getTensorsStringKey(self) + ":" + getArrayRefString(repeats);
@@ -85,7 +95,7 @@ Tensor repeat_mps(const Tensor& self, IntArrayRef repeats) {
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, expanded_tensor);
+          MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, inputDataType, getMPSShape(expanded_tensor));
           MPSGraphTensor* outputTensor = [mpsGraph tileTensor:inputTensor
                                                withMultiplier:getMPSShape(repeats)
                                                          name:nil];
@@ -98,8 +108,10 @@ Tensor repeat_mps(const Tensor& self, IntArrayRef repeats) {
       cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
 
-    Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, expanded_tensor);
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result);
+    Placeholder selfPlaceholder = Placeholder(
+      cachedGraph->inputTensor_, expanded_tensor, /*mpsShape=*/nil, /*gatherTensorData=*/true, inputDataType);
+    Placeholder outputPlaceholder = Placeholder(
+      cachedGraph->outputTensor_, result, /*mpsShape=*/nil, /*gatherTensorData*/false, outputDataType);
 
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
       selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData()
