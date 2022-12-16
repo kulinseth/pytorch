@@ -307,14 +307,14 @@ MPSScalar getMPSScalar(const Scalar& scalar, ScalarType type) {
   }
 }
 
-MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, MPSScalar& scalar) {
+MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, MPSScalar& scalar, MPSDataType dataType) {
   MPSGraphTensorData *result = nullptr;
   // Scalar pools are only supported on devices with unified memory
   if (mpsStream->device().hasUnifiedMemory) {
     scalar.buffer = at::mps::allocate_scalar_buffer(&scalar.value, scalar.size);
     result = [[[MPSGraphTensorData alloc] initWithMTLBuffer: scalar.getMTLBuffer()
                                                       shape: @[@1]
-                                                   dataType: getMPSScalarType(scalar.type)] autorelease];
+                                                   dataType: (dataType != MPSDataTypeInvalid) ? dataType : getMPSScalarType(scalar.type)] autorelease];
   } else {
     MPSNDArrayDescriptor *tensorDesc = [MPSNDArrayDescriptor descriptorWithDataType:getMPSScalarType(scalar.type) shape:@[@1]];
     MPSNDArray *tensorNDArray = [[[MPSNDArray alloc] initWithDevice:mpsStream->device() descriptor:tensorDesc] autorelease];

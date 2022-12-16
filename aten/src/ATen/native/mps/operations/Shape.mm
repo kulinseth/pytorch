@@ -375,7 +375,12 @@ TORCH_IMPL_FUNC(cat_out_mps)
           newCachedGraph->inputTensors_.reserve(len_tensor_array);
 
           for (const auto idx : c10::irange(len_tensor_array)) {
-            newCachedGraph->inputTensors_[idx] = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input_tensors[idx].scalar_type()));
+            auto scalar_type = getMPSScalarType(input_tensors[idx].scalar_type());
+            if (input_tensors[idx].scalar_type() == kBool) {
+              scalar_type = MPSDataTypeInt8;
+            }
+
+            newCachedGraph->inputTensors_[idx] = mpsGraphUnrankedPlaceHolder(mpsGraph, scalar_type);
             if (input_tensors[idx].scalar_type() != result_type(inputs)) {
               castInputTensors[idx] = [mpsGraph castTensor:newCachedGraph->inputTensors_[idx]
                                                     toType:getMPSDataType(result_type(inputs))
@@ -407,14 +412,24 @@ TORCH_IMPL_FUNC(cat_out_mps)
     int t_idx = 0;
     for(const Tensor& tensor : materialized_inputs) {
       if(std::find(skipped_tensor_indices.begin(), skipped_tensor_indices.end(), i) == skipped_tensor_indices.end()) {
-        Placeholder currentInputPlaceholder = Placeholder(cachedGraph->inputTensors_[t_idx], tensor);
+        auto scalar_type = getMPSScalarType(tensor.scalar_type());
+        if (tensor.scalar_type() == kBool) {
+          scalar_type = MPSDataTypeInt8;
+        }
+        Placeholder currentInputPlaceholder = Placeholder(
+          cachedGraph->inputTensors_[t_idx], tensor, /*mpsShape=*/nil, /*gatherTensorData=*/true, scalar_type);
         inputPlaceholders.push_back(currentInputPlaceholder);
         t_idx++;
       }
       i++;
     }
 
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, out);
+    auto outputDataType = getMPSScalarType(out.scalar_type());
+    if (!is_macos_13_or_newer() && out.scalar_type() == kBool) {
+      outputDataType = MPSDataTypeInt8;
+    }
+    Placeholder outputPlaceholder = Placeholder(
+      cachedGraph->outputTensor_, out, /*mpsShape=*/nil, /*gatherTensorData=*/false, outputDataType);
 
     NSMutableDictionary *feeds = [[NSMutableDictionary new] autorelease];
     for (int i = 0; i < inputPlaceholders.size(); i++) {

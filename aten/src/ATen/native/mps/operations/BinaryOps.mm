@@ -54,6 +54,21 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
     needsCopyToOutput = true;
   }
 
+  auto inputDataType = self.scalar_type();
+  auto otherDataType = other.scalar_type();
+  auto outputDataType = output_.scalar_type();
+  if (!is_macos_13_or_newer()) {
+    if (self.scalar_type() == kBool) {
+      inputDataType = kChar;
+    }
+    if (other.scalar_type() == kBool) {
+      otherDataType = kChar;
+    }
+    if (output.scalar_type() == kBool) {
+      outputDataType = kChar;
+    }
+  }
+
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
     string key = op_name + getTensorsStringKey({self, other, output_}, /*use_scalar_value*/ false);
@@ -65,35 +80,35 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
         @autoreleasepool {
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new BinaryOpCachedGraph(mpsGraph);
-          newCachedGraph->primaryTensor   = mpsGraphRankedPlaceHolder(mpsGraph, self);
-          newCachedGraph->secondaryTensor = mpsGraphRankedPlaceHolder(mpsGraph, other);
+          newCachedGraph->primaryTensor   = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(inputDataType), getMPSShape(self));
+          newCachedGraph->secondaryTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(otherDataType), getMPSShape(other));
 
           MPSGraphTensor* primaryCastTensor   = newCachedGraph->primaryTensor;
           MPSGraphTensor* secondaryCastTensor = newCachedGraph->secondaryTensor;
 
           // this type inference is only required at the time of graph creation
-          ScalarType common_dtype = c10::promoteTypes(self.scalar_type(), other.scalar_type());
+          ScalarType common_dtype = c10::promoteTypes(inputDataType, otherDataType);
           if (isIntegralType(common_dtype, true)) {
             // integer inputs must be cast to float, if output is float
             if (isFloatingType(output_.scalar_type())) {
               common_dtype = output_.scalar_type();
             // in boolean comparison ops with signed vs. unsigned integers, we always cast to the unsigned type
-            } else if (output_.scalar_type() == ScalarType::Bool &&
-                      (self.scalar_type()  == ScalarType::Byte ||
-                       other.scalar_type() == ScalarType::Byte)) {
+            } else if (outputDataType == ScalarType::Bool &&
+                      (inputDataType  == ScalarType::Byte ||
+                       otherDataType  == ScalarType::Byte)) {
               common_dtype = ScalarType::Byte;
             }
           }
-          if (self.scalar_type() != common_dtype) {
+          if (inputDataType != common_dtype) {
             primaryCastTensor = castMPSTensor(mpsGraph, newCachedGraph->primaryTensor, common_dtype);
           }
-          if (other.scalar_type() != common_dtype) {
+          if (otherDataType != common_dtype) {
             secondaryCastTensor = castMPSTensor(mpsGraph, newCachedGraph->secondaryTensor, common_dtype);
           }
           newCachedGraph->outputTensor = binaryBlock(newCachedGraph, primaryCastTensor, secondaryCastTensor);
           // Cast output tensor to an expected type if needed, which addresses discrepancy when int64 scalar is added to int32 tensor
           // Output tensor should have been promoted but it remains an int32 tensor
-          if (output_.scalar_type() != common_dtype) {
+          if (outputDataType != common_dtype) {
             newCachedGraph->outputTensor = castMPSTensor(mpsGraph, newCachedGraph->outputTensor, output_.scalar_type());
           }
         }
@@ -111,16 +126,18 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
 
     if (is_self_scalar && !self.is_mps()) {
       self_scalar = getMPSScalar(self.item(), self.scalar_type());
-      feeds[cachedGraph->primaryTensor] = getMPSGraphTensorFromScalar(mpsStream, self_scalar);
+      feeds[cachedGraph->primaryTensor] = getMPSGraphTensorFromScalar(mpsStream, self_scalar, getMPSScalarType(inputDataType));
     } else {
-      selfPlaceholder = Placeholder(cachedGraph->primaryTensor, self);
+      selfPlaceholder = Placeholder(
+        cachedGraph->primaryTensor, self,  /*mpsShape*/nil, /*gatherTensorData=*/true, getMPSScalarType(inputDataType));
       feeds[selfPlaceholder.getMPSGraphTensor()] = selfPlaceholder.getMPSGraphTensorData();
     }
     if (is_other_scalar && !other.is_mps()) {
       other_scalar = getMPSScalar(other.item(), other.scalar_type());
-      feeds[cachedGraph->secondaryTensor] = getMPSGraphTensorFromScalar(mpsStream, other_scalar);
+      feeds[cachedGraph->secondaryTensor] = getMPSGraphTensorFromScalar(mpsStream, other_scalar, getMPSScalarType(otherDataType));
     } else {
-      otherPlaceholder = Placeholder(cachedGraph->secondaryTensor, other);
+      otherPlaceholder = Placeholder(
+        cachedGraph->secondaryTensor, other,  /*mpsShape*/nil, /*gatherTensorData=*/true, getMPSScalarType(otherDataType));
       feeds[otherPlaceholder.getMPSGraphTensor()] = otherPlaceholder.getMPSGraphTensorData();
     }
 
@@ -130,7 +147,8 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
       feeds[cachedGraph->alphaTensor] = getMPSGraphTensorFromScalar(mpsStream, alpha_scalar);
     }
 
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor, needsCopyToOutput ? output : output_);
+    Placeholder outputPlaceholder = Placeholder(
+      cachedGraph->outputTensor, needsCopyToOutput ? output : output_,  /*mpsShape*/nil, /*gatherTensorData=*/false, getMPSScalarType(outputDataType));
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
