@@ -53,8 +53,12 @@ TORCH_IMPL_FUNC(gather_out_mps)
         needSlice = true;
     }
     auto input_type = getMPSDataType(self.scalar_type());
-    if (input_type ==  MPSDataTypeUInt8) {
-      input_type =  MPSDataTypeInt8;
+    auto output_type = getMPSDataType(output.scalar_type());
+    if (input_type == MPSDataTypeUInt8 || ((input_type ==  MPSDataTypeBool && !is_macos_13_or_newer()))) {
+      input_type = MPSDataTypeInt8;
+    }
+    if (output_type == MPSDataTypeUInt8 || ((output_type ==  MPSDataTypeBool && !is_macos_13_or_newer()))) {
+      output_type = MPSDataTypeInt8;
     }
     string key = "gather_out_mps" + getTensorsStringKey({self, index, output}) + ":" + std::to_string(dim);
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
@@ -112,7 +116,7 @@ TORCH_IMPL_FUNC(gather_out_mps)
 
     Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self, input_shape, true, input_type);
     Placeholder indexPlaceholder = Placeholder(cachedGraph->indexTensor_, index, index_shape);
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output, nullptr, false, input_type);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output, nullptr, false, output_type);
 
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
       selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData(),
