@@ -90,12 +90,12 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
           ScalarType common_dtype = c10::promoteTypes(inputDataType, otherDataType);
           if (isIntegralType(common_dtype, true)) {
             // integer inputs must be cast to float, if output is float
-            if (isFloatingType(output_.scalar_type())) {
-              common_dtype = output_.scalar_type();
+            if (isFloatingType(outputDataType)) {
+              common_dtype = outputDataType;
             // in boolean comparison ops with signed vs. unsigned integers, we always cast to the unsigned type
             } else if (outputDataType == ScalarType::Bool &&
-                      (inputDataType  == ScalarType::Byte ||
-                       otherDataType  == ScalarType::Byte)) {
+                      (inputDataType == ScalarType::Byte ||
+                       otherDataType == ScalarType::Byte)) {
               common_dtype = ScalarType::Byte;
             }
           }
@@ -108,8 +108,9 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
           newCachedGraph->outputTensor = binaryBlock(newCachedGraph, primaryCastTensor, secondaryCastTensor);
           // Cast output tensor to an expected type if needed, which addresses discrepancy when int64 scalar is added to int32 tensor
           // Output tensor should have been promoted but it remains an int32 tensor
-          if (outputDataType != common_dtype) {
-            newCachedGraph->outputTensor = castMPSTensor(mpsGraph, newCachedGraph->outputTensor, output_.scalar_type());
+          if (outputDataType != common_dtype ||
+             [newCachedGraph->outputTensor dataType] != getMPSDataType(outputDataType)) {
+            newCachedGraph->outputTensor = castMPSTensor(mpsGraph, newCachedGraph->outputTensor, outputDataType);
           }
         }
         return newCachedGraph;
