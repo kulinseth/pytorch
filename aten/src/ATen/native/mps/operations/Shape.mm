@@ -307,13 +307,13 @@ TORCH_IMPL_FUNC(cat_out_mps)
           newCachedGraph->inputTensors_.reserve(len_tensor_array);
 
           for (const auto idx : c10::irange(len_tensor_array)) {
-            auto scalar_type = getMPSScalarType(input_tensors[idx].scalar_type());
-            if (input_tensors[idx].scalar_type() == kBool) {
+            const Tensor& tensor = input_tensors[idx];
+            auto scalar_type = getMPSScalarType(tensor.scalar_type());
+            if (tensor.scalar_type() == kBool) {
               scalar_type = MPSDataTypeInt8;
             }
-
-            newCachedGraph->inputTensors_[idx] = mpsGraphUnrankedPlaceHolder(mpsGraph, scalar_type);
-            if (input_tensors[idx].scalar_type() != result_type(inputs)) {
+            newCachedGraph->inputTensors_[idx] = mpsGraphRankedPlaceHolder(mpsGraph, scalar_type, getMPSShape(tensor, memory_format));
+            if (tensor.scalar_type() != out_dtype) {
               castInputTensors[idx] = [mpsGraph castTensor:newCachedGraph->inputTensors_[idx]
                                                     toType:getMPSDataType(out_dtype)
                                                       name:@"castInput"];
@@ -348,9 +348,9 @@ TORCH_IMPL_FUNC(cat_out_mps)
         if (tensor.scalar_type() == kBool) {
           scalar_type = MPSDataTypeInt8;
         }
-        Placeholder currentInputPlaceholder = Placeholder(
-          cachedGraph->inputTensors_[t_idx], tensor, /*mpsShape=*/nil, /*gatherTensorData=*/true, scalar_type);
-        inputPlaceholders.push_back(currentInputPlaceholder);
+        inputPlaceholders.emplace_back(cachedGraph->inputTensors_[t_idx], tensor,
+                                       getMPSShape(tensor, memory_format),
+                                       memory_format != MemoryFormat::ChannelsLast, scalar_type);
         t_idx++;
       }
       i++;
