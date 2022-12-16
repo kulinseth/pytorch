@@ -54,11 +54,11 @@ static Tensor& runViewGraph(ViewCachedGraph* cachedGraph, const at::Tensor& src,
                                                                             dataType: inputType] autorelease];
     if (needsScatter) {
       auto updatesType = getMPSScalarType(src.scalar_type());
-      if (updatesType == MPSDataTypeUInt8 || updatesType == MPSDataTypeBool) {
+      if (updatesType == MPSDataTypeUInt8 || (updatesType == MPSDataTypeBool && !is_macos_13_or_newer())) {
         updatesType = MPSDataTypeInt8;
       }
 
-      feeds[cachedGraph->updatesTensor] = [[[MPSGraphTensorData alloc] initWithMTLBuffer: sourceBuffer
+      feeds[cachedGraph->updatesTensor] = [[[MPSGraphTensorData alloc] initWithMTLBuffer: (updatesBuffer != nil) ? updatesBuffer : sourceBuffer
                                                                                    shape: getMPSShape(src.numel())
                                                                                 dataType: updatesType] autorelease];
     }
@@ -70,12 +70,13 @@ static Tensor& runViewGraph(ViewCachedGraph* cachedGraph, const at::Tensor& src,
       strideScalars[i] = getMPSScalar(strides[i], ScalarType::Int);
       feeds[cachedGraph->strideTensors[i]] = getMPSGraphTensorFromScalar(stream, strideScalars[i]);
     }
-    // Workaround for MPSShaderLibrary bug
-    // TODO: Remove once https://github.com/pytorch/pytorch/issues/82305 is resolved
-    auto outputType = getMPSDataType(output.scalar_type());
-    if (outputType ==  MPSDataTypeUInt8) {
+    // Workaround for MPSShaderLibrary bug in macOS Monterey
+    // This is fixed in macOS Ventura
+    auto outputType = getMPSScalarType(output.scalar_type());
+    if (outputType == MPSDataTypeUInt8 || (outputType ==  MPSDataTypeBool && !is_macos_13_or_newer())) {
         outputType =  MPSDataTypeInt8;
     }
+
     MPSGraphTensorData* outputTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer: outputBuffer
                                                                                     shape: outputShape
                                                                                  dataType: outputType] autorelease];
@@ -514,7 +515,6 @@ MPSGraphTensor* asStridedLayer_pattern(MPSGraph *graph, MPSGraphTensor *inputTen
 static MPSGraphTensor* chainViewOperation(ViewCachedGraph* cachedGraph, const IntArrayRef& size,
                                           const IntArrayRef& stride, int64_t offset,
                                           const IntArrayRef& base_shape, bool needsScatter,
-                                          const bool needsBoolCast,
                                           MPSGraphTensor* updatesTensor)
 {
   MPSGraph* mpsGraph = cachedGraph->graph();
@@ -557,23 +557,9 @@ static MPSGraphTensor* chainViewOperation(ViewCachedGraph* cachedGraph, const In
                                                    name: nil];
     MPSGraphTensor *inputTensor = cachedGraph->inputTensor;
 
-    // Workaround for bool scatter/gather deficiency
-    // See https://github.com/pytorch/pytorch/issues/82663
-    if (needsBoolCast) {
-      inputTensor = [mpsGraph castTensor:inputTensor
-                                  toType:MPSDataTypeInt8
-                                    name:@"Cast away from bool"];
-    }
-
     if (!needsScatter) {
       MPSGraphTensor *outputTensor = asStridedLayer_pattern(mpsGraph, inputTensor, shape_size, size, stride, offset);
-
       if (outputTensor) {
-        if (needsBoolCast) {
-          outputTensor = [mpsGraph castTensor:outputTensor
-                                       toType:MPSDataTypeBool
-                                         name:@"Cast back to bool"];
-        }
         return outputTensor;
       }
     }
@@ -605,14 +591,6 @@ static MPSGraphTensor* chainViewOperation(ViewCachedGraph* cachedGraph, const In
       outputTensor =  [mpsGraph reshapeTensor: gatheredTensor
                               withShapeTensor: shapeTensor
                                          name: nil];
-    }
-
-    // Workaround for bool scatter/gather deficiency
-    // See https://github.com/pytorch/pytorch/issues/82663
-    if (needsBoolCast) {
-      outputTensor = [mpsGraph castTensor:outputTensor
-                                   toType:MPSDataTypeBool
-                                     name:@"Cast back to bool"];
     }
   }
   return outputTensor;
@@ -669,13 +647,13 @@ static ViewCachedGraph* createViewGraph(const Tensor& self, const Tensor &update
             MPSGraph* mpsGraph = make_mps_graph();
             MPSGraphTensor* updatesTensor = nil;
             newCachedGraph = new ViewCachedGraph(mpsGraph);
-            // Workaround for MPSShaderLibrary bug
-            // TODO: Remove once https://github.com/pytorch/pytorch/issues/82305 is resolved
+            // Workaround for MPSShaderLibrary bug in macOS Monterey
+            // This is fixed in macOS Ventura
             auto inputType = getMPSScalarType(self.scalar_type());
-            if (inputType == MPSDataTypeUInt8) {
+            if (inputType == MPSDataTypeUInt8 || (inputType == MPSDataTypeBool && !is_macos_13_or_newer())) {
                 inputType = MPSDataTypeInt8;
             }
-            auto needsBoolCast = inputType == MPSDataTypeBool;
+
             // Self is the input tensor we are creating view of
             newCachedGraph->inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, inputType, getMPSShape(base_shape));
             newCachedGraph->storageOffsetTensor = mpsGraphRankedPlaceHolder(mpsGraph, MPSDataTypeInt32, @[@1]);
@@ -684,10 +662,10 @@ static ViewCachedGraph* createViewGraph(const Tensor& self, const Tensor &update
             }
             if (needsScatter) {
               auto updatesType = getMPSScalarType(updates.scalar_type());
-              if (updatesType == MPSDataTypeUInt8) {
-                updatesType = MPSDataTypeInt8;
+              if (updatesType == MPSDataTypeUInt8 || (updatesType == MPSDataTypeBool && !is_macos_13_or_newer())) {
+                  updatesType = MPSDataTypeInt8;
               }
-              newCachedGraph->updatesTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, updatesType);
+              newCachedGraph->updatesTensor = mpsGraphRankedPlaceHolder(mpsGraph, updatesType, getMPSShape(self.numel()));
               updatesTensor = newCachedGraph->updatesTensor;
               if (inputType != updatesType) {
                 updatesTensor = [mpsGraph castTensor:updatesTensor
@@ -695,7 +673,7 @@ static ViewCachedGraph* createViewGraph(const Tensor& self, const Tensor &update
                                                 name:@"castUpdatesTensor"];
               }
             }
-            newCachedGraph->outputTensor = chainViewOperation(newCachedGraph, size, stride, storage_offset, base_shape, needsScatter, needsBoolCast, updatesTensor);
+            newCachedGraph->outputTensor = chainViewOperation(newCachedGraph, size, stride, storage_offset, base_shape, needsScatter, updatesTensor);
         }
         return newCachedGraph;
       }));

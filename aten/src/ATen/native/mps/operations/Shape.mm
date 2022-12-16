@@ -307,13 +307,13 @@ TORCH_IMPL_FUNC(cat_out_mps)
           newCachedGraph->inputTensors_.reserve(len_tensor_array);
 
           for (const auto idx : c10::irange(len_tensor_array)) {
-            const Tensor& tensor = input_tensors[idx];
-            auto scalar_type = getMPSScalarType(tensor.scalar_type());
-            if (tensor.scalar_type() == kBool) {
+            auto scalar_type = getMPSScalarType(input_tensors[idx].scalar_type());
+            if (input_tensors[idx].scalar_type() == kBool) {
               scalar_type = MPSDataTypeInt8;
             }
-            newCachedGraph->inputTensors_[idx] = mpsGraphRankedPlaceHolder(mpsGraph, scalar_type, getMPSShape(tensor, memory_format));
-            if (tensor.scalar_type() != out_dtype) {
+
+            newCachedGraph->inputTensors_[idx] = mpsGraphUnrankedPlaceHolder(mpsGraph, scalar_type);
+            if (input_tensors[idx].scalar_type() != result_type(inputs)) {
               castInputTensors[idx] = [mpsGraph castTensor:newCachedGraph->inputTensors_[idx]
                                                     toType:getMPSDataType(out_dtype)
                                                       name:@"castInput"];
@@ -342,15 +342,15 @@ TORCH_IMPL_FUNC(cat_out_mps)
     std::vector<Placeholder> inputPlaceholders;
     int i = 0;
     int t_idx = 0;
-    for (const Tensor& tensor : materialized_inputs) {
-      if (std::find(skipped_tensor_indices.begin(), skipped_tensor_indices.end(), i) == skipped_tensor_indices.end()) {
+    for(const Tensor& tensor : materialized_inputs) {
+      if(std::find(skipped_tensor_indices.begin(), skipped_tensor_indices.end(), i) == skipped_tensor_indices.end()) {
         auto scalar_type = getMPSScalarType(tensor.scalar_type());
         if (tensor.scalar_type() == kBool) {
           scalar_type = MPSDataTypeInt8;
         }
-        inputPlaceholders.emplace_back(cachedGraph->inputTensors_[t_idx], tensor,
-                                       getMPSShape(tensor, memory_format),
-                                       memory_format != MemoryFormat::ChannelsLast, scalar_type);
+        Placeholder currentInputPlaceholder = Placeholder(
+          cachedGraph->inputTensors_[t_idx], tensor, /*mpsShape=*/nil, /*gatherTensorData=*/true, scalar_type);
+        inputPlaceholders.push_back(currentInputPlaceholder);
         t_idx++;
       }
       i++;
@@ -360,7 +360,8 @@ TORCH_IMPL_FUNC(cat_out_mps)
     if (!is_macos_13_or_newer() && out.scalar_type() == kBool) {
       outputDataType = MPSDataTypeInt8;
     }
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, out, nil, false, outputDataType);
+    Placeholder outputPlaceholder = Placeholder(
+      cachedGraph->outputTensor_, out, /*mpsShape=*/nil, /*gatherTensorData=*/false, outputDataType);
 
     NSMutableDictionary *feeds = [[NSMutableDictionary new] autorelease];
     for (auto& inputPlaceholder : inputPlaceholders) {

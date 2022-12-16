@@ -57,16 +57,14 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
   auto otherDataType = other.scalar_type();
   auto outputDataType = output_.scalar_type();
   if (!is_macos_13_or_newer()) {
-    // workaround for signed vs. unsigned comparison issue in MacOS 12
-    if (outputDataType == kBool && (inputDataType == kByte || otherDataType == kByte)) {
-      inputDataType = otherDataType = kByte;
-    } else {
-      if (inputDataType == kBool || inputDataType == kByte) {
-        inputDataType = kChar;
-      }
-      if (otherDataType == kBool || otherDataType == kByte) {
-        otherDataType = kChar;
-      }
+    if (self.scalar_type() == kBool) {
+      inputDataType = kChar;
+    }
+    if (other.scalar_type() == kBool) {
+      otherDataType = kChar;
+    }
+    if (output.scalar_type() == kBool) {
+      outputDataType = kChar;
     }
   }
 
@@ -109,7 +107,8 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
           newCachedGraph->outputTensor = binaryBlock(newCachedGraph, primaryCastTensor, secondaryCastTensor);
           // Cast output tensor to an expected type if needed, which addresses discrepancy when int64 scalar is added to int32 tensor
           // Output tensor should have been promoted but it remains an int32 tensor
-          if (outputDataType != common_dtype) {
+          if (outputDataType != common_dtype ||
+             [newCachedGraph->outputTensor dataType] != getMPSDataType(outputDataType)) {
             newCachedGraph->outputTensor = castMPSTensor(mpsGraph, newCachedGraph->outputTensor, outputDataType);
           }
         }
@@ -126,19 +125,19 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
     MPSScalar alpha_scalar;
 
     if (is_self_scalar && !self.is_mps()) {
-      self_scalar = getMPSScalar(self.item(), inputDataType);
-      feeds[cachedGraph->primaryTensor] = getMPSGraphTensorFromScalar(mpsStream, self_scalar);
+      self_scalar = getMPSScalar(self.item(), self.scalar_type());
+      feeds[cachedGraph->primaryTensor] = getMPSGraphTensorFromScalar(mpsStream, self_scalar, getMPSScalarType(inputDataType));
     } else {
-      selfPlaceholder = Placeholder(cachedGraph->primaryTensor, self, /*mpsShape*/nil,
-                                    /*gatherTensorData=*/true, getMPSScalarType(inputDataType));
+      selfPlaceholder = Placeholder(
+        cachedGraph->primaryTensor, self,  /*mpsShape*/nil, /*gatherTensorData=*/true, getMPSScalarType(inputDataType));
       feeds[selfPlaceholder.getMPSGraphTensor()] = selfPlaceholder.getMPSGraphTensorData();
     }
     if (is_other_scalar && !other.is_mps()) {
-      other_scalar = getMPSScalar(other.item(), otherDataType);
-      feeds[cachedGraph->secondaryTensor] = getMPSGraphTensorFromScalar(mpsStream, other_scalar);
+      other_scalar = getMPSScalar(other.item(), other.scalar_type());
+      feeds[cachedGraph->secondaryTensor] = getMPSGraphTensorFromScalar(mpsStream, other_scalar, getMPSScalarType(otherDataType));
     } else {
-      otherPlaceholder = Placeholder(cachedGraph->secondaryTensor, other,  /*mpsShape*/nil,
-                                     /*gatherTensorData=*/true, getMPSScalarType(otherDataType));
+      otherPlaceholder = Placeholder(
+        cachedGraph->secondaryTensor, other,  /*mpsShape*/nil, /*gatherTensorData=*/true, getMPSScalarType(otherDataType));
       feeds[otherPlaceholder.getMPSGraphTensor()] = otherPlaceholder.getMPSGraphTensorData();
     }
 
@@ -148,7 +147,8 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
       feeds[cachedGraph->alphaTensor] = getMPSGraphTensorFromScalar(mpsStream, alpha_scalar);
     }
 
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor, needsCopyToOutput ? output : output_);
+    Placeholder outputPlaceholder = Placeholder(
+      cachedGraph->outputTensor, needsCopyToOutput ? output : output_,  /*mpsShape*/nil, /*gatherTensorData=*/false, getMPSScalarType(outputDataType));
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
