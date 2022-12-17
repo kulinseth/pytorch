@@ -286,36 +286,36 @@ TORCH_IMPL_FUNC(_upsample_nearest_exact1d_backward_out_mps) (
   }
 }
 
-TORCH_IMPL_FUNC(upsample_nearest2d_out_mps) (
-    const Tensor& input,
-    IntArrayRef output_size,
-    c10::optional<double> scales_h,
-    c10::optional<double> scales_w,
-    const Tensor& output)
-{
-  if (check_mps_compatibility(scales_w)) {
-    mps::upsample_out_template(input, output_size, c10::nullopt, scales_h, scales_w, output, false, "nearest");
-  } else {
-   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-   const_cast<Tensor&>(output) = at::upsample_nearest2d(input.to("cpu"), output_size, scales_h, scales_w).clone().to("mps");
-  }
-}
+//TORCH_IMPL_FUNC(upsample_nearest2d_out_mps) (
+//    const Tensor& input,
+//    IntArrayRef output_size,
+//    c10::optional<double> scales_h,
+//    c10::optional<double> scales_w,
+//    const Tensor& output)
+//{
+//  if (check_mps_compatibility(scales_w)) {
+//    mps::upsample_out_template(input, output_size, c10::nullopt, scales_h, scales_w, output, false, "nearest");
+//  } else {
+//   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+//   const_cast<Tensor&>(output) = at::upsample_nearest2d(input.to("cpu"), output_size, scales_h, scales_w).clone().to("mps");
+//  }
+//}
 
-TORCH_IMPL_FUNC(upsample_nearest2d_backward_out_mps) (
-    const Tensor& grad_output,
-    IntArrayRef output_size,
-    IntArrayRef input_size,
-    c10::optional<double> scales_h,
-    c10::optional<double> scales_w,
-    const Tensor& grad_input)
-{
-  if (check_mps_compatibility(scales_w)) {
-    mps::upsample_out_template(grad_output, output_size, input_size, scales_h, scales_w, grad_input, false, "nearest");
-  } else {
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-    const_cast<Tensor&>(grad_input) = at::upsample_nearest2d_backward(grad_output.to("cpu"), output_size, input_size, scales_h, scales_w).clone().to("mps");
-  }
-}
+//TORCH_IMPL_FUNC(upsample_nearest2d_backward_out_mps) (
+//    const Tensor& grad_output,
+//    IntArrayRef output_size,
+//    IntArrayRef input_size,
+//    c10::optional<double> scales_h,
+//    c10::optional<double> scales_w,
+//    const Tensor& grad_input)
+//{
+//  if (check_mps_compatibility(scales_w)) {
+//    mps::upsample_out_template(grad_output, output_size, input_size, scales_h, scales_w, grad_input, false, "nearest");
+//  } else {
+//    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+//    const_cast<Tensor&>(grad_input) = at::upsample_nearest2d_backward(grad_output.to("cpu"), output_size, input_size, scales_h, scales_w).clone().to("mps");
+//  }
+//}
 
 TORCH_IMPL_FUNC(_upsample_nearest_exact2d_out_mps) (
     const Tensor& input,
@@ -348,38 +348,38 @@ TORCH_IMPL_FUNC(_upsample_nearest_exact2d_backward_out_mps) (
   }
 }
 
-TORCH_IMPL_FUNC(upsample_bilinear2d_out_mps) (
-    const Tensor& input,
-    IntArrayRef output_size,
-    bool align_corners,
-    c10::optional<double> scales_h,
-    c10::optional<double> scales_w,
-    const Tensor& output)
-{
-  if (check_mps_compatibility(scales_w)) {
-    mps::upsample_out_template(input, output_size, c10::nullopt, scales_h, scales_w, output, align_corners, "bilinear");
-  } else {
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-    const_cast<Tensor&>(output) = at::upsample_bilinear2d(input.to("cpu"), output_size, align_corners, scales_h, scales_w).clone().to("mps");
-  }
-}
+//TORCH_IMPL_FUNC(upsample_bilinear2d_out_mps) (
+//    const Tensor& input,
+//    IntArrayRef output_size,
+//    bool align_corners,
+//    c10::optional<double> scales_h,
+//    c10::optional<double> scales_w,
+//    const Tensor& output)
+//{
+//  if (check_mps_compatibility(scales_w)) {
+//    mps::upsample_out_template(input, output_size, c10::nullopt, scales_h, scales_w, output, align_corners, "bilinear");
+//  } else {
+//    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+//    const_cast<Tensor&>(output) = at::upsample_bilinear2d(input.to("cpu"), output_size, align_corners, scales_h, scales_w).clone().to("mps");
+//  }
+//}
 
-TORCH_IMPL_FUNC(upsample_bilinear2d_backward_out_mps) (
-    const Tensor& grad_output,
-    IntArrayRef output_size,
-    IntArrayRef input_size,
-    bool align_corners,
-    c10::optional<double> scales_h,
-    c10::optional<double> scales_w,
-    const Tensor& grad_input)
-{
-  if (check_mps_compatibility(scales_w)) {
-    mps::upsample_out_template(grad_output, output_size, input_size, scales_h, scales_w, grad_input, align_corners, "bilinear");
-  } else {
-    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
-    const_cast<Tensor&>(grad_input) = at::upsample_bilinear2d_backward(grad_output.to("cpu"), output_size, input_size, align_corners, scales_h, scales_w).clone().to("mps");
-  }
-}
+//TORCH_IMPL_FUNC(upsample_bilinear2d_backward_out_mps) (
+//    const Tensor& grad_output,
+//    IntArrayRef output_size,
+//    IntArrayRef input_size,
+//    bool align_corners,
+//    c10::optional<double> scales_h,
+//    c10::optional<double> scales_w,
+//    const Tensor& grad_input)
+//{
+//  if (check_mps_compatibility(scales_w)) {
+//    mps::upsample_out_template(grad_output, output_size, input_size, scales_h, scales_w, grad_input, align_corners, "bilinear");
+//  } else {
+//    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-const-cast)
+//    const_cast<Tensor&>(grad_input) = at::upsample_bilinear2d_backward(grad_output.to("cpu"), output_size, input_size, align_corners, scales_h, scales_w).clone().to("mps");
+//  }
+//}
 
 } // namespace native
 } // namespace at
