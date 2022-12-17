@@ -5,6 +5,7 @@
 #include <ATen/native/mps/OperationUtils.h>
 #include <ATen/mps/MPSGeneratorImpl.h>
 #include <ATen/native/TensorFactories.h>
+#include <ATen/native/mps/MPSGraphVenturaOps.h>
 
 namespace at {
 namespace native {
