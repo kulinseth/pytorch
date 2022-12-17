@@ -311,7 +311,7 @@
   device_check: NoCheck   # TensorIterator
   dispatch:
     CPU, CUDA: abs_out
-    MPS: abs_out_mps
+    #MPS: abs_out_mps
     SparseCPU, SparseCUDA: abs_sparse_out
     SparseCsrCPU, SparseCsrCUDA: abs_sparse_csr_out
   tags: pointwise
@@ -714,7 +714,7 @@
   structured: True
   dispatch:
     CPU, CUDA: argmax_out
-    MPS: argmax_out_mps
+    #MPS: argmax_out_mps
 
 - func: argmin(Tensor self, int? dim=None, bool keepdim=False) -> Tensor
   structured_delegate: argmin.out
@@ -1656,7 +1656,7 @@
   structured_inherits: TensorIteratorBase
   dispatch:
     CPU, CUDA: cos_out
-    MPS: cos_out_mps
+    #MPS: cos_out_mps
   tags: pointwise
 
 - func: cosh(Tensor self) -> Tensor
@@ -1989,7 +1989,7 @@
   structured_inherits: TensorIteratorBase
   dispatch:
     CPU, CUDA: div_out
-    MPS: div_out_mps
+    #MPS: div_out_mps
     SparseCPU, SparseCUDA: div_out_sparse_zerodim
   tags: pointwise
 
@@ -2015,7 +2015,7 @@
   structured_inherits: TensorIteratorBase
   dispatch:
     CPU, CUDA: div_out_mode
-    MPS: div_out_mode_mps
+    #MPS: div_out_mode_mps
     SparseCPU, SparseCUDA: div_out_sparse_zerodim
   tags: pointwise
 
@@ -2399,7 +2399,7 @@
   structured_inherits: TensorIteratorBase
   dispatch:
     CPU, CUDA: exp_out
-    MPS: exp_out_mps
+    #MPS: exp_out_mps
   tags: pointwise
 
 - func: exp2(Tensor self) -> Tensor
@@ -3192,7 +3192,7 @@
   structured_inherits: TensorIteratorBase
   dispatch:
     CPU, CUDA: log_out
-    MPS: log_out_mps
+    #MPS: log_out_mps
   tags: pointwise
 
 - func: log10(Tensor self) -> Tensor
@@ -3512,7 +3512,7 @@
   - dim -> int dim
   dispatch:
     CPU, CUDA: max_out
-    MPS: max_out_mps
+    #MPS: max_out_mps
 
 - func: max.names_dim(Tensor self, Dimname dim, bool keepdim=False) -> (Tensor values, Tensor indices)
   device_check: NoCheck   # TensorIterator
@@ -3698,7 +3698,7 @@
   - dim -> int dim
   dispatch:
     CPU, CUDA: min_out
-    MPS: min_out_mps
+    #MPS: min_out_mps
 
 - func: min.names_dim(Tensor self, Dimname dim, bool keepdim=False) -> (Tensor values, Tensor indices)
   device_check: NoCheck   # TensorIterator
@@ -4928,7 +4928,7 @@
   structured_inherits: TensorIteratorBase
   dispatch:
     CPU, CUDA: sin_out
-    MPS: sin_out_mps
+    #MPS: sin_out_mps
     SparseCsrCPU, SparseCsrCUDA: sin_sparse_csr_out
     SparseCPU, SparseCUDA: sin_sparse_out
   tags: pointwise
@@ -8116,7 +8116,7 @@
   device_check: NoCheck   # TensorIterator
   dispatch:
     CPU, CUDA: ne_Scalar_out
-    MPS: ne_scalar_out_mps
+    #MPS: ne_scalar_out_mps
     QuantizedCPU: ne_out_quantized_cpu
   tags: pointwise
 
@@ -8134,7 +8134,7 @@
   device_check: NoCheck   # TensorIterator
   dispatch:
     CPU, CUDA: ne_Tensor_out
-    MPS: ne_tensor_out_mps
+    #MPS: ne_tensor_out_mps
     QuantizedCPU: ne_out_quantized_cpu
   tags: pointwise
 
@@ -8215,7 +8215,7 @@
   device_check: NoCheck   # TensorIterator
   dispatch:
     CPU, CUDA: ge_Scalar_out
-    MPS: ge_scalar_out_mps
+    #MPS: ge_scalar_out_mps
     QuantizedCPU: ge_out_quantized_cpu
   tags: pointwise
 
@@ -8233,7 +8233,7 @@
   device_check: NoCheck   # TensorIterator
   dispatch:
     CPU, CUDA: ge_Tensor_out
-    MPS: ge_tensor_out_mps
+    #MPS: ge_tensor_out_mps
     QuantizedCPU: ge_out_quantized_cpu
   tags: pointwise
 
@@ -9209,7 +9209,7 @@
   variants: method, function
   dispatch:
     CPU, CUDA: min
-    MPS: min_mps
+    #MPS: min_mps
     QuantizedCPU: min_quantized_cpu
 
 # Not to be confused with binary op `min.out`. Commented because of failed CI
@@ -9238,7 +9238,7 @@
   variants: method, function
   dispatch:
     CPU, CUDA: max
-    MPS: max_mps
+    #MPS: max_mps
     QuantizedCPU: max_quantized_cpu
 
 - func: fmax(Tensor self, Tensor other) -> Tensor
@@ -9299,7 +9299,7 @@
   device_check: NoCheck   # TensorIterator
   dispatch:
     CPU, CUDA: minimum_out
-    MPS: minimum_out_mps
+    #MPS: minimum_out_mps
   tags: pointwise
 
 # binary min, alias for minimum
@@ -10600,7 +10600,7 @@
   python_module: nn
   dispatch:
     CPU, CUDA: smooth_l1_loss_out
-    MPS: smooth_l1_loss_out_mps
+    #MPS: smooth_l1_loss_out_mps
 
 - func: smooth_l1_loss(Tensor self, Tensor target, int reduction=Mean, float beta=1.0) -> Tensor
   device_check: NoCheck   # TensorIterator
@@ -10612,7 +10612,7 @@
   dispatch:
     CPU: smooth_l1_loss_backward_out
     CUDA: smooth_l1_loss_backward_out
-    MPS: smooth_l1_loss_backward_out_mps
+    #MPS: smooth_l1_loss_backward_out_mps
 
 - func: smooth_l1_loss_backward(Tensor grad_output, Tensor self, Tensor target, int reduction, float beta) -> Tensor
   python_module: nn
@@ -11546,7 +11546,7 @@
   dispatch:
     CPU: upsample_bilinear2d_out_cpu
     CUDA: upsample_bilinear2d_out_cuda
-    MPS: upsample_bilinear2d_out_mps
+    #MPS: upsample_bilinear2d_out_mps
 
 - func: upsample_bilinear2d(Tensor self, SymInt[2] output_size, bool align_corners, float? scales_h=None, float? scales_w=None) -> Tensor
   python_module: nn
@@ -11560,7 +11560,7 @@
   dispatch:
     CPU: upsample_bilinear2d_backward_out_cpu
     CUDA: upsample_bilinear2d_backward_out_cuda
-    MPS: upsample_bilinear2d_backward_out_mps
+    #MPS: upsample_bilinear2d_backward_out_mps
 
 - func: upsample_bilinear2d_backward(Tensor grad_output, SymInt[2] output_size, SymInt[4] input_size, bool align_corners, float? scales_h=None, float? scales_w=None) -> Tensor
   python_module: nn
@@ -11708,7 +11708,7 @@
   dispatch:
     CPU: upsample_nearest2d_out_cpu
     CUDA: upsample_nearest2d_out_cuda
-    MPS: upsample_nearest2d_out_mps
+    #MPS: upsample_nearest2d_out_mps
 
 - func: _upsample_nearest_exact2d.out(Tensor self, SymInt[2] output_size, float? scales_h=None, float? scales_w=None, *, Tensor(a!) out) -> Tensor(a!)
   python_module: nn
@@ -11736,7 +11736,7 @@
   dispatch:
     CPU: upsample_nearest2d_backward_out_cpu
     CUDA: upsample_nearest2d_backward_out_cuda
-    MPS: upsample_nearest2d_backward_out_mps
+    #MPS: upsample_nearest2d_backward_out_mps
 
 - func: _upsample_nearest_exact2d_backward.grad_input(Tensor grad_output, SymInt[2] output_size, SymInt[4] input_size, float? scales_h=None, float? scales_w=None, *, Tensor(a!) grad_input) -> Tensor(a!)
   python_module: nn
@@ -11808,7 +11808,7 @@
   structured_inherits: TensorIteratorBase
   dispatch:
     CPU, CUDA: sigmoid_backward_out
-    MPS: sigmoid_backward_out_mps
+    #MPS: sigmoid_backward_out_mps
   tags: pointwise
 
 - func: sigmoid_backward(Tensor grad_output, Tensor output) -> Tensor
