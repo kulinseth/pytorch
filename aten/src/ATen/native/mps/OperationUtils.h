@@ -5,6 +5,7 @@
 #include <ATen/Utils.h>
 #include <ATen/mps/MPSStream.h>
 #include <ATen/native/mps/TensorFactory.h>
+#include <ATen/native/mps/MPSGraphVenturaOps.h>
 #include <c10/core/ScalarType.h>
 #include <torch/library.h>
 #include <unordered_map>
