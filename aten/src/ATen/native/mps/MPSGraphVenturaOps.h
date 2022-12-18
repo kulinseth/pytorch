@@ -33,4 +33,60 @@ typedef NS_ENUM(NSUInteger, MPSGraphResizeNearestRoundingMode)
 
 - (MPSGraphTensor * _Nonnull)inverseOfTensor:(MPSGraphTensor * _Nonnull) inputTensor
                                        name:(NSString * _Nullable)name;
+
+- (MPSGraphTensor * _Nonnull) resizeNearestWithTensor:(MPSGraphTensor * _Nonnull) imagesTensor
+                                  sizeTensor:(MPSGraphTensor * _Nonnull) size
+                         nearestRoundingMode:(MPSGraphResizeNearestRoundingMode) nearestRoundingMode
+                                centerResult:(BOOL) centerResult
+                                alignCorners:(BOOL) alignCorners
+                                      layout:(MPSGraphTensorNamedDataLayout) layout
+                                        name:(NSString * _Nullable) name;
+
+- (MPSGraphTensor * _Nonnull) resizeNearestWithTensor:(MPSGraphTensor * _Nonnull) imagesTensor
+                                  sizeTensor:(MPSGraphTensor * _Nonnull) size
+                           scaleOffsetTensor:(MPSGraphTensor * _Nonnull) scaleOffset
+                         nearestRoundingMode:(MPSGraphResizeNearestRoundingMode) nearestRoundingMode
+                                      layout:(MPSGraphTensorNamedDataLayout) layout
+                                        name:(NSString * _Nullable) name;
+
+- (MPSGraphTensor * _Nonnull) resizeBilinearWithTensor:(MPSGraphTensor * _Nonnull) imagesTensor
+                                   sizeTensor:(MPSGraphTensor * _Nonnull) size
+                                 centerResult:(BOOL) centerResult
+                                 alignCorners:(BOOL) alignCorners
+                                       layout:(MPSGraphTensorNamedDataLayout) layout
+                                         name:(NSString * _Nullable) name;
+
+- (MPSGraphTensor * _Nonnull) resizeBilinearWithTensor:(MPSGraphTensor * _Nonnull) imagesTensor
+                                   sizeTensor:(MPSGraphTensor * _Nonnull) size
+                            scaleOffsetTensor:(MPSGraphTensor * _Nonnull) scaleOffset
+                                       layout:(MPSGraphTensorNamedDataLayout) layout
+                                         name:(NSString * _Nullable) name;
+
+- (MPSGraphTensor * _Nonnull) resizeNearestWithGradientTensor:(MPSGraphTensor * _Nonnull) gradient
+                                               input:(MPSGraphTensor * _Nonnull) input
+                                 nearestRoundingMode:(MPSGraphResizeNearestRoundingMode) nearestRoundingMode
+                                        centerResult:(BOOL) centerResult
+                                        alignCorners:(BOOL) alignCorners
+                                              layout:(MPSGraphTensorNamedDataLayout) layout
+                                                name:(NSString * _Nullable) name;
+
+- (MPSGraphTensor * _Nonnull) resizeNearestWithGradientTensor:(MPSGraphTensor * _Nonnull) gradient
+                                               input:(MPSGraphTensor * _Nonnull) input
+                                   scaleOffsetTensor:(MPSGraphTensor * _Nonnull) scaleOffset
+                                 nearestRoundingMode:(MPSGraphResizeNearestRoundingMode) nearestRoundingMode
+                                              layout:(MPSGraphTensorNamedDataLayout) layout
+                                                name:(NSString * _Nullable) name;
+
+- (MPSGraphTensor * _Nonnull) resizeBilinearWithGradientTensor:(MPSGraphTensor * _Nonnull) gradient
+                                                input:(MPSGraphTensor * _Nonnull) input
+                                         centerResult:(BOOL) centerResult
+                                         alignCorners:(BOOL) alignCorners
+                                               layout:(MPSGraphTensorNamedDataLayout) layout
+                                                 name:(NSString * _Nullable) name;
+
+- (MPSGraphTensor * _Nonnull) resizeBilinearWithGradientTensor:(MPSGraphTensor * _Nonnull) gradient
+                                                input:(MPSGraphTensor * _Nonnull) input
+                                    scaleOffsetTensor:(MPSGraphTensor * _Nonnull) scaleOffset
+                                               layout:(MPSGraphTensorNamedDataLayout) layout
+                                                 name:(NSString * _Nullable) name;
 @end
