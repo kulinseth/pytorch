@@ -1510,32 +1510,32 @@ void min_max_out_mps
 }
 
 // Max out with dim
-//TORCH_IMPL_FUNC(max_out_mps)
-//  (const Tensor& input_t,
-//   int64_t dim,
-//   bool keepdim,
-//   const Tensor& output_t,
-//   const Tensor& indices_t) {
-//
-//    int64_t dim_ = maybe_wrap_dim(dim, input_t.dim());
-//    native::zero_numel_check_dims(input_t, dim_,  "max()");
-//
-//    min_max_out_mps(input_t, dim, keepdim, output_t, indices_t, MPSReductionType::MAX, "max_out_mps");
-//}
+TORCH_IMPL_FUNC(max_out_mps)
+  (const Tensor& input_t,
+   int64_t dim,
+   bool keepdim,
+   const Tensor& output_t,
+   const Tensor& indices_t) {
+
+    int64_t dim_ = maybe_wrap_dim(dim, input_t.dim());
+    native::zero_numel_check_dims(input_t, dim_,  "max()");
+
+    min_max_out_mps(input_t, dim, keepdim, output_t, indices_t, MPSReductionType::MAX, "max_out_mps");
+}
 
 // Min out with dim
-//TORCH_IMPL_FUNC(min_out_mps)
-//  (const Tensor& input_t,
-//   int64_t dim,
-//   bool keepdim,
-//   const Tensor& output_t,
-//   const Tensor& indices_t) {
-//
-//    int64_t dim_ = maybe_wrap_dim(dim, input_t.dim());
-//    native::zero_numel_check_dims(input_t, dim_, "min()");
-//
-//    min_max_out_mps(input_t, dim, keepdim, output_t, indices_t, MPSReductionType::MIN, "min_out_mps");
-//}
+TORCH_IMPL_FUNC(min_out_mps)
+  (const Tensor& input_t,
+   int64_t dim,
+   bool keepdim,
+   const Tensor& output_t,
+   const Tensor& indices_t) {
+
+    int64_t dim_ = maybe_wrap_dim(dim, input_t.dim());
+    native::zero_numel_check_dims(input_t, dim_, "min()");
+
+    min_max_out_mps(input_t, dim, keepdim, output_t, indices_t, MPSReductionType::MIN, "min_out_mps");
+}
 
 void argmax_argmin_out_mps
    (const Tensor& input_t,
@@ -1669,14 +1669,14 @@ void argmax_argmin_out_mps
   }
 }
 
-//TORCH_IMPL_FUNC(argmax_out_mps)
-//   (const Tensor& input_t,
-//    c10::optional<int64_t> dim,
-//    bool keepdim,
-//    const Tensor& output_t) {
-//
-//    argmax_argmin_out_mps(input_t, dim, keepdim, output_t, MPSReductionType::MAX, "argmax_out_mps");
-//}
+TORCH_IMPL_FUNC(argmax_out_mps)
+   (const Tensor& input_t,
+    c10::optional<int64_t> dim,
+    bool keepdim,
+    const Tensor& output_t) {
+
+    argmax_argmin_out_mps(input_t, dim, keepdim, output_t, MPSReductionType::MAX, "argmax_out_mps");
+}
 
 TORCH_IMPL_FUNC(argmin_out_mps)
    (const Tensor& input_t,

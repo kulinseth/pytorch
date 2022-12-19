@@ -1368,15 +1368,15 @@ Tensor binary_cross_entropy_backward_mps(const Tensor& grad_output, const Tensor
 }
 
 // SmoothL1Loss
-//TORCH_IMPL_FUNC(smooth_l1_loss_out_mps)(
-//                    const Tensor& input,
-//                    const Tensor& target,
-//                    int64_t reduction,
-//                    double beta,
-//                    const Tensor& result) {
-//  mps::smooth_l1_loss_template(
-//      input, target, reduction, beta, result);
-//}
+TORCH_IMPL_FUNC(smooth_l1_loss_out_mps)(
+                    const Tensor& input,
+                    const Tensor& target,
+                    int64_t reduction,
+                    double beta,
+                    const Tensor& result) {
+  mps::smooth_l1_loss_template(
+      input, target, reduction, beta, result);
+}
 
 Tensor& smooth_l1_loss_backward_out_mps(
     const Tensor& grad_output,
