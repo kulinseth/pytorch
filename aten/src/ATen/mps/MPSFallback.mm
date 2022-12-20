@@ -68,12 +68,12 @@ TORCH_LIBRARY_IMPL(aten, MPS, m) {
   m.impl("topk.values", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("norm.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("norm.dtype_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
-  //m.impl("sigmoid.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("sigmoid.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("pow.Tensor_Tensor_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("pow.Tensor_Scalar_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
-  //m.impl("sgn.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("sgn.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("cumsum.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
-  //m.impl("_cdist_forward", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("_cdist_forward", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("nll_loss_forward.output", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("nll_loss_backward.grad_input", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("nll_loss2d_forward.output", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
@@ -90,7 +90,7 @@ TORCH_LIBRARY_IMPL(aten, MPS, m) {
   //m.impl("ne.Scalar_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   //m.impl("ne.Tensor_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   //m.impl("cos.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
-  //m.impl("sigmoid_backward.grad_input", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("sigmoid_backward.grad_input", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   //m.impl("min", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   //m.impl("min.dim_min", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("upsample_bilinear2d.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
