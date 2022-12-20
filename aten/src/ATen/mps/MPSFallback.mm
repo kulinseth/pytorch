@@ -63,11 +63,11 @@ TORCH_LIBRARY_IMPL(aten, MPS, m) {
   m.impl("_slow_conv2d_forward", slow_conv2d_forward_mps);
   m.impl("upsample_nearest3d.vec", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("topk.values", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
-  m.impl("norm.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
-  m.impl("norm.dtype_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  //m.impl("norm.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  //m.impl("norm.dtype_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   //m.impl("sigmoid.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
-  m.impl("pow.Tensor_Tensor_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
-  m.impl("pow.Tensor_Scalar_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  //m.impl("pow.Tensor_Tensor_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  //m.impl("pow.Tensor_Scalar_out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   //m.impl("sgn.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("cumsum.out", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   //m.impl("_cdist_forward", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
