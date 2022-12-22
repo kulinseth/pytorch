@@ -8192,7 +8192,6 @@ class TestConsistency(TestCase):
         'einsum': ['f32'],
         'equal': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'eq': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'empty': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'erf': ['b8', 'f32', 'i16', 'i32', 'u8'],
         'exp': ['b8', 'f32', 'i16', 'i32', 'u8'],
         'exp2': ['b8', 'f16', 'f32', 'i16', 'i32', 'u8'],
@@ -8669,6 +8668,7 @@ class TestConsistency(TestCase):
          # these fill tensors with uninitialized data, causing mismatch with CPU
         'new_empty': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'empty_like': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
+        'empty': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         # problem 103190467, as_strided_scatter has non-deterministic behavior when the update indices are not unique
         'as_strided_scatter': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
 
