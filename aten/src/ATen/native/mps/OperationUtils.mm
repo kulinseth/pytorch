@@ -225,7 +225,8 @@ MPSNDArray* ndArrayFromTensor(const Tensor& tensor, MPSShape *shape, MPSDataType
   return [tmpGraphTensorData mpsndarray];
 }
 
-Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src, MPSShape *mpsShape, bool gatherTensorData, MPSDataType dataType) : _tensor(src)
+Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src, MPSShape *mpsShape,
+                         bool gatherTensorData, MPSDataType dataType) : _tensor(src)
 {
   TORCH_CHECK(src.is_mps(), "Placeholder storage has not been allocated on MPS device!");
   // extract the pointer to MTLBuffer from the Tensor's storage
@@ -308,14 +309,14 @@ MPSScalar getMPSScalar(const Scalar& scalar, ScalarType type) {
   }
 }
 
-MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, MPSScalar& scalar, MPSDataType dataType) {
+MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, MPSScalar& scalar) {
   MPSGraphTensorData *result = nullptr;
   // Scalar pools are only supported on devices with unified memory
   if (mpsStream->device().hasUnifiedMemory) {
     scalar.buffer = at::mps::allocate_scalar_buffer(&scalar.value, scalar.size);
     result = [[[MPSGraphTensorData alloc] initWithMTLBuffer: scalar.getMTLBuffer()
                                                       shape: @[@1]
-                                                   dataType: (dataType != MPSDataTypeInvalid) ? dataType : getMPSScalarType(scalar.type)] autorelease];
+                                                   dataType: getMPSScalarType(scalar.type)] autorelease];
   } else {
     MPSNDArrayDescriptor *tensorDesc = [MPSNDArrayDescriptor descriptorWithDataType:getMPSScalarType(scalar.type) shape:@[@1]];
     MPSNDArray *tensorNDArray = [[[MPSNDArray alloc] initWithDevice:mpsStream->device() descriptor:tensorDesc] autorelease];
