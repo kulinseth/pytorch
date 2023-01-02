@@ -8466,6 +8466,7 @@ class TestConsistency(TestCase):
         'gather': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'ge': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'gradient': ['f16', 'f32', 'i16'],
+        'grid_sampler_2d': ['f16', 'f32', 'i16'],
         'outer': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'gt': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'half': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8579,7 +8580,6 @@ class TestConsistency(TestCase):
         'nn.functional.triplet_margin_with_distance_loss': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.upsample_bilinear': ['f32'],
         'nn.functional.upsample_nearest': ['f32'],
-	    'nn.functional.grid_sample': ['f32'],
         'norm': ['f32', 'f16'],
         'positive': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'pow': ['f16'],
@@ -8891,6 +8891,7 @@ class TestConsistency(TestCase):
         'put': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'stft': ['torch.float32'],
         'nn.functional.conv_transpose3d': [torch.int64, torch.float32],
+	    'nn.functional.grid_sample': ['f32'],
 
         # failure due to issue: atan2() may generate NAN in output with
         'atan2': ['torch.bool', 'torch.int16', 'torch.int32', 'torch.uint8'],
