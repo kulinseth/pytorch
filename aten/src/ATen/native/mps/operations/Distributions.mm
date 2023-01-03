@@ -14,7 +14,6 @@ namespace mps {
 struct RandomCachedGraph : public MPSCachedGraph
 {
   RandomCachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) { }
-
   // Only relevant for multinomial
   MPSGraphTensor *probTensor = nil;
   MPSGraphTensor *resultTensor = nil;
