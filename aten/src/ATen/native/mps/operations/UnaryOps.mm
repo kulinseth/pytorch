@@ -266,7 +266,7 @@ TORCH_IMPL_FUNC(cumsum_out_mps)
                 ^ MPSGraphTensor* (MPSGraph* mpsGraph, MPSGraphTensor* inputTensor) {
        // cumsum is horribly broken for int8, int16 and as chances for overflow is pretty high, cast to int32
        if (isIntegralType(input.scalar_type()) && input.scalar_type() !=ScalarType::Int) {
-           inputTensor = mps::castMPSTensor(mpsGraph, inputTensor, result.scalar_type());
+           inputTensor = mps::castMPSTensor(mpsGraph, inputTensor, ScalarType::Int);
        }
        auto rc = [mpsGraph cumulativeSumWithTensor: inputTensor
                                               axis: dim
