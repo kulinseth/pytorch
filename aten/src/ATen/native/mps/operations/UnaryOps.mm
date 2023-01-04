@@ -262,6 +262,7 @@ TORCH_IMPL_FUNC(cumsum_out_mps)
     return;
   }
   auto input = dtype.has_value() ? self.to(dtype.value()) : self;
+  TORCH_CHECK(input.scalar_type() != ScalarType::Long, "Input type shouldn't be int64");
   mps::unary_op(input, result, "cumsum_out_mp" + std::to_string(dim),
                 ^ MPSGraphTensor* (MPSGraph* mpsGraph, MPSGraphTensor* inputTensor) {
        // cumsum is horribly broken for int8, int16 and as chances for overflow is pretty high, cast to int32
