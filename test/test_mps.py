@@ -8850,7 +8850,6 @@ class TestConsistency(TestCase):
         'nn.functional.avg_pool1d': [torch.float32, torch.int64],
         'nn.functional.avg_pool2d': [torch.float32, torch.int64],
         'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'index_put': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'divfloor_rounding': [torch.int16, torch.int32, torch.int64],
         'divtrunc_rounding': [torch.float16],
         'norm': [torch.float16],
@@ -8934,6 +8933,8 @@ class TestConsistency(TestCase):
         'empty': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         # problem 103190467, as_strided_scatter has non-deterministic behavior when the update indices are not unique
         'as_strided_scatter': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
+        # duplicate indices are used in the testcase - this case is documented as undefined behaviour
+        'index_put': [None],
 
         # failures due to precision issues
         'masked.var': ['f16'],
