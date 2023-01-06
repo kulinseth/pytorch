@@ -8264,6 +8264,7 @@ class TestConsistency(TestCase):
         'neg': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'nn.functional.adaptive_max_pool1d': ['f32'],
         'nn.functional.adaptive_max_pool2d': ['f32'],
+        'nn.functional.bilinear': ['f32'],
         'nn.functional.binary_cross_entropy': ['f32'],
         'nn.functional.binary_cross_entropy_with_logits': ['f32'],
         'nn.functional.celu': ['f32'],
@@ -8612,7 +8613,6 @@ class TestConsistency(TestCase):
         'take_along_dim': None,
 
         # New block list ops that need investigation
-        'nn.functional.bilinear': ['torch.float32'],
         'nn.functional.conv_transpose2d': ['torch.float32'],
         'nn.functional.interpolate': ['torch.float32'],
         'topk': ['torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
