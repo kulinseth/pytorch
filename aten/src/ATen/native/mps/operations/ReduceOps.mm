@@ -1447,25 +1447,26 @@ void min_max_out_mps
 
               MPSGraphTensor* inputTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, input_t);
               MPSGraphTensor* outputTensor = nil;
-              if(reduction_type == MPSReductionType::MAX)
-                outputTensor = [mpsGraph reductionMaximumWithTensor:inputTensor
-                                                               axis:(NSInteger)dim_
-                                                               name:nil];
-              else if(reduction_type == MPSReductionType::MIN)
-                outputTensor = [mpsGraph reductionMinimumWithTensor:inputTensor
-                                                               axis:(NSInteger)dim_
-                                                               name:nil];
 
-              MPSGraphTensor* castInputTensor = nil;
-
+              MPSGraphTensor* castInputTensor = inputTensor;
+              bool castOutput = false;
               if(input_t.scalar_type() != ScalarType::Float &&
                  input_t.scalar_type() != ScalarType::Int   &&
-                 input_t.scalar_type() != ScalarType::Half)
+                 input_t.scalar_type() != ScalarType::Half) {
                 castInputTensor =  [mpsGraph castTensor:inputTensor
                                                  toType:MPSDataTypeInt32
                                                    name:@"castInputTensor"];
-              else
-                castInputTensor = inputTensor;
+                castOutput = true;
+              }
+
+              if(reduction_type == MPSReductionType::MAX)
+                outputTensor = [mpsGraph reductionMaximumWithTensor:castInputTensor
+                                                               axis:(NSInteger)dim_
+                                                               name:nil];
+              else if(reduction_type == MPSReductionType::MIN)
+                outputTensor = [mpsGraph reductionMinimumWithTensor:castInputTensor
+                                                               axis:(NSInteger)dim_
+                                                               name:nil];
 
               MPSGraphTensor* argreduceOutTensor = nil;
               if(reduction_type == MPSReductionType::MAX)
@@ -1481,6 +1482,11 @@ void min_max_out_mps
                                                             toType:MPSDataTypeInt64
                                                               name:@"cast_out"];
 
+              if (castOutput) {
+                outputTensor = [mpsGraph castTensor:outputTensor
+                                             toType:native_mps::getMPSDataType(output_t.scalar_type())
+                                               name:@"cast_out"];
+              }
               newCachedGraph->inputTensor_ = inputTensor;
               newCachedGraph->outputTensor_ = outputTensor;
               newCachedGraph->indicesTensor_ = indicesTensor;

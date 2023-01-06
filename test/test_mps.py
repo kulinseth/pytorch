@@ -8400,6 +8400,8 @@ class TestConsistency(TestCase):
         'masked.std': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.sum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.var': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'minreduction_with_dim': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'maxreduction_with_dim': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
     }
 
 
@@ -8593,8 +8595,7 @@ class TestConsistency(TestCase):
         'divfloor_rounding': [torch.int16, torch.int32, torch.int64],
         'divtrunc_rounding': [torch.float16],
         'norm': [torch.float16],
-        'minreduction_with_dim': [torch.bool, torch.int16, torch.uint8],
-        'maxreduction_with_dim': [torch.bool, torch.int16, torch.uint8],
+
         'square': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8],
         # Functions that are flaky
         # These are detected as "ok" by the expect case but actually fail to run sometimes
