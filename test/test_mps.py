@@ -8466,7 +8466,6 @@ class TestConsistency(TestCase):
         'gather': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'ge': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'gradient': ['f16', 'f32', 'i16'],
-        'grid_sampler_2d': ['f16', 'f32', 'i16'],
         'outer': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'gt': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'half': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8895,6 +8894,9 @@ class TestConsistency(TestCase):
 
         # failure due to issue: atan2() may generate NAN in output with
         'atan2': ['torch.bool', 'torch.int16', 'torch.int32', 'torch.uint8'],
+
+        # Unsupported Border padding mode
+        'grid_sampler_2d': ['f16', 'f32', 'i16'],
 
         # failures due to issue #103039644: Wrong results from avgPooling2DWithSourceTensor()
         # when both ceilMode and includeZeroPadToAverage are True

@@ -9,6 +9,16 @@ void grid_sampler_2d_mps_impl(Tensor &output, const Tensor& input, const Tensor&
                               int64_t interpolation_mode, int64_t padding_mode,
                               bool align_corners) {
   using namespace mps;
+
+  if (!is_macos_13_or_newer()) {
+    TORCH_WARN_ONCE("MPS: grid_sampler_2d op is supported natively starting from macOS 13.0. ",
+                    "Falling back on CPU. This may have performance implications.");
+
+    output = at::grid_sampler_2d(
+      input.cpu(), grid.cpu(), interpolation_mode, padding_mode, align_corners).clone().to("mps");
+    return;
+  }
+
   check_grid_sampler_common(input, grid);
   check_grid_sampler_2d(input, grid);
 
@@ -25,7 +35,7 @@ void grid_sampler_2d_mps_impl(Tensor &output, const Tensor& input, const Tensor&
     case GridSamplerPadding::Border:
       TORCH_CHECK(false, "MPS: Unsupported Border padding mode"); break;
     case GridSamplerPadding::Reflection:
-      paddingMode = MPSGraphPaddingModeReflect; break;
+      paddingMode = align_corners == true ? MPSGraphPaddingModeReflect : MPSGraphPaddingModeSymmetric; break;
     default:
       TORCH_CHECK(false, "MPS: Unrecognised Padding Mode: ", padding_mode);
   }
@@ -43,8 +53,7 @@ void grid_sampler_2d_mps_impl(Tensor &output, const Tensor& input, const Tensor&
 
   MPSStream *stream = getCurrentMPSStream();
 
-  struct CachedGraph : public MPSCachedGraph
-  {
+  struct CachedGraph : public MPSCachedGraph {
     CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
     MPSGraphTensor* inputTensor_ = nil;
     MPSGraphTensor* gridTensor_ = nil;
@@ -72,16 +81,30 @@ void grid_sampler_2d_mps_impl(Tensor &output, const Tensor& input, const Tensor&
           MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, input);
           MPSGraphTensor* gridTensor = mpsGraphRankedPlaceHolder(mpsGraph, grid);
 
-          MPSGraphTensor* outputTensor = [mpsGraph sampleGridWithSourceTensor: inputTensor
-                                                             coordinateTensor: gridTensor
-                                                                       layout: inputTensorLayout
-                                                         normalizeCoordinates: TRUE
-                                                          relativeCoordinates: FALSE
-                                                                 alignCorners: align_corners
-                                                                  paddingMode: paddingMode
-                                                                 samplingMode: samplingMode
-                                                                constantValue: 0.0f
-                                                                         name: nil];
+          MPSGraphTensor* outputTensor = nil;
+          if (static_cast<GridSamplerInterpolation>(interpolation_mode) == GridSamplerInterpolation::Nearest) {
+            outputTensor = [mpsGraph sampleGridWithSourceTensor: inputTensor
+                                               coordinateTensor: gridTensor
+                                                         layout: inputTensorLayout
+                                           normalizeCoordinates: TRUE
+                                            relativeCoordinates: FALSE
+                                                   alignCorners: align_corners
+                                                    paddingMode: paddingMode
+                                            nearestRoundingMode: MPSGraphResizeNearestRoundingModeRoundToEven
+                                                  constantValue: 0.0f
+                                                           name: nil];
+          } else {
+            outputTensor = [mpsGraph sampleGridWithSourceTensor: inputTensor
+                                               coordinateTensor: gridTensor
+                                                         layout: inputTensorLayout
+                                           normalizeCoordinates: TRUE
+                                            relativeCoordinates: FALSE
+                                                   alignCorners: align_corners
+                                                    paddingMode: paddingMode
+                                                   samplingMode: samplingMode
+                                                  constantValue: 0.0f
+                                                           name: nil];
+          }
 
           newCachedGraph->inputTensor_ = inputTensor;
           newCachedGraph->gridTensor_ = gridTensor;
