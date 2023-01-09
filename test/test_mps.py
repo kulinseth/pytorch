@@ -8890,13 +8890,13 @@ class TestConsistency(TestCase):
         'put': ['torch.bool', 'torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
         'stft': ['torch.float32'],
         'nn.functional.conv_transpose3d': [torch.int64, torch.float32],
-	    'nn.functional.grid_sample': ['f32'],
 
         # failure due to issue: atan2() may generate NAN in output with
         'atan2': ['torch.bool', 'torch.int16', 'torch.int32', 'torch.uint8'],
 
         # Unsupported Border padding mode
         'grid_sampler_2d': ['f16', 'f32', 'i16'],
+        'nn.functional.grid_sample': ['f32'],
 
         # failures due to issue #103039644: Wrong results from avgPooling2DWithSourceTensor()
         # when both ceilMode and includeZeroPadToAverage are True
