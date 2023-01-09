@@ -9390,7 +9390,7 @@
   dispatch:
     CPU: topk_out_cpu
     CUDA: topk_out_cuda
-    MPS: topk_out_mps
+    #MPS: topk_out_mps
 
 - func: topk(Tensor self, int k, int dim=-1, bool largest=True, bool sorted=True) -> (Tensor values, Tensor indices)
   variants: method, function
@@ -10540,7 +10540,7 @@
   dispatch:
     CPU: nll_loss_forward_out_cpu
     CUDA: nll_loss_forward_out_cuda
-    MPS: nll_loss_forward_out_mps
+    #MPS: nll_loss_forward_out_mps
 
 - func: nll_loss_forward(Tensor self, Tensor target, Tensor? weight, int reduction, SymInt ignore_index) -> (Tensor output, Tensor total_weight)
   python_module: nn
@@ -10552,7 +10552,7 @@
   dispatch:
     CPU: nll_loss_backward_out_cpu
     CUDA: nll_loss_backward_out_cuda
-    MPS: nll_loss_backward_out_mps
+    #MPS: nll_loss_backward_out_mps
 
 - func: nll_loss_backward(Tensor grad_output, Tensor self, Tensor target, Tensor? weight, int reduction, SymInt ignore_index, Tensor total_weight) -> Tensor
   python_module: nn
@@ -10571,28 +10571,28 @@
   dispatch:
     CPU: nll_loss2d_forward_out_cpu
     CUDA: nll_loss2d_forward_out_cuda
-    MPS: nll_loss2d_forward_out_mps
+    #MPS: nll_loss2d_forward_out_mps
 
 - func: nll_loss2d_forward(Tensor self, Tensor target, Tensor? weight, int reduction, SymInt ignore_index) -> (Tensor output, Tensor total_weight)
   python_module: nn
   dispatch:
     CPU: nll_loss2d_forward_cpu
     CUDA: nll_loss2d_forward_cuda
-    MPS: nll_loss2d_forward_mps
+    #MPS: nll_loss2d_forward_mps
 
 - func: nll_loss2d_backward.grad_input(Tensor grad_output, Tensor self, Tensor target, Tensor? weight, int reduction, SymInt ignore_index, Tensor total_weight, *, Tensor(a!) grad_input) -> Tensor(a!)
   python_module: nn
   dispatch:
     CPU: nll_loss2d_backward_out_cpu
     CUDA: nll_loss2d_backward_out_cuda
-    MPS: nll_loss2d_backward_out_mps
+    #MPS: nll_loss2d_backward_out_mps
 
 - func: nll_loss2d_backward(Tensor grad_output, Tensor self, Tensor target, Tensor? weight, int reduction, SymInt ignore_index, Tensor total_weight) -> Tensor
   python_module: nn
   dispatch:
     CPU: nll_loss2d_backward_cpu
     CUDA: nll_loss2d_backward_cuda
-    MPS: nll_loss2d_backward_mps
+    #MPS: nll_loss2d_backward_mps
 
 - func: smooth_l1_loss.out(Tensor self, Tensor target, int reduction=Mean, float beta=1.0, *, Tensor(a!) out) -> Tensor(a!)
   device_check: NoCheck   # TensorIterator

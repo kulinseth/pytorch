@@ -62,6 +62,13 @@ TORCH_LIBRARY_IMPL(aten, MPS, m) {
   m.impl("linalg_vector_norm", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
   m.impl("_slow_conv2d_forward", slow_conv2d_forward_mps);
   m.impl("upsample_nearest3d.vec", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("topk.values", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("nll_loss_forward.output", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("nll_loss_backward.grad_input", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("nll_loss2d_forward.output", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("nll_loss2d_forward", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("nll_loss2d_backward.grad_input", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
+  m.impl("nll_loss2d_backward", torch::CppFunction::makeFromBoxedFunction<&mps_fallback>());
 }
 
 } // namespace at
