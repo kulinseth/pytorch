@@ -664,7 +664,7 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
                                                                                           dataType:getMPSDataType(B_.scalar_type())];
       for (const auto i: c10::irange(batchSize)) {
         MPSMatrix* sourceMatrix = [[[MPSMatrix alloc] initWithBuffer:aBuffer
-                                                              offset:i * aRows * aCols * A_.element_size()
+                                                              offset:i * aRows * aCols * aElemSize
                                                           descriptor:sourceMatrixDesc] autorelease];
         MPSMatrix* rightHandSideMatrix = [[[MPSMatrix alloc] initWithBuffer:bBuffer
                                                                     offset:i * bRows * bCols * bElemSize
