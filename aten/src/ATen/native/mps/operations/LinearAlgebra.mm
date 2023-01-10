@@ -634,14 +634,14 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
   dispatch_sync(mpsStream->queue(), ^(){
     @autoreleasepool {
       id<MTLCommandBuffer> commandBuffer = mpsStream->commandBuffer();
-      MPSMatrixSolveTriangular *filter = [[MPSMatrixSolveTriangular alloc] initWithDevice:device
+      MPSMatrixSolveTriangular *filter = [[[MPSMatrixSolveTriangular alloc] initWithDevice:device
                                                                                     right:!left
                                                                                     upper:upper
                                                                                 transpose:transpose
                                                                                      unit:unitriangular
                                                                                     order:left ? B_.size(-2) : B_.size(-1)
                                                                    numberOfRightHandSides:left ? B_.size(-1) : B_.size(-2)
-                                                                                    alpha:1.0f];
+                                                                                    alpha:1.0f] autorelease];
       uint64_t batchSize = A_.sizes().size() > 2 ? A_.size(0) : 1;
       uint64_t aRows = A_.size(-2);
       uint64_t bRows = B_.size(-2);
@@ -666,12 +666,12 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
         MPSMatrix* sourceMatrix = [[[MPSMatrix alloc] initWithBuffer:aBuffer
                                                               offset:i * aRows * aCols * A_.element_size()
                                                           descriptor:sourceMatrixDesc] autorelease];
-        MPSMatrix* rightHandSideMatrix = [[MPSMatrix alloc] initWithBuffer:bBuffer
+        MPSMatrix* rightHandSideMatrix = [[[MPSMatrix alloc] initWithBuffer:bBuffer
                                                                     offset:i * bRows * bCols * bElemSize
-                                                                descriptor:rightHandSideMatrixDesc];
-        MPSMatrix *solutionMatrix = [[MPSMatrix alloc] initWithBuffer:outBuffer
+                                                                descriptor:rightHandSideMatrixDesc] autorelease];
+        MPSMatrix *solutionMatrix = [[[MPSMatrix alloc] initWithBuffer:outBuffer
                                                                offset:i * bRows * bCols * bElemSize
-                                                           descriptor:rightHandSideMatrixDesc];
+                                                           descriptor:rightHandSideMatrixDesc] autorelease];
 
         [filter encodeToCommandBuffer:commandBuffer
                          sourceMatrix:sourceMatrix
