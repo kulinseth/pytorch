@@ -13,7 +13,7 @@ class IMPSAllocator : public c10::Allocator {
 public:
   // see the comments in MPSAllocator.h for the description of these methods.
   virtual void emptyCache() const = 0;
-  virtual ssize_t getRequestedBufferSize(void* ptr) const = 0;
+  virtual ssize_t getUnalignedBufferSize(void* ptr) const = 0;
   virtual IntArrayRef getBufferShape(void* ptr) const = 0;
   virtual void setBufferShape(void* ptr, const IntArrayRef& shape) = 0;
   virtual bool isSharedBuffer(void* ptr) const = 0;

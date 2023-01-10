@@ -478,7 +478,7 @@ id<MTLBuffer> MPSHeapAllocatorImpl::allocScalarBufferWithValue(void* value, size
   return buffer_block->buffer;
 }
 
-ssize_t MPSHeapAllocatorImpl::getRequestedBufferSize(void* ptr)
+ssize_t MPSHeapAllocatorImpl::getUnalignedBufferSize(void* ptr)
 {
   std::lock_guard<std::mutex> lock(m_mutex);
 
@@ -601,7 +601,7 @@ public:
   bool isSharedBuffer(void* ptr) const override { return _getAllocImpl().isSharedBuffer(ptr); }
   bool isSharedStorageSupported() const override { return m_has_unified_memory; }
   void emptyCache() const override { _getAllocImpl().emptyCache(); }
-  ssize_t getRequestedBufferSize(void* ptr) const override { return _getAllocImpl().getRequestedBufferSize(ptr); }
+  ssize_t getUnalignedBufferSize(void* ptr) const override { return _getAllocImpl().getUnalignedBufferSize(ptr); }
   IntArrayRef getBufferShape(void* ptr) const override { return _getAllocImpl().getBufferShape(ptr); }
   void setBufferShape(void* ptr, const IntArrayRef& shape) override { _getAllocImpl().setBufferShape(ptr, shape); }
   size_t getTotalAllocatedMemory() const override { return _getAllocImpl().getTotalAllocatedMemory(); }

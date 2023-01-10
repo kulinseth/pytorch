@@ -253,8 +253,8 @@ public:
   void emptyCache();
   // returns true if buffer was allocated from the shared pool
   bool isSharedBuffer(void* ptr);
-  // get the requested non-aligned size of an MTL buffer
-  ssize_t getRequestedBufferSize(void* ptr);
+  // get the requested unaligned size of an MTLBuffer
+  ssize_t getUnalignedBufferSize(void* ptr);
   // set the shape of a base tensor from a view tensor
   void setBufferShape(void* ptr, const IntArrayRef& shape);
   // retrieve the shape of a base tensor from a view tensor
