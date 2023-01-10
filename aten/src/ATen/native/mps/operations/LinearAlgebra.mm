@@ -697,7 +697,7 @@ Tensor linalg_solve_triangular_mps(const Tensor& A, const Tensor& B, bool upper,
 TORCH_IMPL_FUNC(triangular_solve_mps_out)(const Tensor& self, const Tensor& A, bool upper, bool transpose, bool unitriangular, const Tensor& result, const Tensor& clone_A) {
   clone_A.copy_(A);
   Tensor out = at::empty({0}, A.options());
-  linalg_solve_triangular_mps_impl(transpose ? A.t() : A, self, upper, transpose, /*left=*/true, unitriangular, out);
+  linalg_solve_triangular_mps_impl(A, self, upper, transpose, /*left=*/true, unitriangular, out);
   result.resize_(out.sizes());
   result.copy_(out);
 }
