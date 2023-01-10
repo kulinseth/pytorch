@@ -678,12 +678,9 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
                   rightHandSideMatrix:rightHandSideMatrix
                        solutionMatrix:solutionMatrix];
       }
-
-      // [commandBuffer commit];
       mpsStream->commit(true);
     }
   });
-
   return out;
 }
 
