@@ -9,16 +9,6 @@ void grid_sampler_2d_mps_impl(Tensor &output, const Tensor& input, const Tensor&
                               int64_t interpolation_mode, int64_t padding_mode,
                               bool align_corners) {
   using namespace mps;
-
-  if (!is_macos_13_or_newer()) {
-    TORCH_WARN_ONCE("MPS: grid_sampler_2d op is supported natively starting from macOS 13.0. ",
-                    "Falling back on CPU. This may have performance implications.");
-
-    output = at::grid_sampler_2d(
-      input.cpu(), grid.cpu(), interpolation_mode, padding_mode, align_corners).clone().to("mps");
-    return;
-  }
-
   check_grid_sampler_common(input, grid);
   check_grid_sampler_2d(input, grid);
 
@@ -136,7 +126,7 @@ Tensor grid_sampler_2d_mps(const Tensor& input, const Tensor& grid,
                            int64_t interpolation_mode, int64_t padding_mode,
                            bool align_corners) {
   if (!is_macos_13_or_newer()) {
-    TORCH_WARN_ONCE("MPS: grid_sampler_2d op is supported natively starting from macOS 13.0. ",
+    TORCH_WARN_ONCE("MPS: grid_sampler_2d op is supported natively starting from macOS 13.1. ",
                     "Falling back on CPU. This may have performance implications.");
 
     return at::grid_sampler_2d(
