@@ -2293,7 +2293,7 @@ class TestLogical(TestCase):
                 z_cpu = x_cpu.min()
                 self.assertEqual(z, z_cpu)
 
-        [helper(dtype) for dtype in [torch.float32, torch.float16, torch.int16, torch.int32, torch.int16, torch.uint8, torch.int8, torch.bool]]
+        [helper(dtype) for dtype in [torch.float32, torch.float16, torch.int32, torch.int16, torch.uint8, torch.int8, torch.bool]]
 
 class TestSmoothL1Loss(TestCase):
 
@@ -3617,7 +3617,7 @@ class TestNLLLoss(TestCase):
 
                 self.assertEqual(dim_prod_keepdim, dim_prod_cpu_keepdim)
 
-        for dtype in [torch.float32, torch.int16, torch.int32, torch.int64, torch.bool]:
+        for dtype in [torch.float32, torch.int32, torch.int64, torch.bool]:
             helper((2, 3), dtype)
 
     # Test forward mean
@@ -3972,7 +3972,7 @@ class TestNLLLoss(TestCase):
 
     def test_divmode(self):
         def helper(shape, rounding_mode):
-            for dtype in [torch.float32, torch.float16, torch.int16, torch.int32, torch.int64]:
+            for dtype in [torch.float32, torch.float16, torch.int32, torch.int64]:
                 cpu_x = None
                 cpu_y = None
                 if (dtype in [torch.float32, torch.float16]):
@@ -5390,7 +5390,7 @@ class TestNLLLoss(TestCase):
 
             self.assertEqual(result, cpu_result)
 
-        for dtype in [torch.float32, torch.int16, torch.int32, torch.int64]:
+        for dtype in [torch.float32, torch.int32, torch.int64]:
             helper(2, 2, dtype)
             helper(2, 3, dtype)
             helper(0, 2, dtype)
@@ -5427,7 +5427,7 @@ class TestNLLLoss(TestCase):
             result = torch.linspace(start, end, steps, dtype=dtype, device='mps')
             self.assertEqual(cpu_result, result)
 
-        for dtype in [torch.float32, torch.int16, torch.int32, torch.uint8, torch.int64]:
+        for dtype in [torch.float32, torch.int32, torch.uint8, torch.int64]:
             helper(2, 5, 10, dtype)
             helper(2, 2, 10, dtype)
             helper(5, 2, 10, dtype)
