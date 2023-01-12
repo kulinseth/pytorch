@@ -9647,7 +9647,7 @@ class TestConsistency(TestCase):
 
     FAST_MATH_PRECISION_ISSUES = {
         # failures due to precision issues
-        'tan_cpu': [torch.float32],
+        'tan': [torch.float32],
         'pow_': [torch.float32],
         'masked_softmin': [torch.float32],
         'masked_softmax': [torch.float32],
