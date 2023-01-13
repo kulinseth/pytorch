@@ -65,8 +65,6 @@ class TORCH_API MPSDevice {
  private:
   static MPSDevice* _device;
   MTLDevice_t _mtl_device;
-  bool _macos13plus;
-  bool _macos_13_1_plus;
   MTLLibrary_t _mtl_indexing_library;
   MPSDevice();
 };

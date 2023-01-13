@@ -66,9 +66,6 @@ MPSDevice::MPSDevice(): _mtl_device(nil), _mtl_indexing_library(nil)  {
   // Create the MPSGraph and check method introduced in 12.3+
   // which is used by MPS backend.
   id mpsCD = NSClassFromString(@"MPSGraph");
-  _macos13plus = [mpsCD instancesRespondToSelector:@selector(cumulativeSumWithTensor:axis:name:)] == YES;
-  _macos_13_1_plus = [mpsCD instancesRespondToSelector:@selector(
-    sampleGridWithSourceTensor:coordinateTensor:layout:normalizeCoordinates:relativeCoordinates:alignCorners:paddingMode:samplingMode:constantValue:name:)] == YES;
 
   if ([mpsCD instancesRespondToSelector:@selector(LSTMWithSourceTensor:
                                                        recurrentWeight:
@@ -94,15 +91,16 @@ MPSDevice::MPSDevice(): _mtl_device(nil), _mtl_indexing_library(nil)  {
 }
 
 bool MPSDevice::isMacOS13Plus(int32_t subVersion) const {
+  id mpsCD = NSClassFromString(@"MPSGraph");
+  static bool _macos_13_0_plus = [mpsCD instancesRespondToSelector:@selector(cumulativeSumWithTensor:axis:name:)] == YES;
+  static bool _macos_13_1_plus = [mpsCD instancesRespondToSelector:@selector(
+    sampleGridWithSourceTensor:coordinateTensor:layout:normalizeCoordinates:relativeCoordinates:alignCorners:paddingMode:samplingMode:constantValue:name:)] == YES;
+
   switch (subVersion) {
-    case 0:
-      return _macos13plus;
-    case 1:
-      return _macos_13_1_plus;
-    default:
-      return false;
+    case 0:  return _macos_13_0_plus;
+    case 1:  return _macos_13_1_plus;
+    default: return false;
   }
-  return false;
 }
 
 at::Allocator* getMPSSharedAllocator();
