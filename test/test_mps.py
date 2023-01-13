@@ -9292,7 +9292,6 @@ class TestConsistency(TestCase):
         '_native_batch_norm_legit': [torch.float32],
         'addr': [torch.float16],
         'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'uniform': [torch.float16, torch.float32],
         'trace': [torch.int64],
         'tan': [torch.float32],
         'normalnumber_mean': [torch.float16, torch.float32],
@@ -9626,6 +9625,7 @@ class TestConsistency(TestCase):
     UNDEFINED_BEHAVIOUR = {
         # failures due to random output that they generate using
         # Philox engine causing mismatch with CPU results
+        'uniform': [torch.float16, torch.float32],
         'rand_like': [torch.float16, torch.float32],
         'randint_like': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'randn_like': [torch.float16, torch.float32],
