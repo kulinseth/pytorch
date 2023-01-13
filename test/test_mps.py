@@ -9281,8 +9281,6 @@ class TestConsistency(TestCase):
         'square': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8],
 
         # Functions with correctness issues
-        'nn.functional.avg_pool1d': [torch.float32, torch.int64],
-        'nn.functional.avg_pool2d': [torch.float32, torch.int64],
         'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'divfloor_rounding': [torch.int16, torch.int32, torch.int64],
         'divtrunc_rounding': [torch.float16],
@@ -9292,18 +9290,13 @@ class TestConsistency(TestCase):
         '_native_batch_norm_legit': [torch.float32],
         'addr': [torch.float16],
         'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'uniform': [torch.float16, torch.float32],
         'trace': [torch.int64],
-        'tan': [torch.float32],
         'normalnumber_mean': [torch.float16, torch.float32],
         'nn.functional.gelu': [torch.float32],
         'nn.functional.conv_transpose2d': [torch.float32, torch.int64],
         'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'native_batch_norm': [torch.float32],
         'multinomial': [torch.float32],
-        'masked.softmin': [torch.float32],
-        'masked.softmax': [torch.float32],
-        'masked.log_softmax': [torch.float32],
         'floor_divide': [torch.int16, torch.int32, torch.int64],
         'dist': [torch.float16],
 
@@ -9624,8 +9617,9 @@ class TestConsistency(TestCase):
     }
 
     UNDEFINED_BEHAVIOUR = {
-        # failures due to random output that they generate using
+        # Failures due to random output that they generate using
         # Philox engine causing mismatch with CPU results
+        'uniform': [torch.float16, torch.float32],
         'rand_like': [torch.float16, torch.float32],
         'randint_like': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'randn_like': [torch.float16, torch.float32],
@@ -9646,12 +9640,12 @@ class TestConsistency(TestCase):
     }
 
     FAST_MATH_PRECISION_ISSUES = {
-        # failures due to precision issues
+        # Failures due to precision issues
         'tan': [torch.float32],
-        'pow_': [torch.float32],
-        'masked_softmin': [torch.float32],
-        'masked_softmax': [torch.float32],
-        'masked_log_softmax': [torch.float32],
+        'pow': [torch.float32],
+        'masked.softmin': [torch.float32],
+        'masked.softmax': [torch.float32],
+        'masked.log_softmax': [torch.float32],
         'cdist': [torch.float32],
         '__rpow__': [torch.float32]
     }
