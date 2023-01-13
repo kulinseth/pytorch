@@ -56,7 +56,7 @@ class TORCH_API MPSDevice {
   /**
    * Returns whether running on Ventura or newer
    */
-  bool isMacOS13Plus() const;
+  bool isMacOS13Plus(int32_t subVersion) const;
 
   MTLFunction_t metalIndexingFunction(const std::string &kernel, MTLFunctionConstantValues_t constantValues);
 
@@ -66,12 +66,13 @@ class TORCH_API MPSDevice {
   static MPSDevice* _device;
   MTLDevice_t _mtl_device;
   bool _macos13plus;
+  bool _macos_13_1_plus;
   MTLLibrary_t _mtl_indexing_library;
   MPSDevice();
 };
 
 TORCH_API bool is_available();
-TORCH_API bool is_macos_13_or_newer();
+TORCH_API bool is_macos_13_or_newer(int32_t subVersion = 0);
 
 TORCH_API at::Allocator* GetMPSAllocator(bool useSharedAllocator = false);
 
