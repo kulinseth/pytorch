@@ -9034,7 +9034,7 @@ class TestConsistency(TestCase):
                              'i64',
                              'u8'],
         'sqrt': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'square': ['f16', 'f32'],
+        'square': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'squeeze': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'stack': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'std': ['f16', 'f32'],
@@ -9280,7 +9280,6 @@ class TestConsistency(TestCase):
         'nn.functional.interpolatearea': [torch.float32],
         'resize_as_': [torch.float16, torch.float32],
         'topk': [torch.int16, torch.int32, torch.int64, torch.uint8],
-        'square': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8],
 
         # Functions with correctness issues
         'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
