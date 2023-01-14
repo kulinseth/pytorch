@@ -400,18 +400,29 @@ bool is2D)
                     }
 
                     float onValue = -1.0f;
-                    auto target_axis = target.defined() ? target.dim() : 1;
 
                     MPSGraphTensor *oneHotTensor = [mpsGraph oneHotWithIndicesTensor:udpatedTargetTensor
                                                                depth:numClasses
-                                                                axis:target_axis
+                                                                axis:1
                                                             dataType:inputTensor.dataType
                                                              onValue:onValue
                                                             offValue:0.0f
                                                                 name:nil];
 
-                    if(isWeightsArrayValid)
-                    {
+                    if(isWeightsArrayValid) {
+                        int64_t nDim = input.sizes().size();
+                        IntArrayRef sizes = input.sizes();
+                        std::vector<NSNumber*> numbers(nDim);
+                        for (const auto i: c10::irange(nDim)) {
+                            NSInteger sz_i = (i == 1) ? sizes[i] : 1;
+                            NSNumber* number = [NSNumber numberWithInteger:sz_i];
+                            numbers[i] = number;
+                        }
+
+                        MPSGraphTensor *weightTensorReshaped = [mpsGraph reshapeTensor:weightTensor
+                                                                             withShape:[NSArray arrayWithObjects:numbers.data() count:numbers.size()]
+                                                                                  name:nil];
+                                                                                  
                         oneHotTensor = [mpsGraph multiplicationWithPrimaryTensor:oneHotTensor
                                                                  secondaryTensor:weightTensor
                                                                             name:@"scaleByWeightTensor"];
