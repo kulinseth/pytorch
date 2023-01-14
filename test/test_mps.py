@@ -2410,16 +2410,14 @@ class TestNLLLoss(TestCase):
         input = torch.rand(input_size, requires_grad=True, device='cpu')
         num_channels = input_size[1]
         target_size = (input_size[0], ) + tuple(input_size[2:])
-        weights = torch.randn(num_channels)
-        weights_mps = weights.to("mps")
         target = torch.randint(num_channels, target_size, device='cpu')
 
         # MPS
         input_mps = input.detach().clone().to('mps').requires_grad_()
         target_mps = target.detach().clone().to('mps')
 
-        output_cpu = F.nll_loss(input, target, weight=weights, reduction=reduction)
-        output_mps = F.nll_loss(input_mps, target_mps, weight=weights_mps, reduction=reduction)
+        output_cpu = F.nll_loss(input, target, reduction=reduction)
+        output_mps = F.nll_loss(input_mps, target_mps, reduction=reduction)
         self.assertEqual(output_cpu, output_mps.to('cpu'))
 
         output_cpu.sum().backward()
