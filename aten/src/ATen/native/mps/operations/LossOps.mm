@@ -422,9 +422,9 @@ bool is2D)
                         MPSGraphTensor *weightTensorReshaped = [mpsGraph reshapeTensor:weightTensor
                                                                              withShape:[NSArray arrayWithObjects:numbers.data() count:numbers.size()]
                                                                                   name:nil];
-                                                                                  
+
                         oneHotTensor = [mpsGraph multiplicationWithPrimaryTensor:oneHotTensor
-                                                                 secondaryTensor:weightTensor
+                                                                 secondaryTensor:weightTensorReshaped
                                                                             name:@"scaleByWeightTensor"];
                     }
 
