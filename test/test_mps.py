@@ -9087,7 +9087,8 @@ class TestConsistency(TestCase):
         'xlogy': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'zero_': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'zeros': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'zeros_like': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8']
+        'zeros_like': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'index_add': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
     }
 
     ALLOWLIST_OP_GRAD = {
@@ -9267,7 +9268,6 @@ class TestConsistency(TestCase):
     # All the entries in this list should be removed
     BLOCKLIST = {
         # Functions that hard crash
-        'index_add': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'nn.functional.softplus': [torch.float32],
         'nonzero': [torch.bool, torch.uint8, torch.float16],
         'median': [torch.float32, torch.int16, torch.int32, torch.uint8, torch.int16],
@@ -9315,6 +9315,9 @@ class TestConsistency(TestCase):
         'nn.functional.avg_pool2d': [torch.float32, torch.int64],
         'nn.functional.adaptive_avg_pool1d': [torch.float32],
         'nn.functional.adaptive_avg_pool2d': [torch.float32],
+
+        #failure due to issue #104289647: Wrong results from scatterWithDataTensor
+        'index_add': [torch.bool, torch.float16, torch.int16, torch.int64, torch.uint8],
     }
 
     UNIMPLEMENTED_OPS = {
