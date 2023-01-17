@@ -104,6 +104,8 @@ bool MPSDevice::isMacOS13Plus(int32_t subVersion) const {
     case 2:  return _macos_13_2_plus;
     default: return false;
   }
+}
+
 at::Allocator* GetMPSAllocator(bool useSharedAllocator) {
   return getIMPSAllocator(useSharedAllocator);
 }
