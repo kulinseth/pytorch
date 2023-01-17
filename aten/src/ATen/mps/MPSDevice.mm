@@ -3,6 +3,7 @@
 #include <c10/util/CallOnce.h>
 
 #include <ATen/mps/MPSDevice.h>
+#include <ATen/mps/MPSAllocatorInterface.h>
 #include <ATen/mps/IndexKernels.h>
 
 namespace at {
@@ -103,10 +104,8 @@ bool MPSDevice::isMacOS13Plus(int32_t subVersion) const {
   }
 }
 
-at::Allocator* getMPSSharedAllocator();
-at::Allocator* getMPSPrivateAllocator();
 at::Allocator* GetMPSAllocator(bool useSharedAllocator) {
-  return useSharedAllocator ? getMPSSharedAllocator() : getMPSPrivateAllocator();
+  return getIMPSAllocator(useSharedAllocator);
 }
 
 bool is_available() {

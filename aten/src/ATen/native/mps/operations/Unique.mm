@@ -2,7 +2,6 @@
 
 #include <ATen/native/mps/OperationUtils.h>
 #include <ATen/native/Resize.h>
-#include <ATen/mps/MPSAllocator.h>
 #include <ATen/native/mps/MPSGraphVenturaOps.h>
 
 namespace at {
