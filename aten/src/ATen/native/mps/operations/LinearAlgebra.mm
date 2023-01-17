@@ -7,6 +7,7 @@
 #include <ATen/native/LinearAlgebraUtils.h>
 #include <ATen/native/mps/OperationUtils.h>
 #include <torch/library.h>
+#include <ATen/native/Resize.h>
 
 #ifdef __OBJC__
 #include <MetalPerformanceShaders/MetalPerformanceShaders.h>
@@ -596,4 +597,107 @@ Tensor &addbmm_mps_(Tensor& self, const Tensor& batch1, const Tensor& batch2, co
   return addbmm_out_mps(self, batch1, batch2, beta, alpha, self);
 }
 
+Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool upper, bool transpose, bool left, bool unitriangular, Tensor& out) {
+  using namespace mps;
+
+  if (!is_macos_13_or_newer()) {
+    TORCH_WARN_ONCE("MPS: linalg_solve_triangular_out op is supported natively starting from macOS 13.0. ",
+                    "Falling back on CPU. This may have performance implications.");
+
+    Tensor cpu_out = out.cpu();
+    Tensor A_cpu = A.cpu();
+    Tensor B_cpu = B.cpu();
+    at::linalg_solve_triangular_out(
+      cpu_out, A_cpu, B_cpu, upper, left, unitriangular);
+    out.resize_(cpu_out.sizes(), cpu_out.suggest_memory_format());
+    out.copy_(cpu_out);
+
+    return out;
+  }
+
+  checkInputsSolver(A, B, left, "linalg.solve_triangular");
+  Tensor A_, B_;
+  std::tie(B_, A_) = _linalg_broadcast_batch_dims(B, A, /*don't check errors*/nullptr);
+  at::native::resize_output(out, B_.sizes());
+
+  if (A.numel() == 0 || B.numel() == 0 || out.numel() == 0) {
+    return out;
+  }
+
+  id<MTLBuffer> aBuffer = getMTLBufferStorage(A_);
+  id<MTLBuffer> bBuffer = getMTLBufferStorage(B_);
+  id<MTLBuffer> outBuffer = getMTLBufferStorage(out);
+  MPSStream* mpsStream = getCurrentMPSStream();
+  id<MTLDevice> device = MPSDevice::getInstance()->device();
+
+  dispatch_sync(mpsStream->queue(), ^(){
+    @autoreleasepool {
+      id<MTLCommandBuffer> commandBuffer = mpsStream->commandBuffer();
+      MPSMatrixSolveTriangular *filter = [[[MPSMatrixSolveTriangular alloc] initWithDevice:device
+                                                                                    right:!left
+                                                                                    upper:upper
+                                                                                transpose:transpose
+                                                                                     unit:unitriangular
+                                                                                    order:left ? B_.size(-2) : B_.size(-1)
+                                                                   numberOfRightHandSides:left ? B_.size(-1) : B_.size(-2)
+                                                                                    alpha:1.0f] autorelease];
+      uint64_t batchSize = A_.sizes().size() > 2 ? A_.size(0) : 1;
+      uint64_t aRows = A_.size(-2);
+      uint64_t bRows = B_.size(-2);
+      uint64_t aCols = A_.size(-1);
+      uint64_t bCols = B_.size(-1);
+      uint64_t aElemSize = A_.element_size();
+      uint64_t bElemSize = B_.element_size();
+
+      MPSMatrixDescriptor* sourceMatrixDesc = [MPSMatrixDescriptor matrixDescriptorWithRows:aRows
+                                                                                    columns:aCols
+                                                                                   matrices:batchSize
+                                                                                   rowBytes:aCols * aElemSize
+                                                                                matrixBytes:aRows * aCols * aElemSize
+                                                                                   dataType:getMPSDataType(A_.scalar_type())];
+      MPSMatrixDescriptor* rightHandSideMatrixDesc = [MPSMatrixDescriptor matrixDescriptorWithRows:bRows
+                                                                                           columns:bCols
+                                                                                          matrices:batchSize
+                                                                                          rowBytes:bCols * bElemSize
+                                                                                       matrixBytes:bRows * bCols * bElemSize
+                                                                                          dataType:getMPSDataType(B_.scalar_type())];
+      for (const auto i: c10::irange(batchSize)) {
+        MPSMatrix* sourceMatrix = [[[MPSMatrix alloc] initWithBuffer:aBuffer
+                                                              offset:i * aRows * aCols * aElemSize
+                                                          descriptor:sourceMatrixDesc] autorelease];
+        MPSMatrix* rightHandSideMatrix = [[[MPSMatrix alloc] initWithBuffer:bBuffer
+                                                                    offset:i * bRows * bCols * bElemSize
+                                                                descriptor:rightHandSideMatrixDesc] autorelease];
+        MPSMatrix *solutionMatrix = [[[MPSMatrix alloc] initWithBuffer:outBuffer
+                                                               offset:i * bRows * bCols * bElemSize
+                                                           descriptor:rightHandSideMatrixDesc] autorelease];
+
+        [filter encodeToCommandBuffer:commandBuffer
+                         sourceMatrix:sourceMatrix
+                  rightHandSideMatrix:rightHandSideMatrix
+                       solutionMatrix:solutionMatrix];
+      }
+      mpsStream->commit(true);
+    }
+  });
+  return out;
+}
+
+Tensor& linalg_solve_triangular_mps_out( const Tensor& A, const Tensor& B, bool upper, bool left, bool unitriangular, Tensor& out) {
+  return linalg_solve_triangular_mps_impl(A, B, upper, /*transpose=*/false, left, unitriangular, out);
+}
+
+Tensor linalg_solve_triangular_mps(const Tensor& A, const Tensor& B, bool upper, bool left, bool unitriangular) {
+  Tensor out = at::empty({0}, A.options());
+  linalg_solve_triangular_mps_impl(A, B, upper, /*transpose=*/false, left, unitriangular, out);
+  return out;
+}
+
+TORCH_IMPL_FUNC(triangular_solve_mps_out)(const Tensor& self, const Tensor& A, bool upper, bool transpose, bool unitriangular, const Tensor& result, const Tensor& clone_A) {
+  clone_A.copy_(A);
+  Tensor out = at::empty({0}, A.options());
+  linalg_solve_triangular_mps_impl(A, self, upper, transpose, /*left=*/true, unitriangular, out);
+  result.resize_(out.sizes());
+  result.copy_(out);
+}
 } // namespace at::native
