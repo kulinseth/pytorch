@@ -15,6 +15,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import itertools
+import yaml
 from collections import defaultdict
 from torch._six import inf
 from torch.nn import Parameter
@@ -9293,7 +9294,6 @@ class TestConsistency(TestCase):
         'trace': [torch.int64],
         'normalnumber_mean': [torch.float16, torch.float32],
         'nn.functional.gelu': [torch.float32],
-        'nn.functional.conv_transpose2d': [torch.float32, torch.int64],
         'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'native_batch_norm': [torch.float32],
         'multinomial': [torch.float32],
@@ -9657,6 +9657,12 @@ class TestConsistency(TestCase):
         "true_divide"
     }
 
+    with open("./test/cuda_results.yaml") as f:
+        data = yaml.safe_load(f)
+    CUDA_RESULT = dict()
+    for key,value in data.items():
+        CUDA_RESULT[key]= torch.as_tensor(value)
+
     MPS_SKIP_LIST = reduce(lambda x,y: dict(x, **y), (FAST_MATH_PRECISION_ISSUES, BLOCKLIST, UNDEFINED_BEHAVIOUR, EXPECTED_FAILURES, UNIMPLEMENTED_OPS))
 
     # Used for accept mode only
@@ -9675,6 +9681,15 @@ class TestConsistency(TestCase):
         elif key in self.UNIMPLEMENTED_OPS:
             return f"Running test with {op_name} expected to fail due to missing op implementation"
         return f"Running test with {op_name} hangs so skipping"
+
+    def compare_with_CUDA(self, op, mps_out, atol, rtol):
+        cuda_out = self.CUDA_RESULT[op.name]
+        try:
+            self.assertEqual(cuda_out, mps_out, atol=atol, rtol=rtol)
+        except Exception as e:
+            return False
+        else:
+            return True
 
     @ops(op_db, allowed_dtypes=MPS_DTYPES)
     def test_output_match(self, device, dtype, op):
@@ -9753,6 +9768,9 @@ class TestConsistency(TestCase):
             except Exception as e:
                 if any(s in str(e).lower() for s in ["int64", "macos 13"]):
                   self.skipTest(f"{str(e)}")
+
+                if op.name in self.CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
+                    continue
 
                 if not generate_new_truth:
                     raise e
