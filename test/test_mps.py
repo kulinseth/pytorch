@@ -9315,9 +9315,6 @@ class TestConsistency(TestCase):
         'nn.functional.avg_pool2d': [torch.float32, torch.int64],
         'nn.functional.adaptive_avg_pool1d': [torch.float32],
         'nn.functional.adaptive_avg_pool2d': [torch.float32],
-
-        #failure due to issue #104289647: Wrong results from scatterWithDataTensor
-        'index_add': [torch.bool, torch.float16, torch.int16, torch.int64, torch.uint8],
     }
 
     UNIMPLEMENTED_OPS = {

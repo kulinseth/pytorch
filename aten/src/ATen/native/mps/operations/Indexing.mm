@@ -510,6 +510,9 @@ TORCH_IMPL_FUNC(index_add_mps_out)(
     return;
   }
 
+  TORCH_CHECK(self.scalar_type() != ScalarType::Long,
+                "MPS: does not support index_add op with int64 input");
+
   struct CachedGraph : public MPSCachedGraph
   {
     CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
@@ -539,15 +542,45 @@ TORCH_IMPL_FUNC(index_add_mps_out)(
           MPSGraphTensor* indexTensor = mpsGraphRankedPlaceHolder(mpsGraph, index);
           MPSGraphTensor* sourceTensor = mpsGraphRankedPlaceHolder(mpsGraph, source);
           MPSGraphTensor* alphaTensor = mpsGraphScalarPlaceHolder(mpsGraph, getMPSScalarType(self.scalar_type()));
-          MPSGraphTensor* alphaSourceSlice = [mpsGraph multiplicationWithPrimaryTensor:sourceTensor
-                                                                       secondaryTensor:alphaTensor
+
+          MPSGraphTensor* castInputTensor = inputTensor;
+          MPSGraphTensor* castSourceTensor = sourceTensor;
+          MPSGraphTensor* castAlphaTensor = alphaTensor;
+
+          MPSDataType dataType = [inputTensor dataType];
+
+          // failure due to issue #104289647: Wrong results from scatterWithDataTensor
+          if (dataType != MPSDataTypeInt32 &&
+            dataType != MPSDataTypeFloat32) {
+            dataType = (dataType & MPSDataTypeFloatBit) ? MPSDataTypeFloat32 : MPSDataTypeInt32;
+            castInputTensor = [mpsGraph castTensor:inputTensor
+                                            toType:dataType
+                                            name:@"castInputTensor"];
+            castSourceTensor = [mpsGraph castTensor:sourceTensor
+                                            toType:dataType
+                                            name:@"castSourceTensor"];
+            castAlphaTensor = [mpsGraph castTensor:alphaTensor
+                                            toType:dataType
+                                            name:@"castAlphaTensor"];
+          }
+
+          MPSGraphTensor* alphaSourceSlice = [mpsGraph multiplicationWithPrimaryTensor:castSourceTensor
+                                                                       secondaryTensor:castAlphaTensor
                                                                                   name:nil];
-          MPSGraphTensor* outputTensor = [mpsGraph scatterWithDataTensor:inputTensor
+          MPSGraphTensor* outputTensor = [mpsGraph scatterWithDataTensor:castInputTensor
                                                             updatesTensor:alphaSourceSlice
                                                             indicesTensor:indexTensor
                                                                      axis:dim
                                                                      mode:MPSGraphScatterModeAdd
                                                                      name:nil];
+          dataType = [inputTensor dataType];
+          if (dataType != MPSDataTypeInt32 &&
+              dataType != MPSDataTypeFloat32) {
+              outputTensor = [mpsGraph castTensor:outputTensor
+                                            toType:[inputTensor dataType]
+                                            name:@"castOutputTensor"];
+            }
+
           newCachedGraph->inputTensor_ = inputTensor;
           newCachedGraph->indexTensor_ = indexTensor;
           newCachedGraph->sourceTensor_ = sourceTensor;
