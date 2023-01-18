@@ -9272,8 +9272,6 @@ class TestConsistency(TestCase):
         'nonzero': [torch.bool, torch.uint8, torch.float16],
         'median': [torch.float32, torch.int16, torch.int32, torch.uint8, torch.int16],
         'sgn': [torch.bool],
-        'linalg.inv': [torch.float32],
-        'linalg.inv_ex': [torch.float32],
         'linalg.matrix_power': [torch.float32],
         'nn.functional.interpolate': [torch.float32],
         'resize_': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
