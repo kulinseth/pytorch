@@ -9303,7 +9303,6 @@ class TestConsistency(TestCase):
         'norm': [torch.float16],
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
         'cumulative_trapezoid': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        '_native_batch_norm_legit': [torch.float32],
         'addr': [torch.float16],
         'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'trace': [torch.int64],
