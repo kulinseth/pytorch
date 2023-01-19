@@ -9102,7 +9102,8 @@ class TestConsistency(TestCase):
         'xlogy': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'zero_': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'zeros': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'zeros_like': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8']
+        'zeros_like': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'index_add': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
     }
 
     ALLOWLIST_OP_GRAD = {
@@ -9282,7 +9283,6 @@ class TestConsistency(TestCase):
     # All the entries in this list should be removed
     BLOCKLIST = {
         # Functions that hard crash
-        'index_add': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'nn.functional.softplus': [torch.float32],
         'nonzero': [torch.bool, torch.uint8, torch.float16],
         'median': [torch.float32, torch.int16, torch.int32, torch.uint8, torch.int16],

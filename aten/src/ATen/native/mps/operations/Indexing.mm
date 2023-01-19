@@ -505,11 +505,13 @@ TORCH_IMPL_FUNC(index_add_mps_out)(
   MPSStream* stream = getCurrentMPSStream();
   dim = maybe_wrap_dim(dim, self.dim());
   auto numel = index.numel();
-  auto alpha_f = alpha.to<float>();
 
   if (numel == 0) {
     return;
   }
+
+  TORCH_CHECK(self.scalar_type() != ScalarType::Long,
+                "MPS: does not support index_add op with int64 input");
 
   struct CachedGraph : public MPSCachedGraph
   {
@@ -539,16 +541,46 @@ TORCH_IMPL_FUNC(index_add_mps_out)(
           MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, self);
           MPSGraphTensor* indexTensor = mpsGraphRankedPlaceHolder(mpsGraph, index);
           MPSGraphTensor* sourceTensor = mpsGraphRankedPlaceHolder(mpsGraph, source);
-          MPSGraphTensor* alphaTensor = mpsGraphScalarPlaceHolder(mpsGraph, alpha_f);
-          MPSGraphTensor* alphaSourceSlice = [mpsGraph multiplicationWithPrimaryTensor:sourceTensor
-                                                                       secondaryTensor:alphaTensor
+          MPSGraphTensor* alphaTensor = mpsGraphScalarPlaceHolder(mpsGraph, getMPSScalarType(self.scalar_type()));
+
+          MPSGraphTensor* castInputTensor = inputTensor;
+          MPSGraphTensor* castSourceTensor = sourceTensor;
+          MPSGraphTensor* castAlphaTensor = alphaTensor;
+
+          MPSDataType dataType = [inputTensor dataType];
+
+          // failure due to issue #104289647: Wrong results from scatterWithDataTensor
+          if (dataType != MPSDataTypeInt32 &&
+            dataType != MPSDataTypeFloat32) {
+            dataType = (dataType & MPSDataTypeFloatBit) ? MPSDataTypeFloat32 : MPSDataTypeInt32;
+            castInputTensor = [mpsGraph castTensor:inputTensor
+                                            toType:dataType
+                                            name:@"castInputTensor"];
+            castSourceTensor = [mpsGraph castTensor:sourceTensor
+                                            toType:dataType
+                                            name:@"castSourceTensor"];
+            castAlphaTensor = [mpsGraph castTensor:alphaTensor
+                                            toType:dataType
+                                            name:@"castAlphaTensor"];
+          }
+
+          MPSGraphTensor* alphaSourceSlice = [mpsGraph multiplicationWithPrimaryTensor:castSourceTensor
+                                                                       secondaryTensor:castAlphaTensor
                                                                                   name:nil];
-          MPSGraphTensor* outputTensor = [mpsGraph scatterWithDataTensor:inputTensor
+          MPSGraphTensor* outputTensor = [mpsGraph scatterWithDataTensor:castInputTensor
                                                             updatesTensor:alphaSourceSlice
                                                             indicesTensor:indexTensor
                                                                      axis:dim
                                                                      mode:MPSGraphScatterModeAdd
                                                                      name:nil];
+          dataType = [inputTensor dataType];
+          if (dataType != MPSDataTypeInt32 &&
+              dataType != MPSDataTypeFloat32) {
+              outputTensor = [mpsGraph castTensor:outputTensor
+                                            toType:[inputTensor dataType]
+                                            name:@"castOutputTensor"];
+            }
+
           newCachedGraph->inputTensor_ = inputTensor;
           newCachedGraph->indexTensor_ = indexTensor;
           newCachedGraph->sourceTensor_ = sourceTensor;
@@ -563,7 +595,7 @@ TORCH_IMPL_FUNC(index_add_mps_out)(
     Placeholder indexPlaceholder = Placeholder(cachedGraph->indexTensor_, index);
     Placeholder sourcePlaceholder = Placeholder(cachedGraph->sourceTensor_, source);
     Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result);
-    MPSScalar alpha_scalar = getMPSScalar(alpha_f, source.scalar_type());
+    MPSScalar alpha_scalar = getMPSScalar(alpha, self.scalar_type());
 
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
       selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData(),
