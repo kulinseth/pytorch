@@ -134,7 +134,9 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
                       + std::to_string(momentum) + ":" + std::to_string(train) + ":"
                       + std::to_string(has_running_mean) + ":"
                       + std::to_string(has_weight) + ":" + std::to_string(has_bias) + ":"
-                      + [ns_shape_key UTF8String] + ":" + native_mps::getMPSTypeString(self.scalar_type());
+                      + [ns_shape_key UTF8String] + ":"
+                      + native_mps::getTensorsStringKey({
+                        self, weight_opt.value_or(Tensor()), bias_opt.value_or(Tensor()), running_mean_opt.value_or(Tensor()), running_var_opt.value_or(Tensor())});
     auto input_mps_dtype = native_mps::getMPSDataType(self.scalar_type());
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
 
@@ -179,6 +181,7 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
 
             MPSGraphTensor* updatedRunningMeanTensor = nil;
             MPSGraphTensor* updatedRunningVarTensor = nil;
+            MPSGraphTensor *scaledInverseSqrtVariance = nil;
 
             /*
             If train:
@@ -194,6 +197,7 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
 
             Compute the batch norm output and stats to be saved
             */
+            MPSGraphTensor *varTensor = nil;
 
             if(train) {
               // Compute mean and variance of the current batch
@@ -203,6 +207,7 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
               MPSGraphTensor* batchVarianceTensor = [mpsGraph varianceOfTensor:inputTensor
                                                                           axes:axes
                                                                           name:nil];
+              varTensor = batchVarianceTensor;
               if(has_running_mean) {
                 // TODO: This is not the formula used in PyTorch, is this OK? Seems more robust
                 // float besselCorrectionTerm = float(N) / std::max(N - 1.0f, 1.0f);
@@ -239,14 +244,27 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
                 updatedRunningVarTensor = [mpsGraph additionWithPrimaryTensor:scaledCorrectedBatchVar
                                                               secondaryTensor:scaledRunningVar
                                                                          name:nil];
-                // Update saved mean and inverse std tensor
-                saveMeanTensor = batchMeanTensor;
-                saveVarTensor = batchVarianceTensor;
             }
-            else {
-              saveMeanTensor = batchMeanTensor;
-              saveVarTensor = batchVarianceTensor;
-            }
+            // Update saved mean and inverse std tensor
+            MPSGraphTensor *epsilonTensor = [mpsGraph constantWithScalar:(double)epsilon
+                                                                   shape:@[@1]
+                                                                dataType:MPSDataTypeFloat32];
+
+            MPSGraphTensor *varianceEps = [mpsGraph additionWithPrimaryTensor:batchVarianceTensor
+                                                              secondaryTensor:epsilonTensor
+                                                                         name:@"varianceEps"];
+
+            MPSGraphTensor *sqrtVariance = [mpsGraph squareRootWithTensor:varianceEps
+                                                                     name:@"sqrtVariance"];
+            float primary = 1.0f;
+            MPSGraphTensor *primaryTensor = [mpsGraph constantWithScalar:primary dataType:MPSDataTypeFloat32];
+
+            scaledInverseSqrtVariance = [mpsGraph divisionWithPrimaryTensor:primaryTensor
+                                                            secondaryTensor:sqrtVariance
+                                                                       name:nil];
+            // Update saved mean and inverse std tensor
+            saveMeanTensor = batchMeanTensor;
+            saveVarTensor = scaledInverseSqrtVariance;
           }
           else { // Test
             TORCH_CHECK(has_running_mean);
@@ -254,12 +272,13 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
                                                      name:nil];
             saveVarTensor = [mpsGraph identityWithTensor:runningVarTensor
                                                     name:nil];
+            varTensor = saveVarTensor;
           }
 
           // Compute output of batch norm
           MPSGraphTensor* outputTensor = [mpsGraph normalizationWithTensor:inputTensor
                                                                 meanTensor:saveMeanTensor
-                                                            varianceTensor:saveVarTensor
+                                                            varianceTensor:varTensor
                                                                gammaTensor:weightTensor
                                                                 betaTensor:biasTensor
                                                                    epsilon:(float)epsilon
@@ -351,6 +370,10 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
 
   }
 
+  if(!train) {
+    save_mean.resize_({0});
+    save_var.resize_({0});
+  }
   return std::tuple<Tensor&, Tensor&, Tensor&>(output, save_mean, save_var);
 }
 
