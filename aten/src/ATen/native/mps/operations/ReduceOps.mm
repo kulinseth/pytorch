@@ -1999,13 +1999,11 @@ void median_out_mps
                                                         start:((NSUInteger) (int)((dim_total_elements+1)/2 ) - 1)
                                                         length:1
                                                         name:nil];
-              // Cast back
+
               dataType = native_mps::getMPSDataType(input_t.scalar_type());
-              if (dataType != MPSDataTypeInt32 &&
-                  dataType != MPSDataTypeFloat32 &&
-                  dataType != MPSDataTypeFloat16) {
+              if (dataType != MPSDataTypeInt64) {
                   argreduceOutTensor = [mpsGraph castTensor:argreduceOutTensor
-                                          toType:dataType
+                                          toType:MPSDataTypeInt64
                                             name:@"castargargreduceOutTensor"];
               }
 
