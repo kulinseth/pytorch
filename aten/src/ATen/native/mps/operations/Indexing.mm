@@ -228,6 +228,12 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
       return out_;
   }
 
+  int64_t nDim = self.dim();
+  if (self.numel() == 0) {
+    at::native::resize_output(out_, {0, nDim});
+    return out_;
+  }
+
   using namespace mps;
   const uint32_t maxDimensions = 16;
 
@@ -249,7 +255,6 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
   };
 
   int64_t total_nonzero = at::count_nonzero(self).item<int64_t>();
-  int64_t nDim = self.dim();
   at::native::resize_output(out_, {total_nonzero, nDim});
   if (out_.numel() ==  0) {
     return out_;
