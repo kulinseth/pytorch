@@ -9018,7 +9018,7 @@ class TestConsistency(TestCase):
         'nn.functional.unfold': ['f16', 'f32'],
         'nn.functional.upsample_bilinear': ['f32'],
         'nn.functional.upsample_nearest': ['f32', 'u8'],
-        'nonzero': ['b8', 'f32', 'i16', 'i32', 'i64'],
+        'nonzero': ['b8', 'u8', 'f16', 'f32', 'i16', 'i32', 'i64'],
         'norm': ['f32', 'f16'],
         'normal': ['f16', 'f32'],
         'ones': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -9431,7 +9431,6 @@ class TestConsistency(TestCase):
     BLOCKLIST = {
         # Functions that hard crash
         'nn.functional.softplus': [torch.float32],
-        'nonzero': [torch.bool, torch.uint8, torch.float16],
         'median': [torch.float32, torch.int16, torch.int32, torch.uint8, torch.int16],
         'sgn': [torch.bool],
         'linalg.inv': [torch.float32],
