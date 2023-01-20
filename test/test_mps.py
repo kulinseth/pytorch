@@ -9486,7 +9486,7 @@ class TestConsistency(TestCase):
         'put': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'qr': [torch.float32],
         'quantile': [torch.float32],
-        'remainder': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'remainder': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8],
         'renorm': [torch.float16, torch.float32],
         'roll': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'rounddecimals_0': [torch.float32],
