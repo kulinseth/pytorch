@@ -2249,9 +2249,13 @@ class TestMPS(TestCase):
         helper((2, 8, 4, 5), torch.int16)
 
     def test_cumsum_minus_one_axis(self):
-        def helper():
+        def helper(dtype):
             # Test with axis -1
-            cpu_x = torch.randn(10,3, device='cpu', dtype=torch.float32)
+            cpu_x = None
+            if(dtype == torch.float32):
+                cpu_x = torch.randn(10,3, device='cpu', dtype=torch.float32)
+            else:
+                cpu_x = torch.randint(0, 20, (10,3), device='cpu', dtype=torch.float32)
             x = cpu_x.detach().clone().to('mps')
 
             cpu_y = cpu_x.cumsum(-1)
@@ -2259,7 +2263,7 @@ class TestMPS(TestCase):
 
             self.assertEqual(y, cpu_y)
 
-        helper()
+        [helper(dtype) for dtype in [torch.float32, torch.int16, torch.int32, torch.uint8]]
 
 class TestLogical(TestCase):
     def _wrap_tensor(self, x, device="cpu", dtype=None, requires_grad=False):
