@@ -744,6 +744,51 @@ MPSGraphTensor* normcdf (MPSGraph* mpsGraph, MPSGraphTensor *inputTensor) {
     return  erfTensor;
 }
 
+MPSGraphTensor* tanh (MPSGraph* mpsGraph, MPSGraphTensor *inputTensor) {
+    // 0.5 * x * (1 + text{Tanh}(sqrt(2 / pi) * (x + 0.044715 * x^3)))
+    auto dataType = [inputTensor dataType];
+    const float SQRT2_PI = 0.797884523868560791015625f;
+    const float VAL = 0.044715f;
+    MPSGraphTensor *onef = [mpsGraph constantWithScalar: 1.0f
+                                                  shape: @[@1]
+                                              dataType: dataType];
+    MPSGraphTensor *halff = [mpsGraph constantWithScalar: 0.5f
+                                                    shape: @[@1]
+                                                dataType: dataType];
+    MPSGraphTensor *sqrt2_pi = [mpsGraph constantWithScalar: SQRT2_PI
+                                                  shape: @[@1]
+                                              dataType: dataType];
+    MPSGraphTensor *valf = [mpsGraph constantWithScalar: VAL
+                                                  shape: @[@1]
+                                              dataType: dataType];
+
+    MPSGraphTensor *erfTensor = [mpsGraph multiplicationWithPrimaryTensor: inputTensor
+                                                          secondaryTensor: inputTensor
+                                                                    name : nil];
+    erfTensor = [mpsGraph multiplicationWithPrimaryTensor: erfTensor
+                                          secondaryTensor: inputTensor
+                                                    name : nil];
+    erfTensor = [mpsGraph multiplicationWithPrimaryTensor: erfTensor
+                                          secondaryTensor: valf
+                                                    name : nil];
+    erfTensor = [mpsGraph additionWithPrimaryTensor: erfTensor
+                                    secondaryTensor: inputTensor
+                                              name : nil];
+    erfTensor = [mpsGraph multiplicationWithPrimaryTensor: erfTensor
+                                          secondaryTensor: sqrt2_pi
+                                                    name : nil];
+    erfTensor = [mpsGraph tanhWithTensor: erfTensor
+                                   name : nil];
+    erfTensor = [mpsGraph additionWithPrimaryTensor: erfTensor
+                                    secondaryTensor: onef
+                                              name : nil];
+    erfTensor = [mpsGraph multiplicationWithPrimaryTensor: erfTensor
+                                          secondaryTensor: halff
+                                                    name : nil];
+
+    return  erfTensor;
+}
+
 TORCH_IMPL_FUNC(gelu_out_mps) (
     const Tensor& self, c10::string_view approximate, const Tensor& output
   ) {
@@ -767,7 +812,7 @@ TORCH_IMPL_FUNC(gelu_out_mps) (
   MPSStream* stream = getCurrentMPSStream();
 
   @autoreleasepool {
-    string key = "gelu_out_mps" + getTensorsStringKey({self});
+    string key = "gelu_out_mps" + getTensorsStringKey({self}) + ":" + c10::str(approximate);
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
     if(!cachedGraph) {
       MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
@@ -782,7 +827,12 @@ TORCH_IMPL_FUNC(gelu_out_mps) (
                                                                   getMPSDataType(self.scalar_type()),
                                                                   getMPSShape(self));
 
-          MPSGraphTensor* outputTensor = normcdf(mpsGraph, inputTensor);
+          MPSGraphTensor* outputTensor = nil;
+          if(approximate == "tanh") {
+            outputTensor = tanh(mpsGraph, inputTensor);
+          } else {
+            outputTensor = normcdf(mpsGraph, inputTensor);
+          }
           outputTensor = [mpsGraph multiplicationWithPrimaryTensor:outputTensor
                                                    secondaryTensor:inputTensor
                                                               name:nil];
