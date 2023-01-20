@@ -5458,11 +5458,8 @@ class TestNLLLoss(TestCase):
         self.assertEqual(np.arange(6.3, dtype=np.float32), torch.arange(6.3, device='mps'))
 
     def test_arange_empty(self):
-        x_mps = torch.tensor([], device="mps")
         out_mps = torch.tensor([], device="mps")
-
-        x_cpu = torch.tensor([], device="mps")
-        out_cpu = torch.tensor([], device="mps")
+        out_cpu = torch.tensor([], device="cpu")
 
         y_mps = torch.arange(0, 0, 1, out=out_mps)
         y_cpu = torch.arange(0, 0, 1, out=out_cpu)
