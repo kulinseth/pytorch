@@ -449,6 +449,11 @@ bool canSliceViewTensor(const Tensor& src, MPSShape *mpsShape) {
   size_t src_ndim_base = src_base_shape.size();
   std::vector<int64_t> src_view_shape = getViewShape(src, mpsShape);
   size_t src_ndim_view = src_view_shape.size();
+  IntArrayRef base_strides;
+  if (src.is_view()) {
+    base_strides = src._base().strides();
+  }
+
   if (src_ndim_base == src_ndim_view) {
     for (const auto i: c10::irange(src_ndim_base)) {
       if (src_view_shape[i] > src_base_shape[i]) {
@@ -457,17 +462,22 @@ bool canSliceViewTensor(const Tensor& src, MPSShape *mpsShape) {
     }
   } else {
     // Detect slice followed by reshape cases, e.g (1,4800,2) -> (1,4800)
-    bool allDimsEqual = true;
+    int64_t dimsReshaped = 0;
     auto min_ndim = std::min(src_ndim_base, src_ndim_view);
     for (const auto i: c10::irange(min_ndim)) {
       if (src_view_shape[i] > src_base_shape[i]) {
         return false;
       }
-      else if (src_view_shape[i] != src_base_shape[i]) {
-        allDimsEqual = false;
+      else if (src_view_shape[src_ndim_view - i - 1] != src_base_shape[src_ndim_base - i - 1]) {
+        dimsReshaped++;
+      }
+      if (src.is_view() &&
+          base_strides[src_ndim_base - i - 1] != src.strides()[src_ndim_view - i - 1]) {
+        return false;
       }
     }
-    if (allDimsEqual) {
+
+    if (dimsReshaped > 1) {
       return false;
     }
   }
