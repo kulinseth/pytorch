@@ -24,6 +24,10 @@ const Generator& MPSHooks::getDefaultMPSGenerator() const {
   return at::mps::detail::getDefaultMPSGenerator();
 }
 
+void MPSHooks::deviceSynchronize() const {
+  at::mps::device_synchronize();
+}
+
 using at::MPSHooksRegistry;
 using at::RegistererMPSHooksRegistry;
 

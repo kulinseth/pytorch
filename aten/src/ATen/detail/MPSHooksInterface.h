@@ -35,6 +35,10 @@ struct TORCH_API MPSHooksInterface {
   virtual Allocator* getMPSDeviceAllocator() const {
     AT_ERROR("MPSDeviceAllocator requires MPS.");
   }
+
+  virtual void deviceSynchronize() const {
+    TORCH_CHECK(false, "Cannot synchronize MPS device without MPS backend. ");
+  }
 };
 
 struct TORCH_API MPSHooksArgs {};

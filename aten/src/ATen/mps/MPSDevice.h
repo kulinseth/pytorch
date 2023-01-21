@@ -71,7 +71,7 @@ class TORCH_API MPSDevice {
 
 TORCH_API bool is_available();
 TORCH_API bool is_macos_13_or_newer(int32_t subVersion = 0);
-
+TORCH_API void device_synchronize();
 TORCH_API at::Allocator* GetMPSAllocator(bool useSharedAllocator = false);
 
 } // namespace mps
