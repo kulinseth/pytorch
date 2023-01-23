@@ -2221,6 +2221,21 @@ class TestMPS(TestCase):
 
         helper((2, 8, 4, 5))
 
+    # # Failures due to precision issues, enable after resolving from mps
+    # def test_div_floor_int(self):
+    #     def helper(shape, dtype):
+    #         cpu_x = torch.randint(-9999, -1,shape, device='cpu', dtype=dtype)
+    #         x = cpu_x.detach().clone().to('mps')
+
+    #         cpu_y = torch.randint(1, 9999, shape, device='cpu', dtype=dtype)
+    #         y = cpu_y.detach().clone().to('mps')
+
+    #         div_result = torch.div(x, y,rounding_mode='floor')
+    #         div_result_cpu = torch.div(cpu_x, cpu_y, rounding_mode='floor')
+    #         self.assertEqual(div_result, div_result_cpu)
+
+    #     helper((2, 8, 4, 5), torch.int16)
+    #     helper((2, 8, 4, 5), torch.int32)
 
 class TestLogical(TestCase):
     def _wrap_tensor(self, x, device="cpu", dtype=None, requires_grad=False):
@@ -8283,22 +8298,6 @@ class TestRNNMPS(TestCase):
         self.assertEqual(cpu_output, mps_output)
         self.assertEqual(cpu_input_grad, mps_input_grad)
         self.assertEqual(cpu_weight_grad, mps_weight_grad)
-
-    # # Failures due to precision issues, enable after resolving from mps
-    # def test_div_floor_int(self):
-    #     def helper(shape, dtype):
-    #         cpu_x = torch.randint(-9999, -1,shape, device='cpu', dtype=dtype)
-    #         x = cpu_x.detach().clone().to('mps')
-
-    #         cpu_y = torch.randint(1, 9999, shape, device='cpu', dtype=dtype)
-    #         y = cpu_y.detach().clone().to('mps')
-
-    #         div_result = torch.div(x, y,rounding_mode='floor')
-    #         div_result_cpu = torch.div(cpu_x, cpu_y, rounding_mode='floor')
-    #         self.assertEqual(div_result, div_result_cpu)
-
-    #     helper((2, 8, 4, 5), torch.int16)
-    #     helper((2, 8, 4, 5), torch.int32)
 
 class TestFallbackWarning(TestCase):
     # TODO: Remove once test_testing.py is running on MPS devices
