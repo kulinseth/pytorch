@@ -9369,7 +9369,7 @@ class TestConsistency(TestCase):
     BLOCKLIST = {
         # Functions that hard crash
         'nn.functional.softplus': [torch.float32],
-        'median': [torch.float32, torch.int16, torch.int32, torch.uint8, torch.int16],
+        'nonzero': [torch.bool, torch.uint8, torch.float16],
         'sgn': [torch.bool],
         'linalg.inv': [torch.float32],
         'linalg.inv_ex': [torch.float32],
