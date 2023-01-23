@@ -9824,7 +9824,9 @@ class TestConsistency(TestCase):
         "true_divide"
     }
 
-    with open("./test/cuda_results.yaml") as f:
+    dirname = os.path.dirname(__file__)
+    filename = os.path.join(dirname, "cuda_results.yaml")
+    with open(filename) as f:
         data = yaml.safe_load(f)
     CUDA_RESULT = dict()
     for key,value in data.items():
