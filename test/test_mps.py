@@ -2197,6 +2197,17 @@ class TestMPS(TestCase):
             e_string = str(e)
             self.assertEqual(e_string, "MPS does not support cumsum op with int64 input")
 
+    def test_gelu_tanh(self):
+        def helper(shape):
+            cpu_x = torch.randn(shape, device='cpu', dtype=torch.float)
+            x = cpu_x.detach().clone().to('mps')
+
+            gelu_tanh_result = torch.nn.functional.gelu(x, approximate='tanh')
+            gelu_tanh_result_cpu = torch.nn.functional.gelu(cpu_x, approximate='tanh')
+            self.assertEqual(gelu_tanh_result, gelu_tanh_result_cpu)
+
+        helper((2, 8, 4, 5))
+
 
 class TestLogical(TestCase):
     def _wrap_tensor(self, x, device="cpu", dtype=None, requires_grad=False):
@@ -9314,7 +9325,6 @@ class TestConsistency(TestCase):
         'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'trace': [torch.int64],
         'normalnumber_mean': [torch.float16, torch.float32],
-        'nn.functional.gelu': [torch.float32],
         'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'multinomial': [torch.float32],
         'floor_divide': [torch.int16, torch.int32, torch.int64],
