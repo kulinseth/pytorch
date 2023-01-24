@@ -6,8 +6,6 @@ on:
     branches:
       - master
       - main
-      - release/*
-      - landchecks/*
   workflow_dispatch:
 
 # The names of steps that actually test the code should be suffixed with `(nonretryable)`.
