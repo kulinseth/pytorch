@@ -34,8 +34,7 @@ jobs:
         run: |
           # shellcheck disable=SC1090
           set -ex
-          ${CONDA_RUN} python3 -m pip install -r .github/requirements-gha-cache.txt --user
-
+          ${CONDA_RUN} python3 -m pip install --force-reinstall -r .github/requirements-gha-cache.txt
       - name: Initialize lint dependencies
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
