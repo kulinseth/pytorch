@@ -23,7 +23,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.8'
-          architecture: x64
+          architecture: arm64
           check-latest: false
           cache: pip
           cache-dependency-path: |
@@ -83,7 +83,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-          architecture: x64
+          architecture: arm64
           check-latest: false
           cache: pip
           cache-dependency-path: |
