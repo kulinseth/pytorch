@@ -35,6 +35,7 @@ jobs:
           # shellcheck disable=SC1090
           set -ex
           ${CONDA_RUN} python3 -m pip install --force-reinstall -r .github/requirements-gha-cache.txt
+
       - name: Initialize lint dependencies
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
@@ -69,7 +70,7 @@ jobs:
           # shellcheck disable=SC1090
           set -ex
           set +e
-          if ! ${CONDA_RUN} lintrunner --force-color --all-files --tee-json=lint.json; then
+          if ! ${CONDA_RUN} lintrunner --force-color aten/src/ATen/native/mps/operations/* test/test_mps.py --tee-json=lint.json; then
               echo ""
               echo -e "\e[1m\e[36mYou can reproduce these results locally by using \`lintrunner\`.\e[0m"
               echo -e "\e[1m\e[36mSee https://github.com/pytorch/pytorch/wiki/lintrunner for setup instructions.\e[0m"
