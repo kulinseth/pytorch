@@ -5,16 +5,13 @@ on:
   push:
     branches:
       - master
-      - main
-      - release/*
-      - landchecks/*
   workflow_dispatch:
 
 # The names of steps that actually test the code should be suffixed with `(nonretryable)`.
 # When any other step fails, it's job will be retried once by retryBot.
 jobs:
   lintrunner:
-    runs-on: linux.20_04.16x
+    runs-on: macos-m1-12
     steps:
       - name: Checkout PyTorch
         uses: pytorch/pytorch/.github/actions/checkout-pytorch@master
@@ -22,36 +19,70 @@ jobs:
           submodules: false
           fetch-depth: 1
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: Setup miniconda
+        uses: pytorch/test-infra/.github/actions/setup-miniconda@main
         with:
-          python-version: '3.8'
-          architecture: x64
-          check-latest: false
-          cache: pip
-          cache-dependency-path: |
-            **/.github/requirements-gha-cache.txt
+          python-version: 3.9
+          environment-file: .github/requirements/conda-env-${{ runner.os }}-${{ runner.arch }}
+          # pip-requirements-file: .github/requirements/pip-requirements-${{ runner.os }}.txt
 
       - name: Install requirements
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
         run: |
-          pip install -r .github/requirements-gha-cache.txt --user
+          # shellcheck disable=SC1090
+          set -ex
+          ${CONDA_RUN} python3 -m pip install --force-reinstall -r .github/requirements-gha-cache.txt
 
       - name: Initialize lint dependencies
-        run: lintrunner init
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          ${CONDA_RUN} lintrunner init
 
       - name: Do build steps necessary for linters
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
         run: |
-          python3 -m tools.linter.clang_tidy.generate_build_files
-          python3 -m tools.generate_torch_version --is_debug=false
-          python3 -m tools.pyi.gen_pyi \
+          # shellcheck disable=SC1090
+          set -ex
+          ${CONDA_RUN} python3 -m tools.linter.clang_tidy.generate_build_files
+          ${CONDA_RUN} python3 -m tools.generate_torch_version --is_debug=false
+          ${CONDA_RUN} python3 -m tools.pyi.gen_pyi \
             --native-functions-path aten/src/ATen/native/native_functions.yaml \
             --tags-path aten/src/ATen/native/tags.yaml \
             --deprecated-functions-path "tools/autograd/deprecated.yaml"
 
       - name: Run lintrunner on all files (nonretryable)
         run: |
+          # shellcheck disable=SC1090
+          set -ex
           set +e
-          if ! lintrunner --force-color --all-files --tee-json=lint.json; then
+          if ! ${CONDA_RUN} lintrunner --force-color aten/src/ATen/native/mps/operations/* test/test_mps.py; then
+              echo ""
+              echo -e "\e[1m\e[36mYou can reproduce these results locally by using \`lintrunner\`.\e[0m"
+              echo -e "\e[1m\e[36mSee https://github.com/pytorch/pytorch/wiki/lintrunner for setup instructions.\e[0m"
+              exit 1
+          fi
+
+      - name: Run lintrunner on all MPS files (nonretryable)
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          set +e
+          if ! ${CONDA_RUN} lintrunner --force-color aten/src/ATen/native/mps/operations/* test/test_mps.py; then
               echo ""
               echo -e "\e[1m\e[36mYou can reproduce these results locally by using \`lintrunner\`.\e[0m"
               echo -e "\e[1m\e[36mSee https://github.com/pytorch/pytorch/wiki/lintrunner for setup instructions.\e[0m"
