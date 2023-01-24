@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - master
+      - main
   workflow_dispatch:
 
 # The names of steps that actually test the code should be suffixed with `(nonretryable)`.
