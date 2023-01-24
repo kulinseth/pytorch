@@ -27,13 +27,19 @@ jobs:
           pip-requirements-file: .github/requirements/pip-requirements-${{ runner.os }}.txt
 
       - name: Install requirements
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
         run: |
           ${CONDA_RUN} pip install -r .github/requirements-gha-cache.txt --user
 
       - name: Initialize lint dependencies
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
         run: ${CONDA_RUN} lintrunner init
 
       - name: Do build steps necessary for linters
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
         run: |
           ${CONDA_RUN} python3 -m tools.linter.clang_tidy.generate_build_files
           ${CONDA_RUN} python3 -m tools.generate_torch_version --is_debug=false
@@ -43,6 +49,8 @@ jobs:
             --deprecated-functions-path "tools/autograd/deprecated.yaml"
 
       - name: Run lintrunner on all files (nonretryable)
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
         run: |
           set +e
           if ! ${CONDA_RUN} lintrunner --force-color --all-files --tee-json=lint.json; then
