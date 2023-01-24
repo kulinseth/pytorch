@@ -30,17 +30,20 @@ jobs:
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
           PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
         run: |
           ${CONDA_RUN} python3 -mpip install pip install -r .github/requirements-gha-cache.txt --user
 
       - name: Initialize lint dependencies
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
+        shell: arch -arch arm64 bash {0}
         run: ${CONDA_RUN} lintrunner init
 
       - name: Do build steps necessary for linters
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
+        shell: arch -arch arm64 bash {0}
         run: |
           ${CONDA_RUN} python3 -m tools.linter.clang_tidy.generate_build_files
           ${CONDA_RUN} python3 -m tools.generate_torch_version --is_debug=false
@@ -52,6 +55,7 @@ jobs:
       - name: Run lintrunner on all files (nonretryable)
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
+        shell: arch -arch arm64 bash {0}
         run: |
           set +e
           if ! ${CONDA_RUN} lintrunner --force-color --all-files --tee-json=lint.json; then
