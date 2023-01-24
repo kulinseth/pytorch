@@ -31,7 +31,7 @@ jobs:
           ${CONDA_RUN} pip install -r .github/requirements-gha-cache.txt --user
 
       - name: Initialize lint dependencies
-        run: lintrunner init
+        run: ${CONDA_RUN} lintrunner init
 
       - name: Do build steps necessary for linters
         run: |
