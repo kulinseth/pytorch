@@ -14,7 +14,7 @@ on:
 # When any other step fails, it's job will be retried once by retryBot.
 jobs:
   lintrunner:
-    runs-on: macos-m1-13
+    runs-on: macos-m1-12
     steps:
       - name: Checkout PyTorch
         uses: pytorch/pytorch/.github/actions/checkout-pytorch@master
@@ -70,7 +70,7 @@ jobs:
 
   quick-checks:
     name: quick-checks
-    runs-on: macos-m1-13
+    runs-on: macos-m1-12
     steps:
       # [see note: pytorch repo ref]
       - name: Checkout PyTorch
@@ -121,7 +121,7 @@ jobs:
 
   pr-sanity-checks:
     name: pr-sanity-checks
-    runs-on: macos-m1-13
+    runs-on: macos-m1-12
     # Only run this on pull requests
     if: github.event_name == 'pull_request' && !contains(github.event.pull_request.labels.*.name, 'skip-pr-sanity-checks')
     steps:
@@ -139,7 +139,7 @@ jobs:
 
   workflow-checks:
     name: workflow-checks
-    runs-on: macos-m1-13
+    runs-on: macos-m1-12
     steps:
       # [see note: pytorch repo ref]
       - name: Checkout PyTorch
@@ -188,7 +188,7 @@ jobs:
 
   toc:
     name: toc
-    runs-on: macos-m1-13
+    runs-on: macos-m1-12
     # https://github.com/actions/virtual-environments/issues/599#issuecomment-602754687
     env:
       NPM_CONFIG_PREFIX: ~/.npm-global
@@ -231,7 +231,7 @@ jobs:
   test-tools:
     name: Test tools
     if: ${{ github.repository == 'pytorch/pytorch' }}
-    runs-on: macos-m1-13
+    runs-on: macos-m1-12
     steps:
       # [see note: pytorch repo ref]
       # deep clone (fetch-depth 0) required, to allow us to use git log
