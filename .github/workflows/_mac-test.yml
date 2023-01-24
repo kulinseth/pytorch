@@ -196,6 +196,12 @@ jobs:
         run: |
           cat test/**/*.log || true
 
+      - name: Print remaining test logs
+        shell: bash
+        if: always()
+        run: |
+          cat test/**/*.log || true
+
       - name: Get workflow job id
         id: get-job-id
         uses: ./.github/actions/get-workflow-job-id

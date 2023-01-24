@@ -137,6 +137,20 @@ jobs:
 
           ${CONDA_RUN} python3 test/test_modules.py -k mps --verbose
 
+      - name: Run MPS Test Modules
+        id: test_2
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+        shell: arch -arch arm64 bash {0}
+        # During bring up of test_modules don't show this as an error.
+        continue-on-error: true
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          # TODO(https://github.com/pytorch/pytorch/issues/79293)
+
+          ${CONDA_RUN} python3 test/test_modules.py -k mps --verbose
+
       - name: Print remaining test logs
         shell: bash
         if: always() && steps.test.conclusion

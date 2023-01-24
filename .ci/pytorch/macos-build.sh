@@ -40,16 +40,6 @@ cross_compile_arm64() {
   USE_DISTRIBUTED=1 CMAKE_OSX_ARCHITECTURES=arm64 MACOSX_DEPLOYMENT_TARGET=11.0 USE_OPENMP=OFF USE_MKLDNN=OFF USE_QNNPACK=OFF WERROR=1 BUILD_TEST=OFF USE_PYTORCH_METAL=1 python setup.py bdist_wheel
 }
 
-compile_arm64() {
-  # Compilation for arm64
-  # TODO: Compile with OpenMP support (but this causes CI regressions as cross-compilation were done with OpenMP disabled)
-  USE_DISTRIBUTED=0 USE_OPENMP=0 MACOSX_DEPLOYMENT_TARGET=11.0 WERROR=1 BUILD_TEST=OFF USE_PYTORCH_METAL=1 python setup.py bdist_wheel
-}
-
-compile_x86_64() {
-  USE_DISTRIBUTED=0 WERROR=1 python setup.py bdist_wheel
-}
-
 compile_x86_64() {
   USE_DISTRIBUTED=0 WERROR=1 python setup.py bdist_wheel
 }

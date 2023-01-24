@@ -56,7 +56,11 @@ class TestModule(TestCase):
 
     @modules(module_db)
     def test_forward(self, device, dtype, module_info, training):
-        msg = _get_mps_error_msg(device, dtype, module_info, [])
+        MPS_BLOCKLIST = [
+            "nn.LSTM"  # segfault
+        ]
+
+        msg = _get_mps_error_msg(device, dtype, module_info, MPS_BLOCKLIST)
         if msg is not None:
             self.skipTest(msg)
 
@@ -239,7 +243,11 @@ class TestModule(TestCase):
     def test_pickle(self, device, dtype, module_info, training):
         # Test that module can be pickled and unpickled.
 
-        msg = _get_mps_error_msg(device, dtype, module_info, [])
+        MPS_BLOCKLIST = [
+            "nn.LSTM"  # hard crash
+        ]
+
+        msg = _get_mps_error_msg(device, dtype, module_info, MPS_BLOCKLIST)
         if msg is not None:
             self.skipTest(msg)
 
@@ -279,7 +287,11 @@ class TestModule(TestCase):
         # Check if the inplace variant of the module gives the same result as the out of place
         # variant.
 
-        msg = _get_mps_error_msg(device, dtype, module_info, [])
+        MPS_BLOCKLIST = [
+            "nn.ELU"  # hard crash
+        ]
+
+        msg = _get_mps_error_msg(device, dtype, module_info, MPS_BLOCKLIST)
         if msg is not None:
             self.skipTest(msg)
 
@@ -364,7 +376,14 @@ class TestModule(TestCase):
     @skipIfTorchInductor("to be fixed")
     def test_non_contiguous_tensors(self, device, dtype, module_info, training):
         # Check modules work with non-contiguous tensors
-        msg = _get_mps_error_msg(device, dtype, module_info, [])
+        MPS_BLOCKLIST = [
+            # hard crashes
+            "nn.GRU",
+            "nn.LSTM",
+            "nn.RNN"
+        ]
+
+        msg = _get_mps_error_msg(device, dtype, module_info, MPS_BLOCKLIST)
         if msg is not None:
             self.skipTest(msg)
 
@@ -627,6 +646,7 @@ class TestModule(TestCase):
     def test_memory_format(self, device, dtype, module_info, training):
         MPS_BLOCKLIST = [
             "nn.BatchNorm3d",  # failed assert
+            "nn.LSTM",  # segfault
         ]
 
         msg = _get_mps_error_msg(device, dtype, module_info, MPS_BLOCKLIST)

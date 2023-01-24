@@ -6013,7 +6013,12 @@ class TestNLLLoss(TestCaseMPS):
                 for threshold in [0.5, 20, 30, 40, 50]:
                     helper(shape, beta, threshold)
 
-    # Test silu
+    #     # Test empty shape too
+    #     for shape in [(), (2, 3), (10, 10), (2, 3, 4, 5)]:
+    #         for beta in [0.5, 1, 2, 3, 4]:
+    #             for threshold in [0.5, 20, 30, 40, 50]:
+    #                 helper(shape, beta, threshold)
+
     def test_silu(self):
         def helper(shape):
             cpu_x = torch.randn(shape, device='cpu', dtype=torch.float, requires_grad=True)
@@ -11326,16 +11331,32 @@ class TestConsistency(TestCaseMPS):
     # All the entries in this list should be removed
     BLOCKLIST = {
         # Functions that hard crash
+        'nn.functional.softplus': [torch.float32],
+        'median': [torch.float32, torch.int16, torch.int32, torch.uint8, torch.int16],
+        'sgn': [torch.bool],
+        'linalg.inv': [torch.float32],
+        'linalg.inv_ex': [torch.float32],
+        'linalg.matrix_power': [torch.float32],
+        'nn.functional.interpolate': [torch.float32],
         'resize_': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'nn.functional.interpolatearea': [torch.float32],
         'resize_as_': [torch.float16, torch.float32],
         'topk': [torch.int16, torch.int32, torch.int64, torch.uint8],
 
         # Functions with correctness issues
-        'multinomial': [torch.float32],
-
-        # cpu result off, showing random values
+        'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'divfloor_rounding': [torch.int16, torch.int32, torch.int64],
+        'divtrunc_rounding': [torch.float16],
+        'norm': [torch.float16],
+        'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
+        'cumulative_trapezoid': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'addr': [torch.float16],
         'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        # cpu result off, showing inf values
+        'trace': [torch.int64],
+        'normalnumber_mean': [torch.float16, torch.float32],
+        'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'multinomial': [torch.float32],
+        'floor_divide': [torch.int16, torch.int32, torch.int64],
         'dist': [torch.float16],
 
         # failure due to issue: atan2() may generate NAN in output with
@@ -11345,13 +11366,12 @@ class TestConsistency(TestCaseMPS):
         'grid_sampler_2d': [torch.float32],
         'nn.functional.grid_sample': [torch.float32],
 
-        # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
-        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
-        '__rpow__': [torch.uint8],
-
-        # failures before macOS 13.3
-        'nn.functional.conv_transpose2d': [torch.float32],
-        'nn.functional.pairwise_distance': [torch.float16],
+        # failures due to issue #103039644: Wrong results from avgPooling2DWithSourceTensor()
+        # when both ceilMode and includeZeroPadToAverage are True
+        'nn.functional.avg_pool1d': [torch.float32, torch.int64],
+        'nn.functional.avg_pool2d': [torch.float32, torch.int64],
+        'nn.functional.adaptive_avg_pool1d': [torch.float32],
+        'nn.functional.adaptive_avg_pool2d': [torch.float32],
     }
 
     UNIMPLEMENTED_OPS = {
@@ -11449,6 +11469,7 @@ class TestConsistency(TestCaseMPS):
         'lu_unpack': [torch.float32],
         'masked.cumprod': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'masked.median': [torch.float32],
+        'masked_scatter': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
         'matrix_exp': [torch.float32],
         'mode': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
         'msort': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
@@ -11468,7 +11489,6 @@ class TestConsistency(TestCaseMPS):
         'nn.functional.fractional_max_pool3d': [torch.float32],
         'nn.functional.adaptive_avg_pool3d': [torch.float16, torch.float32],
         'nn.functional.adaptive_max_pool3d': [torch.float32],
-        'nn.functional.interpolatearea': [torch.float32],
         'nn.functional.interpolatebicubic': [torch.float32],
         'nn.functional.interpolatelinear': [torch.float32],
         'nn.functional.interpolatetrilinear': [torch.float32],
@@ -11478,6 +11498,7 @@ class TestConsistency(TestCaseMPS):
         'nn.functional.avg_pool3d': [torch.float32, torch.int64],
         'nn.functional.ctc_loss': [torch.float32],
         'nn.functional.embedding_bag': [torch.float16, torch.float32],
+        'nn.functional.max_pool2d': [torch.float32],
         'nn.functional.hardshrink': [torch.float32],
         'nn.functional.hardsigmoid': [torch.float32],
         'nn.functional.logsigmoid': [torch.float32],
@@ -11506,6 +11527,7 @@ class TestConsistency(TestCaseMPS):
         'polygammapolygamma_n_4': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'qr': [torch.float32],
         'quantile': [torch.float32],
+        'remainder': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8],
         'renorm': [torch.float16, torch.float32],
         'roll': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'rsub': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
@@ -11579,7 +11601,6 @@ class TestConsistency(TestCaseMPS):
         'symeig': [torch.float32],
         'take': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'to_sparse': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'var_mean': [torch.float16, torch.float32],
         'var_meanunbiased': [torch.float16, torch.float32],
         'vdot': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
@@ -11591,8 +11612,6 @@ class TestConsistency(TestCaseMPS):
         # Failures due to unsupported data types on MPS backend
         'bfloat16': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'chalf': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        # Byte tests are failing
-        'byte': [torch.float16, torch.float32],
         'nn.functional.conv1d': [torch.int64],
         'nn.functional.conv2d': [torch.int64],
         'nn.functional.conv_transpose1d': [torch.int64],
@@ -11609,7 +11628,6 @@ class TestConsistency(TestCaseMPS):
         'addmmdecomposed': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'addbmm': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'addmm': [torch.int16, torch.int32, torch.int64, torch.uint8],
-        'addr': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'addmv': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'baddbmm': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'bmm': [torch.int16, torch.int32, torch.int64, torch.uint8],
@@ -11670,22 +11688,21 @@ class TestConsistency(TestCaseMPS):
         'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8],
+
+        # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
+        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        '__rpow__': [torch.int16, torch.int32],
     }
 
     UNDEFINED_BEHAVIOUR = {
         # Failures due to random output that they generate using
         # Philox engine causing mismatch with CPU results
         'uniform': [torch.float16, torch.float32],
-        'randn': [torch.float16, torch.float32],
         'rand_like': [torch.float16, torch.float32],
         'randint_like': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'randn_like': [torch.float16, torch.float32],
         'bernoulli': [torch.float32],
-        'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
         'normal': [torch.float16, torch.float32, torch.float16, torch.float32],
-        'normal_': [torch.float16, torch.float32],
-        'normalin_place': [torch.float16, torch.float32],
-        'normalnumber_mean': [torch.float16, torch.float32],
         'nn.functional.alpha_dropout': [torch.float32],
         'nn.functional.dropout': [torch.float32],
         'nn.functional.dropout2d': [torch.float32],
@@ -11694,24 +11711,10 @@ class TestConsistency(TestCaseMPS):
         'new_empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'empty_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         # problem 103190467, as_strided_scatter has non-deterministic behavior when the update indices are not unique
         'as_strided_scatter': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         # duplicate indices are used in the testcase - undefined behaviour
         'index_put': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        # problem 104760543, zero to negative integer powers are undefined
-        '__rpow__': [torch.int16, torch.int32, torch.int64],
-    }
-
-    FAST_MATH_PRECISION_ISSUES = {
-        # Failures due to precision issues
-        'tan': [torch.float32],
-        'pow': [torch.float32],
-        'masked.softmin': [torch.float32],
-        'masked.softmax': [torch.float32],
-        'masked.log_softmax': [torch.float32],
-        'cdist': [torch.float32],
-        '__rpow__': [torch.float32]
     }
 
     FP16_LOW_PRECISION_LIST = {
@@ -11730,18 +11733,13 @@ class TestConsistency(TestCaseMPS):
         'mul',
     }
 
-    BLOCKLIST_MACOS_12 = {
-        # expected failures
-        'nn.functional.interpolatenearest': [torch.float32],
-        'nn.functional.upsample_nearest': [torch.float32],
-        'nn.functional.conv_transpose2d': [torch.float32]
-    }
-
-    ALLOWLIST_MACOS_13_3 = {
-        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
-        '__rpow__': [torch.uint8],
-        'nn.functional.conv_transpose2d': [torch.float32],
-    }
+    dirname = os.path.dirname(__file__)
+    filename = os.path.join(dirname, "cuda_results.yaml")
+    with open(filename) as f:
+        data = yaml.safe_load(f)
+    CUDA_RESULT = dict()
+    for key, value in data.items():
+        CUDA_RESULT[key] = torch.as_tensor(value)
 
     MPS_SKIP_LIST = reduce(lambda x, y: dict(x, **y), (
         FAST_MATH_PRECISION_ISSUES, BLOCKLIST, UNDEFINED_BEHAVIOUR, EXPECTED_FAILURES, UNIMPLEMENTED_OPS))
@@ -11914,10 +11912,10 @@ class TestConsistency(TestCaseMPS):
                 self.assertEqual(cpu_out, mps_out, atol=atol, rtol=rtol)
 
             except Exception as e:
-                if any(s in str(e).lower() for s in ["int64", "macos 13", "adaptive pool mps"]):
-                    self.skipTest(f"Expected Runtime Error: {str(e)}")
+                if any(s in str(e).lower() for s in ["int64", "macos 13"]):
+                    self.skipTest(f"{str(e)}")
 
-                if op.name in CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
+                if op.name in self.CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
                     continue
 
                 if not generate_new_truth:
