@@ -1,10 +1,11 @@
 name: Mac MPS
 
 on:
-  push:
-    tags:
-      - ciflow/mps/*
-  workflow_dispatch:
+  # push:
+  #   tags:
+  #     - ciflow/mps/*
+  # workflow_dispatch:
+  pull_request:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}-${{ github.ref_type == 'branch' && github.sha }}-${{ github.event_name == 'workflow_dispatch' }}
@@ -18,7 +19,7 @@ jobs:
       sync-tag: macos-12-py3-arm64-build
       build-environment: macos-12-py3-arm64
       xcode-version: "13.3.1"
-      runner-type: macos-12-xl
+      runner-type: macos-m1-13
       build-generates-artifacts: true
       # To match the one pre-installed in the m1 runners
       python_version: 3.9.12
