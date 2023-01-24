@@ -10,12 +10,23 @@ import torch
 from torch.testing._internal.common_cuda import with_tf32_off
 from torch.testing._internal.common_device_type import (
     instantiate_device_type_tests, onlyCUDA, toleranceOverride, tol, skipMeta)
+from torch.testing._internal.common_dtype import get_all_dtypes
 from torch.testing._internal.common_modules import module_db, modules, TrainEvalMode
 from torch.testing._internal.common_utils import (
     TestCase, run_tests, freeze_rng_state, mock_wrapper, get_tensors_from, gradcheck,
-    gradgradcheck, skipIfMps, skipIfTorchInductor)
+    gradgradcheck, skipIfTorchInductor)
 from unittest.mock import patch, call
 
+MPS_DTYPES = get_all_dtypes()
+for t in [torch.double, torch.cdouble, torch.cfloat, torch.int8, torch.bfloat16]:
+    del MPS_DTYPES[MPS_DTYPES.index(t)]
+
+def _get_mps_error_msg(device, dtype, op, mps_blocklist):
+    if torch.backends.mps.is_available() and device == "mps" and dtype not in MPS_DTYPES:
+        return f"MPS doesn't support {str(dtype)} datatype"
+    if op.name.startswith(tuple(mps_blocklist)):
+        return "MPS doesn't support op " + str(op.name)
+    return None
 
 class TestModule(TestCase):
     _do_cuda_memory_leak_check = True
@@ -33,7 +44,8 @@ class TestModule(TestCase):
         def _check_module(items, name, device=device, dtype=dtype):
             for item_name, item in items:
                 self.assertEqual(
-                    item.device, device,
+                    # workaround for the tests checking the device (mps:0 with mps)
+                    item.device.type, device.type,
                     f'{name} {item_name} is on device {item.device} instead of the expected device {device}')
                 if item.dtype.is_floating_point:
                     self.assertEqual(
@@ -42,9 +54,16 @@ class TestModule(TestCase):
         _check_module(module.named_parameters(), "Parameter")
         _check_module(module.named_buffers(), "Buffer")
 
-    @skipIfMps  # the test doesn't work on MPS as double types are not supported
     @modules(module_db)
     def test_forward(self, device, dtype, module_info, training):
+        MPS_BLOCKLIST = [
+            "nn.LSTM"  # segfault
+        ]
+
+        msg = _get_mps_error_msg(device, dtype, module_info, MPS_BLOCKLIST)
+        if msg is not None:
+            self.skipTest(msg)
+
         module_cls = module_info.module_cls
         module_inputs = module_info.module_inputs_func(module_info, device=device, dtype=dtype,
                                                        requires_grad=False, training=training)
@@ -84,6 +103,10 @@ class TestModule(TestCase):
     # They should be applied to any created parameters and buffers.
     @modules(module_db)
     def test_factory_kwargs(self, device, dtype, module_info, training):
+        msg = _get_mps_error_msg(device, dtype, module_info, [])
+        if msg is not None:
+            self.skipTest(msg)
+
         module_cls = module_info.module_cls
         module_inputs = module_info.module_inputs_func(module_info, device=device, dtype=dtype,
                                                        requires_grad=False, training=training)
@@ -198,6 +221,11 @@ class TestModule(TestCase):
     @modules(module_db)
     def test_repr(self, device, dtype, module_info, training):
         # Test module can be represented with repr and str without errors.
+
+        msg = _get_mps_error_msg(device, dtype, module_info, [])
+        if msg is not None:
+            self.skipTest(msg)
+
         module_cls = module_info.module_cls
         module_inputs = module_info.module_inputs_func(module_info, device=device, dtype=dtype,
                                                        requires_grad=False, training=training)
@@ -211,10 +239,19 @@ class TestModule(TestCase):
             m.__repr__()
             str(m)
 
-    @skipIfMps
     @modules(module_db)
     def test_pickle(self, device, dtype, module_info, training):
         # Test that module can be pickled and unpickled.
+
+        MPS_BLOCKLIST = [
+            "nn.LSTM"  # hard crash
+        ]
+
+        msg = _get_mps_error_msg(device, dtype, module_info, MPS_BLOCKLIST)
+        if msg is not None:
+            self.skipTest(msg)
+
+
         module_cls = module_info.module_cls
         module_inputs = module_info.module_inputs_func(module_info, device=device, dtype=dtype,
                                                        requires_grad=False, training=training)
@@ -249,6 +286,15 @@ class TestModule(TestCase):
     def test_check_inplace(self, device, dtype, module_info, training):
         # Check if the inplace variant of the module gives the same result as the out of place
         # variant.
+
+        MPS_BLOCKLIST = [
+            "nn.ELU"  # hard crash
+        ]
+
+        msg = _get_mps_error_msg(device, dtype, module_info, MPS_BLOCKLIST)
+        if msg is not None:
+            self.skipTest(msg)
+
         module_cls = module_info.module_cls
         module_inputs = module_info.module_inputs_func(module_info, device=device, dtype=dtype,
                                                        requires_grad=True, training=training)
@@ -326,11 +372,21 @@ class TestModule(TestCase):
                 obj.grad = None
         self._traverse_obj(obj, inner_zero_grad)
 
-    @skipIfMps
     @modules(module_db)
     @skipIfTorchInductor("to be fixed")
     def test_non_contiguous_tensors(self, device, dtype, module_info, training):
         # Check modules work with non-contiguous tensors
+        MPS_BLOCKLIST = [
+            # hard crashes
+            "nn.GRU",
+            "nn.LSTM",
+            "nn.RNN"
+        ]
+
+        msg = _get_mps_error_msg(device, dtype, module_info, MPS_BLOCKLIST)
+        if msg is not None:
+            self.skipTest(msg)
+
 
         module_cls = module_info.module_cls
         module_inputs = module_info.module_inputs_func(module_info, device=device, dtype=dtype,
@@ -585,10 +641,18 @@ class TestModule(TestCase):
                         if cpu_output.requires_grad:
                             check_backward(cpu_output, gpu_output)
 
-    @skipIfMps
     @modules(module_db)
     @skipIfTorchInductor("to be fixed")
     def test_memory_format(self, device, dtype, module_info, training):
+        MPS_BLOCKLIST = [
+            "nn.BatchNorm3d",  # failed assert
+            "nn.LSTM",  # segfault
+        ]
+
+        msg = _get_mps_error_msg(device, dtype, module_info, MPS_BLOCKLIST)
+        if msg is not None:
+            self.skipTest(msg)
+
         is_sm86 = device.startswith("cuda") and torch.cuda.get_device_capability(0) == (8, 6)
         # TODO tighten it to a specific module
         atol, rtol = (3e-3, 7e-3) if is_sm86 else (None, None)
@@ -685,9 +749,12 @@ class TestModule(TestCase):
 
     # Test whether train and eval modes differ for each module. Use to verify
     # that the ModuleInfo entry flag is correct.
-    @skipIfMps  # the test doesn't work on MPS as double types are not supported
     @modules(module_db, train_eval_mode=TrainEvalMode.train_only)
     def test_if_train_and_eval_modes_differ(self, device, dtype, module_info, training):
+        msg = _get_mps_error_msg(device, dtype, module_info, [])
+        if msg is not None:
+            self.skipTest(msg)
+
         module_cls = module_info.module_cls
         module_inputs = module_info.module_inputs_func(module_info, device=device, dtype=dtype,
                                                        requires_grad=False, training=training)

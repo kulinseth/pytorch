@@ -130,15 +130,11 @@ jobs:
           echo "monitor-script-pid=${!}" >> "${GITHUB_OUTPUT}"
 
       - name: Install macOS homebrew dependencies
-        uses: nick-fields/retry@v2.8.2
-        with:
-          timeout_minutes: 5
-          max_attempts: 3
-          retry_wait_seconds: 90
-          command: |
-            # Install dependencies
-            brew install libomp
-            brew link --force libomp
+        if: ${{ runner.arch == 'X64' }}
+        run: |
+          # Install dependencies
+          brew install libomp
+          brew link --force libomp
 
       - name: Parse ref
         id: parse-ref
@@ -191,6 +187,12 @@ jobs:
       - name: Print remaining test logs
         shell: bash
         if: always() && steps.test.conclusion
+        run: |
+          cat test/**/*.log || true
+
+      - name: Print remaining test logs
+        shell: bash
+        if: always()
         run: |
           cat test/**/*.log || true
 
