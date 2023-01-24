@@ -63,8 +63,8 @@ on:
 
 jobs:
   build:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
+    # # Don't run on forked repos.
+    # if: github.repository_owner == 'pytorch'
     runs-on: ${{ inputs.runner-type }}
     env:
       # For sccache access (only on non-forked PRs)

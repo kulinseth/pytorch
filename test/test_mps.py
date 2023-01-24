@@ -1236,7 +1236,11 @@ class TestMPS(TestCaseMPS):
         self.assertEqual(res, res_cpu)
 
         c = torch.tensor([[1, 2, 3], [-1, 1, 4]], dtype=torch.float, device="mps")
+<<<<<<< HEAD
         c_cpu = torch.tensor([[1, 2, 3], [-1, 1, 4]] , dtype=torch.float, device="cpu")
+=======
+        c_cpu = torch.tensor([[1, 2, 3], [-1, 1, 4]], dtype=torch.float, device="cpu")
+>>>>>>> a6b4bc54f83 (Enable MPS CI runners (#252))
 
         res = torch.norm(c, dim=0)
         res_cpu = torch.norm(c_cpu, dim=0)
@@ -2408,12 +2412,21 @@ class TestMPS(TestCaseMPS):
 
             self.assertEqual(result, result_cpu)
         helper(torch.tensor([1, 2, 4, 2, 1]), False, False)
+<<<<<<< HEAD
         helper(torch.randint(3, (10, )), False, False)
         helper(torch.randint(3, (10, )), True, False)
         helper(torch.randint(3, (10, )), False, True)
         helper(torch.randint(3, (10, )), True, True)
         helper(torch.randint(3, (1, )), True, True)
         helper(torch.randint(3, (0, )), True, True)
+=======
+        helper(torch.randint(3, (10,)), False, False)
+        helper(torch.randint(3, (10,)), True, False)
+        helper(torch.randint(3, (10,)), False, True)
+        helper(torch.randint(3, (10,)), True, True)
+        helper(torch.randint(3, (1,)), True, True)
+        helper(torch.randint(3, (0,)), True, True)
+>>>>>>> a6b4bc54f83 (Enable MPS CI runners (#252))
 
     def test_unique_consecutive(self):
         def helper(x, dim, return_inverse, return_counts):
@@ -2425,6 +2438,7 @@ class TestMPS(TestCaseMPS):
 
             self.assertEqual(result, result_cpu)
         helper(torch.tensor([1, 2, 4, 2, 1]), 0, False, False)
+<<<<<<< HEAD
         helper(torch.randint(3, (10, )), 0, False, False)
         helper(torch.randint(3, (10, )), 0, True, False)
         helper(torch.randint(3, (10, )), 0, False, True)
@@ -2432,6 +2446,15 @@ class TestMPS(TestCaseMPS):
         helper(torch.randint(3, (10, )), 0, True, True)
         helper(torch.randint(3, (1, )), 0, True, True)
         helper(torch.randint(3, (0, )), 0, True, True)
+=======
+        helper(torch.randint(3, (10,)), 0, False, False)
+        helper(torch.randint(3, (10,)), 0, True, False)
+        helper(torch.randint(3, (10,)), 0, False, True)
+        helper(torch.randint(3, (10,)), 0, True, True)
+        helper(torch.randint(3, (10,)), 0, True, True)
+        helper(torch.randint(3, (1,)), 0, True, True)
+        helper(torch.randint(3, (0,)), 0, True, True)
+>>>>>>> a6b4bc54f83 (Enable MPS CI runners (#252))
 
         helper(torch.tensor([[1, 1, 2, 3, 3, 2], [1, 1, 1, 2, 2, 1]]), 0, False, False)
         helper(torch.tensor([[1, 1, 2, 3, 3, 2], [1, 1, 1, 2, 2, 1]]), 0, True, True)
@@ -4835,6 +4858,11 @@ class TestNLLLoss(TestCaseMPS):
         helper((2, 4, 6), (1, 3, 3, 5, 3, 4), nn.ConstantPad3d)
         # check the workaround for the right padding bug in Monterey
         helper((1, 2, 2, 2, 2), (0, 1), nn.ConstantPad3d)
+<<<<<<< HEAD
+=======
+        # input size < pad size
+        helper((2, 4, 6), (1, 3, 3, 5, 3, 4), nn.ConstantPad3d)
+>>>>>>> a6b4bc54f83 (Enable MPS CI runners (#252))
 
     # Test stack forward
     def test_stack(self):
@@ -5117,6 +5145,7 @@ class TestNLLLoss(TestCaseMPS):
             for dim in range(len(shape)):
                 helper(shape, dim)
 
+<<<<<<< HEAD
     # Test softplus
     def test_softplus(self):
         def helper(shape, beta=1, threshold=20):
@@ -5140,8 +5169,31 @@ class TestNLLLoss(TestCaseMPS):
             for beta in [0.5, 1, 2, 3, 4]:
                 for threshold in [0.5, 20, 30, 40, 50]:
                     helper(shape, beta, threshold)
+=======
+    # # Test softplus
+    # def test_softplus(self):
+    #     def helper(shape, beta=1, threshold=20):
+    #         cpu_x = torch.randn(shape, device='cpu', dtype=torch.float, requires_grad=True)
+    #         x = cpu_x.detach().clone().to('mps').requires_grad_()
 
-    # Test silu
+    #         softplus_result = torch.nn.Softplus(beta=beta, threshold=threshold)(x)
+    #         softplus_result_cpu = torch.nn.Softplus(beta=beta, threshold=threshold)(cpu_x)
+
+    #         cpu_grad = torch.randn(softplus_result.shape)
+    #         grad = cpu_grad.to('mps')
+
+    #         softplus_result.backward(gradient=grad)
+    #         softplus_result_cpu.backward(gradient=cpu_grad)
+
+    #         self.assertEqual(softplus_result, softplus_result_cpu)
+    #         self.assertEqual(x.grad, cpu_x.grad)
+>>>>>>> a6b4bc54f83 (Enable MPS CI runners (#252))
+
+    #     # Test empty shape too
+    #     for shape in [(), (2, 3), (10, 10), (2, 3, 4, 5)]:
+    #         for beta in [0.5, 1, 2, 3, 4]:
+    #             for threshold in [0.5, 20, 30, 40, 50]:
+    #                 helper(shape, beta, threshold)
 
     def test_silu(self):
         def helper(shape):
@@ -5835,7 +5887,11 @@ class TestNLLLoss(TestCaseMPS):
 
         # for reduce in ["sum", "prod", "amax", "amin"]:
         for reduce_type in ["add", "multiply"]:
+<<<<<<< HEAD
             helper((2, 3), 0, (5, 3), (5, 3), reduce_str=reduce_type)
+=======
+            helper((2, 3), 0, (5, 3), (5, 3), reduce_str=reduce)
+>>>>>>> a6b4bc54f83 (Enable MPS CI runners (#252))
             helper((2, 8, 4, 5), 0, (10, 8, 4, 5), (10, 8, 4, 5), reduce_str=reduce_type)
             helper((8, 8, 4, 5), 0, (10, 8, 4, 5), (10, 8, 4, 5), reduce_str=reduce_type)
             helper((8, 8, 4, 5), 0, (4, 7, 3, 2), (4, 7, 3, 2), reduce_str=reduce_type)
@@ -9714,6 +9770,7 @@ class TestConsistency(TestCaseMPS):
     # If the dtype list is None, all dtypes are excluded.
     # All the entries in this list should be removed
     BLOCKLIST = {
+<<<<<<< HEAD
         # Functions that hang
         'masked_fill': [torch.bool, torch.uint8, torch.float32], 'where': [torch.bool],
         # + forward when requires_grad=True or running backward
@@ -9823,6 +9880,393 @@ class TestConsistency(TestCaseMPS):
         'inner': None,
         'dstack': None,
         'take_along_dim': None,
+=======
+        # Functions that hard crash
+        'nn.functional.softplus': [torch.float32],
+        'median': [torch.float32, torch.int16, torch.int32, torch.uint8, torch.int16],
+        'sgn': [torch.bool],
+        'linalg.inv': [torch.float32],
+        'linalg.inv_ex': [torch.float32],
+        'linalg.matrix_power': [torch.float32],
+        'nn.functional.interpolate': [torch.float32],
+        'resize_': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'nn.functional.interpolatearea': [torch.float32],
+        'resize_as_': [torch.float16, torch.float32],
+        'topk': [torch.int16, torch.int32, torch.int64, torch.uint8],
+
+        # Functions with correctness issues
+        'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'divfloor_rounding': [torch.int16, torch.int32, torch.int64],
+        'divtrunc_rounding': [torch.float16],
+        'norm': [torch.float16],
+        'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
+        'cumulative_trapezoid': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'addr': [torch.float16],
+        'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'trace': [torch.int64],
+        'normalnumber_mean': [torch.float16, torch.float32],
+        'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'multinomial': [torch.float32],
+        'floor_divide': [torch.int16, torch.int32, torch.int64],
+        'dist': [torch.float16],
+
+        # failure due to issue: atan2() may generate NAN in output with
+        'atan2': [torch.bool, torch.int16, torch.int32, torch.uint8],
+
+        # Unsupported Border padding mode
+        'grid_sampler_2d': [torch.float32],
+        'nn.functional.grid_sample': [torch.float32],
+
+        # failures due to issue #103039644: Wrong results from avgPooling2DWithSourceTensor()
+        # when both ceilMode and includeZeroPadToAverage are True
+        'nn.functional.avg_pool1d': [torch.float32, torch.int64],
+        'nn.functional.avg_pool2d': [torch.float32, torch.int64],
+        'nn.functional.adaptive_avg_pool1d': [torch.float32],
+        'nn.functional.adaptive_avg_pool2d': [torch.float32],
+    }
+
+    UNIMPLEMENTED_OPS = {
+        # Failures due to lack of op implementation on MPS backend
+        'linalg.eig': [torch.float32],
+        'linalg.eigvals': [torch.float32],
+        'fft.fft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.ifft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.ihfft2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.ihfft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.ihfftn': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.rfft2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.rfft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.rfftn': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'put': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'stft': [torch.float32],
+        'nn.functional.conv_transpose3d': [torch.int64, torch.float32],
+        'rounddecimals_neg_3': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'rounddecimals_3': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'rounddecimals_0': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        '__rmod__': [torch.float16, torch.float32],
+        '__rsub__': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'aminmax': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'angle': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'argsort': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'bucketize': [torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'cholesky': [torch.float32],
+        'cholesky_inverse': [torch.float32],
+        'cholesky_solve': [torch.float32],
+        'copysign': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'cummax': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'cummin': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'cumprod': [torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'digamma': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'erfc': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'erfinv': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fmax': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fmin': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fmod': [torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'frexp': [torch.float16, torch.float32],
+        'gcd': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'geqrf': [torch.float32],
+        'heaviside': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'histc': [torch.float32],
+        'histogram': [torch.float32],
+        'histogramdd': [torch.float32],
+        'hypot': [torch.float32],
+        'i0': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'igamma': [torch.float16, torch.float32],
+        'igammac': [torch.float16, torch.float32],
+        'index_copy': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'index_fill': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'index_reduce': [torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'isin': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'isneginf': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'isposinf': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'kthvalue': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'lcm': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'ldexp': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'lerp': [torch.float32],
+        'lgamma': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'linalg.cholesky': [torch.float32],
+        'linalg.cholesky_ex': [torch.float32],
+        'linalg.cond': [torch.float32],
+        'linalg.detsingular': [torch.float32],
+        'linalg.det': [torch.float32],
+        'linalg.eigh': [torch.float32],
+        'linalg.eigvalsh': [torch.float32],
+        'linalg.householder_product': [torch.float32],
+        'linalg.ldl_factor': [torch.float32],
+        'linalg.ldl_factor_ex': [torch.float32],
+        'linalg.ldl_solve': [torch.float32],
+        'linalg.lstsq': [torch.float32],
+        'linalg.lstsqgrad_oriented': [torch.float32],
+        'linalg.lu': [torch.float32],
+        'linalg.lu_factor': [torch.float32],
+        'linalg.lu_factor_ex': [torch.float32],
+        'linalg.lu_solve': [torch.float32],
+        'linalg.matrix_norm': [torch.float32],
+        'linalg.norm': [torch.float32],
+        'linalg.normsubgradients_at_zero': [torch.float32],
+        'linalg.qr': [torch.float32],
+        'linalg.slogdet': [torch.float32],
+        'linalg.solve': [torch.float32],
+        'linalg.solve_ex': [torch.float32],
+        'linalg.svdvals': [torch.float32],
+        'linalg.tensorsolve': [torch.float32],
+        'linalg.vander': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'linalg.vecdot': [torch.float32],
+        'logcumsumexp': [torch.float32],
+        'logdet': [torch.float32],
+        'logit': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'lu': [torch.float32],
+        'lu_solve': [torch.float32],
+        'lu_unpack': [torch.float32],
+        'masked.cumprod': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'masked.median': [torch.float32],
+        'masked_scatter': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'matrix_exp': [torch.float32],
+        'mode': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'msort': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'mvlgamma': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'mvlgammamvlgamma_p_1': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'mvlgammamvlgamma_p_3': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'mvlgammamvlgamma_p_5': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'nanquantile': [torch.float32],
+        'nanmean': [torch.float32, torch.float16],
+        'nanmedian': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'nansum': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'native_dropout_backward': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'nextafter': [torch.float32],
+        'normnuc': [torch.float32],
+        'nn.functional._scaled_dot_product_attention': [torch.float32],
+        'nn.functional.fractional_max_pool2d': [torch.float32],
+        'nn.functional.fractional_max_pool3d': [torch.float32],
+        'nn.functional.adaptive_avg_pool3d': [torch.float16, torch.float32],
+        'nn.functional.adaptive_max_pool3d': [torch.float32],
+        'nn.functional.interpolatebicubic': [torch.float32],
+        'nn.functional.interpolatelinear': [torch.float32],
+        'nn.functional.interpolatetrilinear': [torch.float32],
+        'nn.functional.max_unpool1dgrad': [torch.float32],
+        'nn.functional.max_unpool2dgrad': [torch.float32],
+        'nn.functional.max_unpool3dgrad': [torch.float32],
+        'nn.functional.avg_pool3d': [torch.float32, torch.int64],
+        'nn.functional.ctc_loss': [torch.float32],
+        'nn.functional.embedding_bag': [torch.float16, torch.float32],
+        'nn.functional.max_pool2d': [torch.float32],
+        'nn.functional.hardshrink': [torch.float32],
+        'nn.functional.hardsigmoid': [torch.float32],
+        'nn.functional.logsigmoid': [torch.float32],
+        'nn.functional.max_pool3d': [torch.float32],
+        'nn.functional.max_unpool1d': [torch.float32],
+        'nn.functional.max_unpool2d': [torch.float32],
+        'nn.functional.max_unpool3d': [torch.float32],
+        'nn.functional.mish': [torch.float32],
+        'nn.functional.multi_margin_loss': [torch.float32],
+        'nn.functional.multilabel_margin_loss': [torch.float32],
+        'nn.functional.multilabel_soft_margin_loss': [torch.float32],
+        'nn.functional.pdist': [torch.float32],
+        'nn.functional.rrelu': [torch.float32],
+        'nn.functional.softshrink': [torch.float32],
+        'nn.functional.unfold': [torch.float16, torch.float32],
+        'nn.functional.norm': [torch.float32],
+        'ormqr': [torch.float32],
+        'pca_lowrank': [torch.float32],
+        'pinverse': [torch.float32],
+        'polar': [torch.float32],
+        'polygamma': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'polygammapolygamma_n_0': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'polygammapolygamma_n_1': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'polygammapolygamma_n_2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'polygammapolygamma_n_3': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'polygammapolygamma_n_4': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'qr': [torch.float32],
+        'quantile': [torch.float32],
+        'remainder': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'renorm': [torch.float16, torch.float32],
+        'roll': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'rsub': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'scatter_reduceamax': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'scatter_reduceamin': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'scatter_reducemin': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'scatter_reducemean': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'scatter_reduceprod': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'scatter_reducesum': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'searchsorted': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'segment_reduce': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'segment_reduceoffsets': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'segment_reducelengths': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'sinc': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'sort': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.airy_ai': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.bessel_j0': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.bessel_j1': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.bessel_y0': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.bessel_y1': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.chebyshev_polynomial_t': [torch.bool,
+                                           torch.float16,
+                                           torch.float32,
+                                           torch.int16,
+                                           torch.int32,
+                                           torch.int64,
+                                           torch.uint8],
+        'special.chebyshev_polynomial_u': [torch.bool,
+                                           torch.float16,
+                                           torch.float32,
+                                           torch.int16,
+                                           torch.int32,
+                                           torch.int64,
+                                           torch.uint8],
+        'special.entr': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.erfcx': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.hermite_polynomial_h': [torch.bool,
+                                         torch.float16,
+                                         torch.float32,
+                                         torch.int16,
+                                         torch.int32,
+                                         torch.int64,
+                                         torch.uint8],
+        'special.hermite_polynomial_he': [torch.bool,
+                                          torch.float16,
+                                          torch.float32,
+                                          torch.int16,
+                                          torch.int32,
+                                          torch.int64,
+                                          torch.uint8],
+        'special.i0e': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.i1': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.i1e': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.laguerre_polynomial_l': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.log_ndtr': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.modified_bessel_i0': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.modified_bessel_i1': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.modified_bessel_k0': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.modified_bessel_k1': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.ndtri': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.polygamma': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.polygammaspecial_polygamma_n_0': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.scaled_modified_bessel_k0': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.scaled_modified_bessel_k1': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.spherical_bessel_j0': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.xlog1py': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.zeta': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'std_mean': [torch.float16, torch.float32],
+        'std_meanunbiased': [torch.float16, torch.float32],
+        'svd_lowrank': [torch.float32],
+        'symeig': [torch.float32],
+        'take': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'to_sparse': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'var_mean': [torch.float16, torch.float32],
+        'var_meanunbiased': [torch.float16, torch.float32],
+        'vdot': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'view_as_complex': [torch.float16, torch.float32],
+        'xlogy': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+    }
+
+    EXPECTED_FAILURES = {
+        # Failures due to unsupported data types on MPS backend
+        'bfloat16': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'chalf': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'nn.functional.conv1d': [torch.int64],
+        'nn.functional.conv2d': [torch.int64],
+        'nn.functional.conv_transpose1d': [torch.int64],
+        'nn.functional.softminwith_dtype': [torch.bool,
+                                            torch.float16,
+                                            torch.float32,
+                                            torch.int16,
+                                            torch.int32,
+                                            torch.int64,
+                                            torch.uint8],
+        'log_softmaxwith_dtype': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'softmaxwith_dtype': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        '__rmatmul__': [torch.int16, torch.int32, torch.uint8],
+        'addmmdecomposed': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'addbmm': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'addmm': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'addmv': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'baddbmm': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'bmm': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'cdouble': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'cfloat': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'complex': [torch.float16, torch.float32],
+        'double': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'einsum': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.fft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.fft2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.fftn': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.fftshift': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.hfft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.hfft2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.hfftn': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.ifft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.ifft2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.ifftn': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.ifftshift': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.ihfft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.ihfft2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.ihfftn': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.irfft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.irfft2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.irfftn': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'fft.rfft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'float_power': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'full': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'full_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'inner': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'linalg.matrix_rank': [torch.float32],
+        'linalg.matrix_rankhermitian': [torch.float32],
+        'linalg.multi_dot': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'linalg.pinv': [torch.float32],
+        'linalg.pinvhermitian': [torch.float32],
+        'log_softmax': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'matmul': [torch.int16, torch.int32, torch.int64, torch.uint8],  # MPS device does not support mm for non-float inputs
+        'mm': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'mv': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'new_full': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'new_ones': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'new_zeros': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'nn.functional.batch_norm': [torch.float32],
+        'nn.functional.bilinear': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'nn.functional.linear': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'nn.functional.softmin': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'ones_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'signal.windows.blackman': [torch.float16],
+        'signal.windows.cosine': [torch.float16],
+        'signal.windows.exponential': [torch.float16],
+        'signal.windows.gaussian': [torch.float16],
+        'signal.windows.general_cosine': [torch.float16],
+        'signal.windows.general_hamming': [torch.float16],
+        'signal.windows.hamming': [torch.float16],
+        'signal.windows.hann': [torch.float16],
+        'signal.windows.kaiser': [torch.float16],
+        'stft': [torch.float32],
+        'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8],
+
+        # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
+        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        '__rpow__': [torch.int16, torch.int32],
+    }
+
+    UNDEFINED_BEHAVIOUR = {
+        # Failures due to random output that they generate using
+        # Philox engine causing mismatch with CPU results
+        'uniform': [torch.float16, torch.float32],
+        'rand_like': [torch.float16, torch.float32],
+        'randint_like': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'randn_like': [torch.float16, torch.float32],
+        'bernoulli': [torch.float32],
+        'normal': [torch.float16, torch.float32, torch.float16, torch.float32],
+        'nn.functional.alpha_dropout': [torch.float32],
+        'nn.functional.dropout': [torch.float32],
+        'nn.functional.dropout2d': [torch.float32],
+        'nn.functional.dropout3d': [torch.float32],
+        # these fill tensors with uninitialized data, causing mismatch with CPU
+        'new_empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'empty_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        # problem 103190467, as_strided_scatter has non-deterministic behavior when the update indices are not unique
+        'as_strided_scatter': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        # duplicate indices are used in the testcase - undefined behaviour
+        'index_put': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+>>>>>>> a6b4bc54f83 (Enable MPS CI runners (#252))
     }
 
     # Those ops worked on MacOS12, but broken on MacOS13
@@ -9844,6 +10288,20 @@ class TestConsistency(TestCaseMPS):
         'masked.var',
     }
 
+<<<<<<< HEAD
+=======
+    dirname = os.path.dirname(__file__)
+    filename = os.path.join(dirname, "cuda_results.yaml")
+    with open(filename) as f:
+        data = yaml.safe_load(f)
+    CUDA_RESULT = dict()
+    for key, value in data.items():
+        CUDA_RESULT[key] = torch.as_tensor(value)
+
+    MPS_SKIP_LIST = reduce(lambda x, y: dict(x, **y), (
+        FAST_MATH_PRECISION_ISSUES, BLOCKLIST, UNDEFINED_BEHAVIOUR, EXPECTED_FAILURES, UNIMPLEMENTED_OPS))
+
+>>>>>>> a6b4bc54f83 (Enable MPS CI runners (#252))
     # Used for accept mode only
     NEW_ALLOW_LIST = defaultdict(list)
     NEW_ALLOW_LIST_GRAD = defaultdict(list)
@@ -9930,8 +10388,16 @@ class TestConsistency(TestCaseMPS):
                 self.assertEqual(cpu_out, mps_out, atol=atol, rtol=rtol)
 
             except Exception as e:
+<<<<<<< HEAD
                 if any(s in str(e).lower() for s in ["int64", "macos 13", "adaptive pool mps"]):
                     self.skipTest(f"Expected Runtime Error: {str(e)}")
+=======
+                if any(s in str(e).lower() for s in ["int64", "macos 13"]):
+                    self.skipTest(f"{str(e)}")
+
+                if op.name in self.CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
+                    continue
+>>>>>>> a6b4bc54f83 (Enable MPS CI runners (#252))
 
                 if not generate_new_truth:
                     raise e

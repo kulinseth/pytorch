@@ -5,9 +5,6 @@ on:
   push:
     branches:
       - master
-      - main
-      - release/*
-      - landchecks/*
   workflow_dispatch:
 
 # The names of steps that actually test the code should be suffixed with `(nonretryable)`.
@@ -250,6 +247,72 @@ jobs:
         run: |
           # All we need to see is that it passes
           python3 torch/utils/collect_env.py
+
+    runs-on: macos-m1-12
+    steps:
+      - name: Checkout PyTorch
+        uses: pytorch/pytorch/.github/actions/checkout-pytorch@master
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      - name: Setup miniconda
+        uses: pytorch/test-infra/.github/actions/setup-miniconda@main
+        with:
+          python-version: 3.9
+          environment-file: .github/requirements/conda-env-${{ runner.os }}-${{ runner.arch }}
+          # pip-requirements-file: .github/requirements/pip-requirements-${{ runner.os }}.txt
+
+      - name: Install requirements
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          ${CONDA_RUN} python3 -m pip install --force-reinstall -r .github/requirements-gha-cache.txt
+
+      - name: Initialize lint dependencies
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          ${CONDA_RUN} lintrunner init
+
+      - name: Do build steps necessary for linters
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          ${CONDA_RUN} python3 -m tools.linter.clang_tidy.generate_build_files
+          ${CONDA_RUN} python3 -m tools.generate_torch_version --is_debug=false
+          ${CONDA_RUN} python3 -m tools.pyi.gen_pyi \
+            --native-functions-path aten/src/ATen/native/native_functions.yaml \
+            --tags-path aten/src/ATen/native/tags.yaml \
+            --deprecated-functions-path "tools/autograd/deprecated.yaml"
+
+      - name: Run lintrunner on all MPS files (nonretryable)
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          set +e
+          if ! ${CONDA_RUN} lintrunner --force-color aten/src/ATen/native/mps/operations/* test/test_mps.py; then
+              echo ""
+              echo -e "\e[1m\e[36mYou can reproduce these results locally by using \`lintrunner\`.\e[0m"
+              echo -e "\e[1m\e[36mSee https://github.com/pytorch/pytorch/wiki/lintrunner for setup instructions.\e[0m"
+              exit 1
+          fi
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}-${{ github.event_name == 'workflow_dispatch' }}
