@@ -29,8 +29,9 @@ jobs:
       - name: Install requirements
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
         run: |
-          ${CONDA_RUN} pip install -r .github/requirements-gha-cache.txt --user
+          ${CONDA_RUN} python3 -mpip install pip install -r .github/requirements-gha-cache.txt --user
 
       - name: Initialize lint dependencies
         env:
