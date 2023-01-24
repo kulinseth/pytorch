@@ -19,15 +19,12 @@ jobs:
           submodules: false
           fetch-depth: 1
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: Setup miniconda
+        uses: pytorch/test-infra/.github/actions/setup-miniconda@main
         with:
-          python-version: '3.8'
-          architecture: arm64
-          check-latest: false
-          cache: pip
-          cache-dependency-path: |
-            **/.github/requirements-gha-cache.txt
+          python-version: 3.9
+          environment-file: .github/requirements/conda-env-${{ runner.os }}-${{ runner.arch }}
+          pip-requirements-file: .github/requirements/pip-requirements-${{ runner.os }}.txt
 
       - name: Install requirements
         run: |
@@ -82,7 +79,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.x'
+          python-version: '3.9'
           architecture: arm64
           check-latest: false
           cache: pip
