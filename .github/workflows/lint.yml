@@ -70,7 +70,7 @@ jobs:
           # shellcheck disable=SC1090
           set -ex
           set +e
-          if ! ${CONDA_RUN} lintrunner --force-color aten/src/ATen/native/mps/operations/* test/test_mps.py --tee-json=lint.json; then
+          if ! ${CONDA_RUN} lintrunner --force-color aten/src/ATen/native/mps/operations/* test/test_mps.py; then
               echo ""
               echo -e "\e[1m\e[36mYou can reproduce these results locally by using \`lintrunner\`.\e[0m"
               echo -e "\e[1m\e[36mSee https://github.com/pytorch/pytorch/wiki/lintrunner for setup instructions.\e[0m"
@@ -86,57 +86,6 @@ jobs:
           jq --raw-output \
             '"::\(if .severity == "advice" or .severity == "disabled" then "warning" else .severity end) file=\(.path),line=\(.line),col=\(.char),title=\(.code) \(.name)::" + (.description | gsub("\\n"; "%0A"))' \
             lint.json
-
-  quick-checks:
-    name: quick-checks
-    runs-on: macos-m1-12
-    steps:
-      # [see note: pytorch repo ref]
-      - name: Checkout PyTorch
-        uses: pytorch/pytorch/.github/actions/checkout-pytorch@master
-        with:
-          submodules: false
-          fetch-depth: 1
-      - name: Clean PyTorch checkout
-        run: |
-          # Remove any artifacts from the previous checkouts
-          git clean -fxd
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.9'
-          architecture: arm64
-          check-latest: false
-          cache: pip
-          cache-dependency-path: |
-            **/requirements.txt
-      - name: Install requirements
-        id: requirements
-        run: pip install -r requirements.txt --user
-      - name: Ensure no non-breaking spaces
-        if: always()
-        run: |
-          # NB: We use 'printf' below rather than '\u000a' since bash pre-4.2
-          # does not support the '\u000a' syntax (which is relevant for local linters)
-          (! git --no-pager grep -In "$(printf '\xC2\xA0')" -- . || (echo "The above lines have non-breaking spaces (U+00A0); please convert them to spaces (U+0020)"; false))
-      - name: Ensure cross-OS compatible file names (nonretryable)
-        if: always()
-        run: |
-          (! git ls-files | grep -E '([<>:"|?*]|[ .]$)' || (echo "The above file names are not valid across all operating systems. Please ensure they don't contain the characters '<>:""|?*' and don't end with a white space or a '.' "; false))
-      - name: Ensure no versionless Python shebangs (nonretryable)
-        if: always()
-        run: |
-          (! git --no-pager grep -In '#!.*python$' -- . || (echo "The above lines have versionless Python shebangs; please specify either python2 or python3"; false))
-      - name: C++ docs check (nonretryable)
-        if: ${{ always() && steps.requirements.outcome == 'success' }}
-        run: |
-          sudo apt-get install -y doxygen
-          cd docs/cpp/source && ./check-doxygen.sh
-      - name: CUDA kernel launch check (nonretryable)
-        if: ${{ always() && steps.requirements.outcome == 'success' }}
-        run: |
-          set -eux
-          python torch/testing/_internal/check_kernel_launches.py |& tee "${GITHUB_WORKSPACE}"/cuda_kernel_launch_checks.txt
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}-${{ github.event_name == 'workflow_dispatch' }}
