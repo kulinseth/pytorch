@@ -15,6 +15,7 @@ struct MPSHooks : public at::MPSHooksInterface {
   bool hasMPS() const override;
   Allocator* getMPSDeviceAllocator() const override;
   const Generator& getDefaultMPSGenerator() const override;
+  void deviceSynchronize() const override;
 };
 
 }} // at::mps
