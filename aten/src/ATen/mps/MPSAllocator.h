@@ -287,6 +287,9 @@ public:
   // returns the device that we allocate from
   inline id<MTLDevice> Device() const { return m_device; }
 
+  // TODO: make a common function to do size unit conversions in PyTorch.
+  inline std::string format_size(uint64_t size) const;
+
 private:
   // (see m_high_watermark_ratio for description)
   constexpr static double default_high_watermark_ratio = 1.7;
@@ -372,18 +375,6 @@ private:
     for (const auto& name : MPSAllocatorCallbacksRegistry()->Keys()) {
       MPSAllocatorCallbacksRegistry()->Create(name)->executeMPSAllocatorCallback(buffer_block->buffer, event);
     }
-  }
-
-  // TODO: make a common function to do size unit conversions in PyTorch.
-  static std::string format_size(uint64_t size) {
-    std::ostringstream os;
-    os.precision(2);
-    os << std::fixed;
-    if (size <= 1024UL) { os << size << " bytes"; }
-    else if (size <= 1048576UL) { os << ((float) size / 1024.0) << " KB"; }
-    else if (size <= 1073741824UL) { os << ((float) size / 1048576.0) << " MB"; }
-    else { os << ((float) size / 1073741824.0) << " GB"; }
-    return os.str();
   }
 };
 
