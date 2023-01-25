@@ -9787,8 +9787,7 @@ class TestConsistency(TestCase):
 
         key = op.name + op.variant_test_name
         if key in self.MPS_SKIP_LIST:
-            if self.MPS_SKIP_LIST[key] is None or dtype in self.MPS_SKIP_LIST[key]:
-                self.skipTest(self.get_error_message(key, op.name))
+            self.skipTest(self.get_error_message(key, op.name))
 
         # Make this an expecttest manually
         # When this env variable is set, generate a new ALLOWLIST_OP
