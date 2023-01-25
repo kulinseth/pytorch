@@ -4029,7 +4029,7 @@ class TestNLLLoss(TestCase):
     def test_divmode(self):
         def helper(shape, rounding_mode):
             for dtype in [torch.float32, torch.float16, torch.int32, torch.int64]:
-                if (rounding_mode != None and "floor" in rounding_mode and dtype == torch.int64) is not None:
+                if (rounding_mode != None and "floor" in rounding_mode and dtype == torch.int64) is None:
                     cpu_x = None
                     cpu_y = None
                     if (dtype in [torch.float32, torch.float16]):
