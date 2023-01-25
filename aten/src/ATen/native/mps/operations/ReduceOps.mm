@@ -1863,15 +1863,6 @@ Tensor median_mps(const Tensor& input_t) {
                                                   axis:((NSUInteger) (int)0)
                                                   name:nil];
 
-            // Cast back
-            dataType = [inputTensor dataType];
-            if (dataType != MPSDataTypeInt32 &&
-                dataType != MPSDataTypeFloat32 &&
-                dataType != MPSDataTypeFloat16) {
-                sortedTensor = [mpsGraph castTensor:sortedTensor
-                                        toType:dataType
-                                          name:@"castSortedTensor"];
-            }
             outputTensor = [mpsGraph sliceTensor:sortedTensor
                                                         dimension:0
                                                         start:((NSUInteger) (int)((num_in_elements+1)/2 ) - 1)
