@@ -2000,13 +2000,6 @@ void median_out_mps
                                                         length:1
                                                         name:nil];
 
-              dataType = native_mps::getMPSDataType(input_t.scalar_type());
-              if (dataType != MPSDataTypeInt64) {
-                  argreduceOutTensor = [mpsGraph castTensor:argreduceOutTensor
-                                          toType:MPSDataTypeInt64
-                                            name:@"castargargreduceOutTensor"];
-              }
-
               newCachedGraph->inputTensor_ = inputTensor;
               newCachedGraph->outputTensor_ = outputTensor;
               newCachedGraph->indicesTensor_ = argOutputTensor;
