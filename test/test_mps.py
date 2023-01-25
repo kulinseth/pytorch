@@ -5313,7 +5313,7 @@ class TestNLLLoss(TestCase):
 
         # for reduce in ["sum", "prod", "amax", "amin"]:
         for reduce_type in ["add", "multiply"]:
-            helper((2, 3), 0, (5, 3), (5, 3), reduce_str=reduce)
+            helper((2, 3), 0, (5, 3), (5, 3), reduce_str=reduce_type)
             helper((2, 8, 4, 5), 0, (10, 8, 4, 5), (10, 8, 4, 5), reduce_str=reduce_type)
             helper((8, 8, 4, 5), 0, (10, 8, 4, 5), (10, 8, 4, 5), reduce_str=reduce_type)
             helper((8, 8, 4, 5), 0, (4, 7, 3, 2), (4, 7, 3, 2), reduce_str=reduce_type)
