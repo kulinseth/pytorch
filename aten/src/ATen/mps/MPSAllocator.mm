@@ -39,6 +39,10 @@ void MPSHeapAllocatorImpl::setHighWatermarkRatio(double ratio)
   TORCH_CHECK(ratio >= 0.0 && ratio <= default_high_watermark_upper_bound, "invalid high watermark ratio ", ratio);
   m_max_total_allowed_size = (ratio == 0.0) ? std::numeric_limits<size_t>::max() :
                              static_cast<size_t>(ratio * (double)max_device_size());
+  if (m_debug_verbosity & DebugVerbosity::PROFILING) {
+    std::cerr << "\nHigh watermark memory allocation limit: "
+              << (ratio == 0.0 ? "unlimited" : format_size(m_max_total_allowed_size)) << "\n";
+  }
   m_high_watermark_ratio = ratio;
 }
 
@@ -50,6 +54,10 @@ void MPSHeapAllocatorImpl::setLowWatermarkRatio(double ratio)
   // we use this to detect if there's memory pressure
   m_low_watermark_limit = (ratio == 0.0) ? std::numeric_limits<size_t>::max() :
                           static_cast<size_t>(ratio * (double)max_device_size());
+  if (m_debug_verbosity & DebugVerbosity::PROFILING) {
+    std::cerr << "Low watermark memory allocation limit: "
+              << (ratio == 0.0 ? "unlimited" : format_size(m_low_watermark_limit)) << "\n";
+  }
   m_low_watermark_ratio = ratio;
 }
 
@@ -238,6 +246,7 @@ BufferBlock* MPSHeapAllocatorImpl::alloc_buffer_block(size_t size, uint32_t usag
   }
   buffer_block->in_use = true;
   buffer_block->use_count++;
+  m_current_allocated_memory += buffer_block->size;
 
   return buffer_block;
 }
@@ -252,6 +261,8 @@ void MPSHeapAllocatorImpl::free_buffer(BufferBlock* buffer_block)
   pool.available_size += buffer_block->size;
   buffer_block->shape.clear(); // reset shape
   buffer_block->in_use = false;
+  TORCH_INTERNAL_ASSERT_DEBUG_ONLY(m_current_allocated_memory >= buffer_block->size);
+  m_current_allocated_memory -= buffer_block->size;
 }
 
 BufferBlock* MPSHeapAllocatorImpl::get_allocated_buffer_block(void* ptr)
@@ -325,14 +336,17 @@ bool MPSHeapAllocatorImpl::release_buffer(BufferBlock* buffer_block, bool remove
 
 void MPSHeapAllocatorImpl::release_buffers(BufferPool& pool)
 {
-  if ((m_debug_verbosity & DebugVerbosity::PROFILING) && pool.n_buffers > 0) {
-    std::cerr << "Releasing " << pool.n_buffers
+  if (pool.buffers.empty()) {
+    return;
+  }
+  if ((m_debug_verbosity & DebugVerbosity::RELEASES)) {
+    std::cerr << "Releasing " << pool.buffers.size()
               << " buffers from "
               << ((pool.usage & UsageFlags::SMALL ) ? "small " : "large ")
               << ((pool.usage & UsageFlags::SHARED) ? "shared" : "private")
               << ((pool.usage & UsageFlags::SCALAR) ? " scalar" : "")
               << " pool (total size: " << format_size(pool.allocated_size)
-              << ", free buffers: " << pool.buffers.size() << ")\n";
+              << ", #buffers: " << pool.n_buffers << ")\n";
   }
   auto it = pool.buffers.begin();
   while (it != pool.buffers.end()) {
@@ -375,8 +389,10 @@ bool MPSHeapAllocatorImpl::release_available_cached_buffers(AllocParams& params)
 bool MPSHeapAllocatorImpl::release_cached_buffers()
 {
   if (m_debug_verbosity >= DebugVerbosity::PROFILING) {
-    std::cerr << "Releasing buffer pools (MPS allocated: " << format_size(m_total_allocated_memory)
-              << ", other allocations: " << format_size(current_allocated_size() - m_total_allocated_memory) << ")\n";
+    std::cerr << "Attempting to release cached buffers (MPS allocated: "
+              << format_size(m_total_allocated_memory)
+              << ", other allocations: "
+              << format_size(current_allocated_size() - m_total_allocated_memory) << ")\n";
   }
   // before releasing the buffers make sure the command buffer has finished.
   // we need to release the lock temporarily as synchronizing may cause deadlock with completion handlers.
@@ -567,20 +583,12 @@ public:
   {
     if (_getAllocImpl().getDebugVerbosity()) {
       if (!(m_usage & HeapAllocator::UsageFlags::SHARED) || m_has_unified_memory) {
-        const size_t high_watermark_limit = _getAllocImpl().getHighWatermarkLimit();
-        const size_t low_watermark_limit  = _getAllocImpl().getLowWatermarkLimit();
         std::cerr << "Initializing "
                   << ((m_usage & HeapAllocator::UsageFlags::SHARED) ? "shared" : "private")
                   << " heap allocator on "
                   << (m_has_unified_memory ? "unified" : "discrete")
                   << " device memory of size "
-                  << _getAllocImpl().Device().recommendedMaxWorkingSetSize / 1048576UL << " MB"
-                  << " (max allowed: "
-                  << (high_watermark_limit == std::numeric_limits<size_t>::max() ? "unlimited" :
-                     (to_string(high_watermark_limit / 1048576UL) + " MB"))
-                  << ", low watermark: "
-                  << (low_watermark_limit == std::numeric_limits<size_t>::max() ? "unlimited" :
-                     (to_string(low_watermark_limit / 1048576UL) + " MB"))  << ")\n";
+                  << _getAllocImpl().Device().recommendedMaxWorkingSetSize / 1048576UL << " MB\n";
       }
     }
   }
@@ -594,6 +602,8 @@ public:
     __block id<MTLBuffer> buf = nbytes > 0 ? _getAllocImpl().malloc(nbytes, m_usage) : nullptr;
     return { buf, buf, &Delete, at::Device(at::DeviceType::MPS, 0)};
   }
+
+  // implementation of IMPSAllocator interface
   DataPtr allocScalarBufferWithValue(void *value, size_t size) const override {
     id<MTLBuffer> buf = _getAllocImpl().allocScalarBufferWithValue(value, size);
     return { buf, buf, &Delete, at::Device(at::DeviceType::MPS, 0)};
@@ -603,8 +613,10 @@ public:
   void emptyCache() const override { _getAllocImpl().emptyCache(); }
   ssize_t getUnalignedBufferSize(void* ptr) const override { return _getAllocImpl().getUnalignedBufferSize(ptr); }
   IntArrayRef getBufferShape(void* ptr) const override { return _getAllocImpl().getBufferShape(ptr); }
-  void setBufferShape(void* ptr, const IntArrayRef& shape) override { _getAllocImpl().setBufferShape(ptr, shape); }
+  void setBufferShape(void* ptr, const IntArrayRef& shape) const override { _getAllocImpl().setBufferShape(ptr, shape); }
   size_t getTotalAllocatedMemory() const override { return _getAllocImpl().getTotalAllocatedMemory(); }
+  size_t getCurrentAllocatedMemory() const override { return _getAllocImpl().getCurrentAllocatedMemory(); }
+  size_t getDriverAllocatedMemory() const override { return _getAllocImpl().getDriverAllocatedMemory(); }
   ssize_t getLowWatermarkValue() const override { return _getAllocImpl().getLowWatermarkValue(); }
   size_t getLowWatermarkLimit() const override { return _getAllocImpl().getLowWatermarkLimit(); }
   size_t getHighWatermarkLimit() const override { return _getAllocImpl().getHighWatermarkLimit(); }
