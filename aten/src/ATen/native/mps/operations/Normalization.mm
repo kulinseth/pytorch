@@ -673,11 +673,24 @@ std::tuple<Tensor, Tensor, Tensor> batch_norm_backward_mps
 
           if(train) {
             // Use save_mean and save_var
+            float primary = 1.0f;
+            MPSGraphTensor *primaryTensor = [mpsGraph constantWithScalar:primary dataType:MPSDataTypeFloat32];
+            MPSGraphTensor *epsilonTensor = [mpsGraph constantWithScalar:(float)epsilon dataType:MPSDataTypeFloat32];
+            MPSGraphTensor *revertSaveVarTensor = saveVarTensor;
+            revertSaveVarTensor = [mpsGraph divisionWithPrimaryTensor: primaryTensor
+                                                      secondaryTensor: revertSaveVarTensor
+                                                                 name: nil];
+            revertSaveVarTensor = [mpsGraph multiplicationWithPrimaryTensor: revertSaveVarTensor
+                                                            secondaryTensor: revertSaveVarTensor
+                                                                       name: nil];
+            revertSaveVarTensor = [mpsGraph subtractionWithPrimaryTensor: revertSaveVarTensor
+                                                         secondaryTensor: epsilonTensor
+                                                                    name: nil];
             if(grad_input_mask[1]) {
               gradWeightTensor = [mpsGraph normalizationGammaGradientWithIncomingGradientTensor:gradOutputTensor
                                                                                    sourceTensor:inputTensor
                                                                                      meanTensor:saveMeanTensor
-                                                                                 varianceTensor:saveVarTensor
+                                                                                 varianceTensor:revertSaveVarTensor
                                                                                   reductionAxes:axes
                                                                                         epsilon:(float)epsilon
                                                                                            name:nil];
@@ -692,7 +705,7 @@ std::tuple<Tensor, Tensor, Tensor> batch_norm_backward_mps
               gradInputTensor = [mpsGraph normalizationGradientWithIncomingGradientTensor:gradOutputTensor
                                                                              sourceTensor:inputTensor
                                                                                meanTensor:saveMeanTensor
-                                                                           varianceTensor:saveVarTensor
+                                                                           varianceTensor:revertSaveVarTensor
                                                                               gammaTensor:weightTensor
                                                                       gammaGradientTensor:gradWeightTensor
                                                                        betaGradientTensor:gradBiasTensor
