@@ -5324,7 +5324,7 @@ class TestNLLLoss(TestCase):
 
         # for reduce in ["sum", "prod", "amax", "amin"]:
         for reduce_type in ["add", "multiply"]:
-            helper((2, 3), 0, (5, 3), (5, 3), reduce_str=reduce)
+            helper((2, 3), 0, (5, 3), (5, 3), reduce_str=reduce_type)
             helper((2, 8, 4, 5), 0, (10, 8, 4, 5), (10, 8, 4, 5), reduce_str=reduce_type)
             helper((8, 8, 4, 5), 0, (10, 8, 4, 5), (10, 8, 4, 5), reduce_str=reduce_type)
             helper((8, 8, 4, 5), 0, (4, 7, 3, 2), (4, 7, 3, 2), reduce_str=reduce_type)
@@ -9768,16 +9768,16 @@ class TestConsistency(TestCase):
     NEW_ALLOW_LIST = defaultdict(list)
     NEW_ALLOW_LIST_GRAD = defaultdict(list)
 
-    def get_error_message(self, key, op_name):
-        if key in self.FAST_MATH_PRECISION_ISSUES:
+    def get_error_message(self, key, op_name, dtype):
+        if key in self.FAST_MATH_PRECISION_ISSUES and dtype in self.FAST_MATH_PRECISION_ISSUES[key]:
             return f"Running test with {op_name} fails due to precision issues (fast math) so skipping"
-        elif key in self.BLOCKLIST:
+        elif key in self.BLOCKLIST and dtype in self.BLOCKLIST[key]:
             return f"Running test with {op_name} fails so skipping"
-        elif key in self.UNDEFINED_BEHAVIOUR:
+        elif key in self.UNDEFINED_BEHAVIOUR and dtype in self.UNDEFINED_BEHAVIOUR[key]:
             return f"Running test with {op_name} fails due to undefined behaviour / random output so skipping"
-        elif key in self.EXPECTED_FAILURES:
+        elif key in self.EXPECTED_FAILURES and dtype in self.EXPECTED_FAILURES[key]:
             return f"Running test with {op_name} expected to fail due to unsupported MPS data type so skipping"
-        elif key in self.UNIMPLEMENTED_OPS:
+        elif key in self.UNIMPLEMENTED_OPS and dtype in self.UNIMPLEMENTED_OPS[key]:
             return f"Running test with {op_name} expected to fail due to missing op implementation"
         return f"Running test with {op_name} hangs so skipping"
 
@@ -9798,8 +9798,7 @@ class TestConsistency(TestCase):
 
         key = op.name + op.variant_test_name
         if key in self.MPS_SKIP_LIST:
-            if self.MPS_SKIP_LIST[key] is None or dtype in self.MPS_SKIP_LIST[key]:
-                self.skipTest(self.get_error_message(key, op.name))
+            self.skipTest(self.get_error_message(key, op.name, dtype))
 
         # Make this an expecttest manually
         # When this env variable is set, generate a new ALLOWLIST_OP
@@ -9948,6 +9947,12 @@ class TestConsistency(TestCase):
 # Copied from `TestCommon` in `test_ops.py`, just enough to duplicate the `test_numpy_ref` for MPS
 @skipIfSlowGradcheckEnv
 class TestCommon(TestCase):
+
+    UNIMPLEMENTED_OPS = {
+        'aminmax': [torch.float32],
+        'roll': [torch.float32],
+    }
+
     exact_dtype = True
 
     # Verifies, on teardown, that no OpInfo is still using dynamic dtypes in CI
@@ -9978,6 +9983,10 @@ class TestCommon(TestCase):
     # MPS only supports float32
     @ops(_ref_test_ops, allowed_dtypes=(torch.float32,))
     def test_numpy_ref_mps(self, device, dtype, op):
+        key = op.name + op.variant_test_name
+        if key in self.UNIMPLEMENTED_OPS and dtype in self.UNIMPLEMENTED_OPS[key]:
+            self.skipTest(f"Running test with {op.name} expected to fail due to missing op implementation")
+
         # Unlike `test_numpy_ref`, this test compares in `float32` since at the time of this test's creation MPS
         # does not support float64 Tensors.
         # A few ops are currently broken on their reference inputs, but not their sample inputs. These should
