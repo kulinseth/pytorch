@@ -140,7 +140,7 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
                 threadsPerThreadgroup: threadGroupSize];
 
       [computeEncoder endEncoding];
-      mpsStream->commit(true);
+      mpsStream->synchronize(SyncType::COMMIT);
     }
   });
 
@@ -273,7 +273,8 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
   // }
   
 
-  // out_ = out_.contiguous();
+
+  stream->synchronize(SyncType::COMMIT_AND_WAIT);
   Tensor count_nonzero = at::empty({1}, self.options().dtype(kInt));
   Tensor out =  at::native::empty_mps(
            {self.numel(), nDim == 0 ? 1 : nDim},
