@@ -140,7 +140,7 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
                 threadsPerThreadgroup: threadGroupSize];
 
       [computeEncoder endEncoding];
-      mpsStream->commit(true);
+      mpsStream->synchronize(SyncType::COMMIT_AND_WAIT);
     }
   });
 
