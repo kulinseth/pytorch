@@ -9374,6 +9374,7 @@ class TestConsistency(TestCase):
         'zero_': ['f16', 'f32'],
         '_native_batch_norm_legit': ['f32'],
         'native_batch_norm': ['f32'],
+        'native_layer_norm': ['f32'],
     }
 
     # These ops that are problematic. So never run them even when
@@ -9884,6 +9885,9 @@ class TestConsistency(TestCase):
                 elif (op.name == "masked.mean"):
                     atol = 7e-4
                     rtol = 2e-3
+                elif (op.name == "native_layer_norm"):
+                    atol = 1e-4
+                    rtol = 1.3e-5
                 else:
                     atol = None
                     rtol = None
