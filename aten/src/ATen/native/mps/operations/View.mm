@@ -487,13 +487,17 @@ MPSGraphTensor* asStridedLayer_reshapeTransposePattern(MPSGraph *graph, MPSGraph
     }
 
     // Verify strides make sense
-    // Strides must be multiples of inner strides
     for (NSInteger i = dstRank - 2; i >= 0; i--) {
       NSInteger innerStride = [sortedTargetStrides[i + 1] integerValue];
       NSInteger outerStride = [sortedTargetStrides[i] integerValue];
-      if (outerStride % innerStride != 0) {
+      // Strides must be multiples of inner strides
+      if (outerStride % innerStride != 0)
         return nil;
-      }
+
+      // Strides must be at least inner stride * matching dim length
+      NSUInteger innerLength = dstSizes[[dimOrder[i + 1] integerValue]];
+      if (outerStride < innerStride * innerLength)
+        return nil;
     }
   }
 
