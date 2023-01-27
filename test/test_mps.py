@@ -2253,9 +2253,9 @@ class TestMPS(TestCase):
             # Test with axis -1
             cpu_x = None
             if(dtype == torch.float32):
-                cpu_x = torch.randn(10,3, device='cpu', dtype=torch.float32)
+                cpu_x = torch.randn(10, 3, device='cpu', dtype=torch.float32)
             else:
-                cpu_x = torch.randint(0, 20, (10,3), device='cpu', dtype=torch.float32)
+                cpu_x = torch.randint(0, 20, (10, 3), device='cpu', dtype=torch.float32)
             x = cpu_x.detach().clone().to('mps')
 
             cpu_y = cpu_x.cumsum(-1)
