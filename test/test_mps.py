@@ -9363,7 +9363,6 @@ class TestConsistency(TestCase):
 
         # Functions with correctness issues
         'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'divfloor_rounding': [torch.int16, torch.int32, torch.int64],
         'norm': [torch.float16],
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
         'cumulative_trapezoid': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
@@ -9373,7 +9372,6 @@ class TestConsistency(TestCase):
         'normalnumber_mean': [torch.float16, torch.float32],
         'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'multinomial': [torch.float32],
-        'floor_divide': [torch.int16, torch.int32, torch.int64],
         'dist': [torch.float16],
 
         # failure due to issue: atan2() may generate NAN in output with
