@@ -1847,6 +1847,17 @@ Tensor median_mps(const Tensor& input_t) {
             MPSGraphTensor * reshapedTensor = [mpsGraph reshapeTensor:inputTensor
                                                             withShape:@[@-1]
                                                                   name:nil];
+            MPSDataType dataType = [inputTensor dataType];
+            // #issue 104398441 sortWithTensor only supports following types, cast if necessary
+            if (dataType != MPSDataTypeInt32 &&
+                dataType != MPSDataTypeFloat32 &&
+                dataType != MPSDataTypeFloat16) {
+                dataType = (dataType & MPSDataTypeFloatBit) ? MPSDataTypeFloat32 : MPSDataTypeInt32;
+                reshapedTensor = [mpsGraph castTensor:reshapedTensor
+                                        toType:dataType
+                                          name:@"castReshapedTensor"];
+            }
+
             MPSGraphTensor * sortedTensor = [mpsGraph
                                                   sortWithTensor:reshapedTensor
                                                   axis:((NSUInteger) (int)0)
@@ -1934,7 +1945,7 @@ void median_out_mps
     auto stream = at::mps::getCurrentMPSStream();
 
     @autoreleasepool {
-        string key = func_name + ":" + to_string(dim_) + ":" + native_mps::getTensorsStringKey(input_t);
+        string key = func_name + ":" + to_string(dim_) + ":" + native_mps::getTensorsStringKey(input_t) + ":" + native_mps::getTensorsStringKey(indices_t);
         CachedGraph* cachedGraph = cache_->LookUpAs<CachedGraph>(key);
 
         if(!cachedGraph) {
@@ -1948,8 +1959,20 @@ void median_out_mps
 
               MPSGraphTensor* inputTensor = native_mps::mpsGraphUnrankedPlaceHolder(mpsGraph, native_mps::getMPSDataType(input_t.scalar_type()));
               MPSGraphTensor* outputTensor = nil;
+              MPSGraphTensor* castInputTensor = inputTensor;
+              MPSDataType dataType = native_mps::getMPSDataType(input_t.scalar_type());
+              // #issue 104398441 sortWithTensor only supports following types, cast if necessary
+              if (dataType != MPSDataTypeInt32 &&
+                  dataType != MPSDataTypeFloat32 &&
+                  dataType != MPSDataTypeFloat16) {
+                  dataType = (dataType & MPSDataTypeFloatBit) ? MPSDataTypeFloat32 : MPSDataTypeInt32;
+                  castInputTensor = [mpsGraph castTensor:inputTensor
+                                          toType:dataType
+                                            name:@"castInputTensor"];
+              }
+
               MPSGraphTensor * sortedTensor = [mpsGraph
-                                                  sortWithTensor:inputTensor
+                                                  sortWithTensor:castInputTensor
                                                   axis:((NSUInteger) (int)dim_)
                                                   name:nil];
 
@@ -1959,7 +1982,7 @@ void median_out_mps
                                                         length:1
                                                         name:nil];
               MPSGraphTensor* argreduceOutTensor = nil;
-                argreduceOutTensor = [mpsGraph argSortWithTensor:inputTensor
+                argreduceOutTensor = [mpsGraph argSortWithTensor:castInputTensor
                                                                         axis:(NSInteger)dim_
                                                                         name:@"argmax_out"];
               MPSGraphTensor* argOutputTensor = [mpsGraph sliceTensor:argreduceOutTensor
@@ -2038,7 +2061,7 @@ TORCH_API ::std::tuple<at::Tensor &,at::Tensor &> median_out_mps
     int64_t num_input_dims = input_shape.size();
     NSMutableArray<NSNumber*> *apparent_out_shape = nil;
     // Use this if keepdim is false
-    int64_t num_output_dims = num_input_dims - 1;
+    int64_t num_output_dims = num_input_dims - 1 < 0 ? 0 : num_input_dims - 1;
 
     std::vector<int64_t> vec_apparent_out_shape(num_input_dims);
     std::vector<int64_t> vec_out_shape(num_output_dims);
