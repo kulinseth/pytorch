@@ -9495,16 +9495,13 @@ class TestConsistency(TestCase):
         'linalg.inv': [torch.float32],
         'linalg.inv_ex': [torch.float32],
         'linalg.matrix_power': [torch.float32],
-        'nn.functional.interpolate': [torch.float32],
         'resize_': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'nn.functional.interpolatearea': [torch.float32],
         'resize_as_': [torch.float16, torch.float32],
         'topk': [torch.int16, torch.int32, torch.int64, torch.uint8],
 
         # Functions with correctness issues
         'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'divfloor_rounding': [torch.int16, torch.int32, torch.int64],
-        'divtrunc_rounding': [torch.float16],
         'norm': [torch.float16],
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
         'cumulative_trapezoid': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
@@ -9647,6 +9644,7 @@ class TestConsistency(TestCase):
         'nn.functional.fractional_max_pool3d': [torch.float32],
         'nn.functional.adaptive_avg_pool3d': [torch.float16, torch.float32],
         'nn.functional.adaptive_max_pool3d': [torch.float32],
+        'nn.functional.interpolatearea': [torch.float32],
         'nn.functional.interpolatebicubic': [torch.float32],
         'nn.functional.interpolatelinear': [torch.float32],
         'nn.functional.interpolatetrilinear': [torch.float32],
@@ -9895,7 +9893,7 @@ class TestConsistency(TestCase):
     }
 
     FP16_LOW_PRECISION_LIST = {
-        "add", "sub",
+        "add", "sub", "div",
         "__rdiv__", "__rmul__",
         "nn.functional.huber_loss",
         "true_divide"
