@@ -255,25 +255,6 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
     MPSGraphTensor* countNonzeroTensor_ = nil;
   };
 
-  // int64_t total_nonzero = at::count_nonzero(self).item<int64_t>();
-  // auto self_cpu = self.detach().clone().cpu();
-  // int64_t total_nonzero_cpu = at::count_nonzero(self_cpu).item<int64_t>();
-
-  // std::string s;
-  // if (total_nonzero != total_nonzero_cpu) {
-  //   s = std::to_string(total_nonzero) + string(" ") + std::to_string(total_nonzero_cpu) + " self(";
-  //   for (int i = 0; i < self.sizes().size(); i++) {
-  //     s += std::to_string(self.sizes()[i]) + ",";
-  //   }
-  //   s += ") ";
-  //   s += self.is_view() ? "view " : "not_view ";
-  //   s += self.is_contiguous() ? "contg" : "not_contg ";
-  //   std::cout << s << std::endl;
-  //   TORCH_CHECK(total_nonzero == total_nonzero_cpu, s.c_str());
-  // }
-  
-
-
   stream->synchronize(SyncType::COMMIT_AND_WAIT);
   Tensor count_nonzero = at::empty({1}, self.options().dtype(kInt));
   Tensor out =  at::native::empty_mps(
@@ -322,11 +303,9 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
           MPSGraphTensor *inputNotEqualToZeroTensor = [mpsGraph notEqualWithPrimaryTensor:inputTensor
                                                                           secondaryTensor:zeroTensor
                                                                                      name:nil];
-          
           MPSGraphTensor *countNonzero = [mpsGraph reductionSumWithTensor:inputNotEqualToZeroTensor
                                                          axis:0
                                                          name:nil];
-                                                          
           MPSGraphTensor *maskTensor = [mpsGraph castTensor:inputNotEqualToZeroTensor
                                                      toType:MPSDataTypeInt32
                                                        name:@"castToInt32"];
