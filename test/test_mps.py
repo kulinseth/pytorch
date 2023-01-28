@@ -9416,6 +9416,12 @@ class TestConsistency(TestCase):
         'nn.functional.avg_pool2d': [torch.float32, torch.int64],
         'nn.functional.adaptive_avg_pool1d': [torch.float32],
         'nn.functional.adaptive_avg_pool2d': [torch.float32],
+
+        # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
+        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        '__rpow__': [torch.int16, torch.int32,
+                     # Failure due to correctness issue
+                     torch.uint8, torch.int64],
     }
 
     UNIMPLEMENTED_OPS = {
@@ -9733,10 +9739,6 @@ class TestConsistency(TestCase):
         'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8],
-
-        # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
-        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
-        '__rpow__': [torch.int16, torch.int32],
     }
 
     UNDEFINED_BEHAVIOUR = {
