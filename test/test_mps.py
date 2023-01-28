@@ -9571,6 +9571,10 @@ class TestConsistency(TestCase):
         'nn.functional.avg_pool2d': [torch.float32, torch.int64],
         'nn.functional.adaptive_avg_pool1d': [torch.float32],
         'nn.functional.adaptive_avg_pool2d': [torch.float32],
+
+        # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
+        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        '__rpow__': [torch.int16, torch.int32, torch.uint8, torch.int64],
     }
 
     UNIMPLEMENTED_OPS = {
@@ -9888,10 +9892,6 @@ class TestConsistency(TestCase):
         'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8],
-
-        # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
-        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
-        '__rpow__': [torch.int16, torch.int32],
     }
 
     UNDEFINED_BEHAVIOUR = {
@@ -9969,7 +9969,7 @@ class TestConsistency(TestCase):
             return f"Running test with {op_name} expected to fail due to unsupported MPS data type so skipping"
         elif key in self.UNIMPLEMENTED_OPS and dtype in self.UNIMPLEMENTED_OPS[key]:
             return f"Running test with {op_name} expected to fail due to missing op implementation"
-        return f"Running test with {op_name} hangs so skipping"
+        return None
 
     def compare_with_CUDA(self, op, mps_out, atol, rtol):
         cuda_out = self.CUDA_RESULT[op.name]
@@ -9988,7 +9988,9 @@ class TestConsistency(TestCase):
 
         key = op.name + op.variant_test_name
         if key in self.MPS_SKIP_LIST:
-            self.skipTest(self.get_error_message(key, op.name, dtype))
+            msg = self.get_error_message(key, op.name, dtype)
+            if msg is not None:
+                self.skipTest(msg)
 
         # Make this an expecttest manually
         # When this env variable is set, generate a new ALLOWLIST_OP
