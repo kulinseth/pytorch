@@ -9419,9 +9419,7 @@ class TestConsistency(TestCase):
 
         # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
         'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
-        '__rpow__': [torch.int16, torch.int32,
-                     # Failure due to correctness issue
-                     torch.uint8, torch.int64],
+        '__rpow__': [torch.int16, torch.int32, torch.uint8, torch.int64],
     }
 
     UNIMPLEMENTED_OPS = {
