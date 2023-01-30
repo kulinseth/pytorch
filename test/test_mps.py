@@ -10285,7 +10285,7 @@ class TestConsistency(TestCase):
 
             if (op.name not in self.ALLOWLIST_OP_GRAD or dtype_abbrs[dtype] not in self.ALLOWLIST_OP_GRAD[op.name] or
                (op.name in self.BLOCKLIST_OP_GRAD and dtype_abbrs[dtype] in self.BLOCKLIST_OP_GRAD[op.name])):
-               run_grad_test = False
+                run_grad_test = False
 
         def get_samples():
             return op.sample_inputs(device, dtype, requires_grad=(dtype.is_floating_point or dtype.is_complex))
