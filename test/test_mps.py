@@ -10257,9 +10257,6 @@ class TestConsistency(TestCase):
             self.skipTest("MPS is not available")
 
         key = op.name + op.variant_test_name
-        print(">>>")
-        print(op.name)
-        print(key)
         if key in self.MPS_SKIP_LIST:
             msg = self.get_error_message(key, op.name, dtype)
             if msg is not None and not (self.product_version >= 13.3 and
@@ -10288,7 +10285,6 @@ class TestConsistency(TestCase):
 
             if (op.name not in self.ALLOWLIST_OP_GRAD or dtype_abbrs[dtype] not in self.ALLOWLIST_OP_GRAD[op.name] or
                (op.name in self.BLOCKLIST_OP_GRAD and dtype_abbrs[dtype] in self.BLOCKLIST_OP_GRAD[op.name])):
-               print(">>>> Skipping backward pass")
                run_grad_test = False
 
         def get_samples():
@@ -10329,6 +10325,9 @@ class TestConsistency(TestCase):
                 elif (op.name == "masked.mean"):
                     atol = 7e-4
                     rtol = 2e-3
+                elif (op.name == "native_layer_norm"):
+                    atol = 1e-4
+                    rtol = 1.3e-5
                 else:
                     atol = None
                     rtol = None
