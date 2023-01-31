@@ -192,6 +192,9 @@ TORCH_IMPL_FUNC(cat_out_mps)
        MemoryFormat memory_format,
        const Tensor& out) {
   using namespace mps;
+
+  memory_format = MemoryFormat::Contiguous;
+  
   if (out.numel() == 0) {
     return;
   }
