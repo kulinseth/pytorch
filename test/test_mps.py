@@ -16,6 +16,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import itertools
 import yaml
+import platform
 from collections import defaultdict
 from torch._six import inf
 from torch.nn import Parameter
@@ -9576,6 +9577,9 @@ class TestConsistency(TestCase):
         # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
         'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
         '__rpow__': [torch.int16, torch.int32, torch.uint8, torch.int64],
+
+        # failures before macOS 13.3
+        'nn.functional.conv_transpose2d': [torch.float32],
     }
 
     UNIMPLEMENTED_OPS = {
@@ -9944,6 +9948,16 @@ class TestConsistency(TestCase):
         "true_divide"
     }
 
+    BLOCKLIST_MACOS_12 = {
+        'nn.functional.conv_transpose2d': [torch.float32, torch.float16],
+    }
+
+    ALLOWLIST_MACOS_13_3 = {
+        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        '__rpow__': [torch.uint8],
+        'nn.functional.conv_transpose2d': [torch.float32],
+    }
+
     dirname = os.path.dirname(__file__)
     filename = os.path.join(dirname, "cuda_results.yaml")
     with open(filename) as f:
@@ -9959,6 +9973,8 @@ class TestConsistency(TestCase):
     NEW_ALLOW_LIST = defaultdict(list)
     NEW_ALLOW_LIST_GRAD = defaultdict(list)
 
+    product_version = float('.'.join(platform.mac_ver()[0].split('.')[:2]))
+
     def get_error_message(self, key, op_name, dtype):
         if key in self.FAST_MATH_PRECISION_ISSUES and dtype in self.FAST_MATH_PRECISION_ISSUES[key]:
             return f"Running test with {op_name} fails due to precision issues (fast math) so skipping"
@@ -9970,6 +9986,8 @@ class TestConsistency(TestCase):
             return f"Running test with {op_name} expected to fail due to unsupported MPS data type so skipping"
         elif key in self.UNIMPLEMENTED_OPS and dtype in self.UNIMPLEMENTED_OPS[key]:
             return f"Running test with {op_name} expected to fail due to missing op implementation"
+        elif self.product_version < 13.0 and key in self.BLOCKLIST_MACOS_12 and dtype in self.BLOCKLIST_MACOS_12[key]:
+            return f"Running test with {op_name} expected to fail on macOS 12"
         return None
 
     def compare_with_CUDA(self, op, mps_out, atol, rtol):
@@ -9989,6 +10007,11 @@ class TestConsistency(TestCase):
 
         key = op.name + op.variant_test_name
         if key in self.MPS_SKIP_LIST:
+            msg = self.get_error_message(key, op.name, dtype)
+            if msg is not None and not (self.product_version >= 13.3 and
+                                        key in self.ALLOWLIST_MACOS_13_3 and dtype in self.ALLOWLIST_MACOS_13_3[key]):
+                self.skipTest(msg)
+        if self.product_version < 13.0 and key in self.BLOCKLIST_MACOS_12:
             msg = self.get_error_message(key, op.name, dtype)
             if msg is not None:
                 self.skipTest(msg)
