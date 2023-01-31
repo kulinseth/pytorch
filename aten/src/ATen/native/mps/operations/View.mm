@@ -233,10 +233,8 @@ MPSGraphTensor* asStridedLayer_reshapePattern(MPSGraph *graph, MPSGraphTensor *i
 MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *inputTensor, int dstRank, const IntArrayRef& dstSizes, const IntArrayRef& dstStridesIn, int offset) {
   std::vector<long long> dstStrides(dstStridesIn.begin(), dstStridesIn.end());
   // Set stride to 0 for dimensions with length 1
-  {
-      for (NSInteger dstDim = 0; dstDim < dstRank; dstDim++) if (dstSizes[dstDim] == 1) {
-          dstStrides[dstDim] = 0;
-      }
+  for (NSInteger dstDim = 0; dstDim < dstRank; dstDim++) if (dstSizes[dstDim] == 1) {
+    dstStrides[dstDim] = 0;
   }
 
   // Duplicate strides cannot be done
@@ -318,7 +316,7 @@ MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *i
           if (outerSrcDim < 0)
               return nil;
 
-          NSMutableArray *reshapedShape = [[NSMutableArray alloc] initWithArray:[flatInputTensor shape]];
+          NSMutableArray *reshapedShape = [[[NSMutableArray alloc] initWithArray:[flatInputTensor shape]] autorelease];
           NSInteger mergedSize = [reshapedShape[srcDim] intValue] * [reshapedShape[outerSrcDim] intValue];
           reshapedShape[srcDim] = [NSNumber numberWithInt:mergedSize];
           [reshapedShape removeObjectAtIndex:outerSrcDim];
