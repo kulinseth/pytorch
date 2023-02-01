@@ -314,9 +314,12 @@ Tensor& addmm_out_mps_impl(
           MPSGraphTensor* productTimesAlphaTensor = [mpsGraph multiplicationWithPrimaryTensor:productTensor
                                                                               secondaryTensor:alphaTensor
                                                                                          name:@"MM/alpha*(mat1@mat2)"];
-          MPSGraphTensor* biasTimesBetaTensor = [mpsGraph multiplicationWithPrimaryTensor:biasTensor
-                                                                          secondaryTensor:betaTensor
-                                                                                     name:@"MM/beta*input"];
+          MPSGraphTensor* biasTimesBetaTensor = biasTensor;
+          if (beta.toDouble() != 0.0) {
+            biasTimesBetaTensor = [mpsGraph multiplicationWithPrimaryTensor:biasTensor
+                                                            secondaryTensor:betaTensor
+                                                                       name:@"MM/beta*input"];
+          }
 
           if (transpose_mat1_times_mat2)
             biasTimesBetaTensor = [mpsGraph transposeTensor: biasTimesBetaTensor
@@ -324,9 +327,12 @@ Tensor& addmm_out_mps_impl(
                                               withDimension: -2
                                                        name: nil];
 
-          MPSGraphTensor* outputTensor = [mpsGraph additionWithPrimaryTensor:productTimesAlphaTensor
-                                                             secondaryTensor:biasTimesBetaTensor
-                                                                        name:@"MM/beta*input + alpha*(mat1@mat2)"];
+          MPSGraphTensor* outputTensor = productTimesAlphaTensor;
+          if (beta.toDouble() != 0.0) {
+            outputTensor = [mpsGraph additionWithPrimaryTensor:productTimesAlphaTensor
+                                               secondaryTensor:biasTimesBetaTensor
+                                                          name:@"MM/beta*input + alpha*(mat1@mat2)"];
+           }
 
           newCachedGraph->selfTensor_ = selfTensor;
           newCachedGraph->otherTensor_ = otherTensor;
