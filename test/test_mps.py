@@ -10367,8 +10367,8 @@ class TestConsistency(TestCase):
                 self.assertEqual(cpu_out, mps_out, atol=atol, rtol=rtol)
 
             except Exception as e:
-                if any(s in str(e).lower() for s in ["int64", "macos 13"]):
-                    self.skipTest(f"{str(e)}")
+                if any(s in str(e).lower() for s in ["int64", "macos 13", "adaptive pool mps"]):
+                    self.skipTest(f"Expected Runtime Error: {str(e)}")
 
                 if op.name in CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
                     continue

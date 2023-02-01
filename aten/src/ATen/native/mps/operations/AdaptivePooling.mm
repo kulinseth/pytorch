@@ -6,8 +6,7 @@
 namespace at {
 namespace native {
 
-// returns true if we need to fallback to CPU implementation
-bool set_kernel_params
+void set_kernel_params
   (int64_t isizeH, int64_t isizeW,
    int64_t osizeH, int64_t osizeW,
    int64_t &strideH, int64_t &strideW,
@@ -19,27 +18,24 @@ bool set_kernel_params
               "or equal to, or lesser than output height and width")
 
   if(isizeH >= osizeH) {
-    if (check_avg_pooling && !(isizeH % osizeH == 0 && isizeW % osizeW == 0)) {
-      TORCH_WARN_ONCE("Adaptive pool MPS: input sizes must be divisible by output sizes. ",
-                      "Falling back on CPU. This may have performance implications.");
-      return true;
+    if (check_avg_pooling) {
+      TORCH_CHECK((isizeH % osizeH == 0 && isizeW % osizeW == 0),
+                   "Adaptive pool MPS: input sizes must be divisible by output sizes.");
     }
     strideH = (int64_t) (isizeH / osizeH);
     strideW = (int64_t) (isizeW / osizeW);
     kernel_sizeH = isizeH - (osizeH-1) * strideH;
     kernel_sizeW = isizeW - (osizeW-1) * strideW;
   } else {
-    if (check_avg_pooling && !(osizeH % isizeH == 0 && osizeW % isizeW == 0)) {
-      TORCH_WARN_ONCE("Adaptive pool MPS: output sizes must be divisible by input sizes. ",
-                      "Falling back on CPU. This may have performance implications.");
-      return true;
+    if (check_avg_pooling) {
+      TORCH_CHECK((osizeH % isizeH == 0 && osizeW % isizeW == 0),
+                  "Adaptive pool MPS: output sizes must be divisible by input sizes.");
     }
     strideH = (int64_t) (osizeH / isizeH);
     strideW = (int64_t) (osizeW / isizeW);
     kernel_sizeH = osizeH - (isizeH-1) * strideH;
     kernel_sizeW = osizeW - (isizeW-1) * strideW;
   }
-  return false;
 }
 
 // Adaptive average pooling
@@ -62,14 +58,10 @@ Tensor& adaptive_avg_pool2d_out_mps
   int64_t strideH = 0, strideW = 0;
   int64_t kernel_sizeH = 0, kernel_sizeW = 0;
 
-  bool needsFallback = set_kernel_params(isizeH, isizeW,
-                                         osizeH, osizeW,
-                                         strideH, strideW,
-                                         kernel_sizeH, kernel_sizeW, true);
-  if (needsFallback) {
-    const_cast<Tensor&>(output) = at::adaptive_avg_pool2d(input.to("cpu"), output_size).clone().to("mps");
-    return output;
-  }
+  set_kernel_params(isizeH, isizeW,
+                    osizeH, osizeW,
+                    strideH, strideW,
+                    kernel_sizeH, kernel_sizeW, true);
 
   if(isizeH >= osizeH) {
     output =  at::avg_pool2d(input,
@@ -151,16 +143,14 @@ Tensor adaptive_avg_pool2d_backward_mps
   int64_t osizeH = gradOutput.size(-2);
   int64_t osizeW = gradOutput.size(-1);
 
-  int64_t strideH = 0, strideW = 0, kernel_sizeH = 0, kernel_sizeW = 0;
+  int64_t strideH = 0, strideW = 0;
+  int64_t kernel_sizeH = 0, kernel_sizeW = 0;
 
-  bool needsFallback = set_kernel_params(isizeH, isizeW,
-                                         osizeH, osizeW,
-                                         strideH, strideW,
-                                         kernel_sizeH, kernel_sizeW, true);
-  if (needsFallback) {
-    return at::_adaptive_avg_pool2d_backward(gradOutput.to("cpu"),
-                                             input.to("cpu")).clone().to("mps");
-  }
+  set_kernel_params(isizeH, isizeW,
+                    osizeH, osizeW,
+                    strideH, strideW,
+                    kernel_sizeH, kernel_sizeW, true);
+
   auto gradInput = at::zeros_like(input, LEGACY_CONTIGUOUS_MEMORY_FORMAT);
   if (gradInput.numel() != 0) {
     if(isizeH >= osizeH) {
