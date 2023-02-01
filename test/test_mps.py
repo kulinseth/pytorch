@@ -9867,11 +9867,6 @@ class TestConsistency(TestCase):
         'grid_sampler_2d': [torch.float32],
         'nn.functional.grid_sample': [torch.float32],
 
-        # failures due to issue #103039644: Wrong results from avgPooling2DWithSourceTensor()
-        # when both ceilMode and includeZeroPadToAverage are True
-        'nn.functional.adaptive_avg_pool1d': [torch.float32],
-        'nn.functional.adaptive_avg_pool2d': [torch.float32],
-
         # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
         'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
         '__rpow__': [torch.uint8],

@@ -1,49 +1,48 @@
 //  Copyright © 2022 Apple Inc.
 
-#include <ATen/ATen.h>
-#include <ATen/Tensor.h>
-#include <ATen/Utils.h>
-#include <ATen/TensorUtils.h>
-#include <ATen/mps/MPSStream.h>
 #include <ATen/native/mps/OperationUtils.h>
 #include <ATen/native/Pool.h>
-#include <torch/library.h>
 
 namespace at {
 namespace native {
 
-
-void set_kernel_params
+// returns true if we need to fallback to CPU implementation
+bool set_kernel_params
   (int64_t isizeH, int64_t isizeW,
    int64_t osizeH, int64_t osizeW,
    int64_t &strideH, int64_t &strideW,
-   int64_t &kernel_sizeH, int64_t &kernel_sizeW) {
+   int64_t &kernel_sizeH, int64_t &kernel_sizeW,
+   bool check_avg_pooling = false) {
 
   TORCH_CHECK((isizeH >= osizeH && isizeW >= osizeW) || (isizeH <= osizeH && isizeW <= osizeW),
-              "Adaptive pool MPS: Input height and width must both be greather than or equal to, or lesser than, output height and width")
-
-  TORCH_CHECK((!(isizeH <= osizeH && isizeW <= osizeW) || (osizeH % isizeH == 0 && osizeW % isizeW == 0)),
-              "Adaptive pool MPS: If output is larger than input, output sizes must be multiples of input sizes")
+              "Adaptive pool MPS: Input height and width must both be greater than, "
+              "or equal to, or lesser than output height and width")
 
   if(isizeH >= osizeH) {
+    if (check_avg_pooling && !(isizeH % osizeH == 0 && isizeW % osizeW == 0)) {
+      TORCH_WARN_ONCE("Adaptive pool MPS: input sizes must be divisible by output sizes. ",
+                      "Falling back on CPU. This may have performance implications.");
+      return true;
+    }
     strideH = (int64_t) (isizeH / osizeH);
     strideW = (int64_t) (isizeW / osizeW);
-
     kernel_sizeH = isizeH - (osizeH-1) * strideH;
     kernel_sizeW = isizeW - (osizeW-1) * strideW;
-  }
-  else {
+  } else {
+    if (check_avg_pooling && !(osizeH % isizeH == 0 && osizeW % isizeW == 0)) {
+      TORCH_WARN_ONCE("Adaptive pool MPS: output sizes must be divisible by input sizes. ",
+                      "Falling back on CPU. This may have performance implications.");
+      return true;
+    }
     strideH = (int64_t) (osizeH / isizeH);
     strideW = (int64_t) (osizeW / isizeW);
-
     kernel_sizeH = osizeH - (isizeH-1) * strideH;
     kernel_sizeW = osizeW - (isizeW-1) * strideW;
   }
-
+  return false;
 }
 
 // Adaptive average pooling
-
 Tensor& adaptive_avg_pool2d_out_mps
   (const Tensor& input,
    IntArrayRef output_size,
@@ -52,40 +51,25 @@ Tensor& adaptive_avg_pool2d_out_mps
   for (int64_t i = 1; i < input.ndimension(); i++) {
     TORCH_CHECK(input.size(i) > 0,
       "adaptive_avg_pool2d(): Expected input to have non-zero size for non-batch dimensions, "
-      "but input has sizes ", input.sizes(), " with dimension ", i, " being "
-      "empty");
+      "but input has sizes ", input.sizes(), " with dimension ", i, " being empty");
   }
 
   int64_t isizeH = input.size(-2);
   int64_t isizeW = input.size(-1);
-
   int64_t osizeH = output_size[0];
   int64_t osizeW = output_size[1];
 
-  if(input.suggest_memory_format() == at::MemoryFormat::ChannelsLast)
-    TORCH_CHECK(input.ndimension() == 4,
-                    "adaptive_avg_pool2d(): Expected 4D tensor, but got ",
-                    input.sizes())
+  int64_t strideH = 0, strideW = 0;
+  int64_t kernel_sizeH = 0, kernel_sizeW = 0;
 
-  switch (input.suggest_memory_format()) {
-    case at::MemoryFormat::Contiguous:
-    case at::MemoryFormat::ChannelsLast:
-      break;
-    default:
-        TORCH_CHECK(
-          false,
-          "Unsupported memory format. Supports only ChannelsLast, Contiguous")
+  bool needsFallback = set_kernel_params(isizeH, isizeW,
+                                         osizeH, osizeW,
+                                         strideH, strideW,
+                                         kernel_sizeH, kernel_sizeW, true);
+  if (needsFallback) {
+    const_cast<Tensor&>(output) = at::adaptive_avg_pool2d(input.to("cpu"), output_size).clone().to("mps");
+    return output;
   }
-
-  int64_t strideH;
-  int64_t strideW;
-  int64_t kernel_sizeH;
-  int64_t kernel_sizeW;
-
-  set_kernel_params(isizeH, isizeW,
-                    osizeH, osizeW,
-                    strideH, strideW,
-                    kernel_sizeH, kernel_sizeW);
 
   if(isizeH >= osizeH) {
     output =  at::avg_pool2d(input,
@@ -162,46 +146,48 @@ Tensor adaptive_avg_pool2d_backward_mps
   (const Tensor& gradOutput,
    const Tensor& input) {
 
-    int64_t isizeH = input.size(-2);
-    int64_t isizeW = input.size(-1);
-    int64_t osizeH = gradOutput.size(-2);
-    int64_t osizeW = gradOutput.size(-1);
+  int64_t isizeH = input.size(-2);
+  int64_t isizeW = input.size(-1);
+  int64_t osizeH = gradOutput.size(-2);
+  int64_t osizeW = gradOutput.size(-1);
 
-    int64_t strideH, strideW, kernel_sizeH, kernel_sizeW;
+  int64_t strideH = 0, strideW = 0, kernel_sizeH = 0, kernel_sizeW = 0;
 
-    set_kernel_params(isizeH, isizeW,
-                      osizeH, osizeW,
-                      strideH, strideW,
-                      kernel_sizeH, kernel_sizeW);
-    auto gradInput = at::zeros_like(input, LEGACY_CONTIGUOUS_MEMORY_FORMAT);
-    if (gradInput.numel() != 0) {
-      if(isizeH >= osizeH) {
-        gradInput = at::avg_pool2d_backward(gradOutput,
-                                            input,
-                                            IntArrayRef({kernel_sizeH, kernel_sizeW}),
-                                            IntArrayRef({strideH, strideW}),
-                                            IntArrayRef({0, 0}),
-                                            false,
-                                            true,
-                                            c10::nullopt);
-      } else {
-        gradInput = at::avg_pool2d(gradOutput,
-                                   IntArrayRef({kernel_sizeH, kernel_sizeW}),
-                                   IntArrayRef({strideH, strideW}),
-                                   IntArrayRef({0, 0}),
-                                   false,
-                                   true,
-                                   c10::nullopt);
-        gradInput = at::mul(gradInput, kernel_sizeH*kernel_sizeW);
-      }
+  bool needsFallback = set_kernel_params(isizeH, isizeW,
+                                         osizeH, osizeW,
+                                         strideH, strideW,
+                                         kernel_sizeH, kernel_sizeW, true);
+  if (needsFallback) {
+    return at::_adaptive_avg_pool2d_backward(gradOutput.to("cpu"),
+                                             input.to("cpu")).clone().to("mps");
+  }
+  auto gradInput = at::zeros_like(input, LEGACY_CONTIGUOUS_MEMORY_FORMAT);
+  if (gradInput.numel() != 0) {
+    if(isizeH >= osizeH) {
+      gradInput = at::avg_pool2d_backward(gradOutput,
+                                          input,
+                                          IntArrayRef({kernel_sizeH, kernel_sizeW}),
+                                          IntArrayRef({strideH, strideW}),
+                                          IntArrayRef({0, 0}),
+                                          false,
+                                          true,
+                                          c10::nullopt);
+    } else {
+      gradInput = at::avg_pool2d(gradOutput,
+                                  IntArrayRef({kernel_sizeH, kernel_sizeW}),
+                                  IntArrayRef({strideH, strideW}),
+                                  IntArrayRef({0, 0}),
+                                  false,
+                                  true,
+                                  c10::nullopt);
+      gradInput = at::mul(gradInput, kernel_sizeH*kernel_sizeW);
     }
+  }
 
-    return gradInput;
-
+  return gradInput;
 }
 
 // Adaptive max pooling
-
 TORCH_IMPL_FUNC(adaptive_max_pool2d_out_mps)
   (const Tensor& input,
    IntArrayRef output_size,
@@ -217,44 +203,24 @@ TORCH_IMPL_FUNC(adaptive_max_pool2d_out_mps)
 
   int64_t isizeH = input.size(-2);
   int64_t isizeW = input.size(-1);
-
   int64_t osizeH = output_size[0];
   int64_t osizeW = output_size[1];
 
-  if(input.suggest_memory_format() == at::MemoryFormat::ChannelsLast)
-    TORCH_CHECK(input.ndimension() == 4,
-                    "adaptive_avg_pool2d(): Expected 4D tensor, but got ",
-                    input.sizes())
-
-  switch (input.suggest_memory_format()) {
-    case at::MemoryFormat::Contiguous:
-    case at::MemoryFormat::ChannelsLast:
-      break;
-    default:
-        TORCH_CHECK(
-          false,
-          "Unsupported memory format. Supports only ChannelsLast, Contiguous")
-  }
-
-  int64_t strideH;
-  int64_t strideW;
-  int64_t kernel_sizeH;
-  int64_t kernel_sizeW;
+  int64_t strideH = 0, strideW = 0;
+  int64_t kernel_sizeH = 0, kernel_sizeW = 0;
 
   set_kernel_params(isizeH, isizeW,
                     osizeH, osizeW,
                     strideH, strideW,
                     kernel_sizeH, kernel_sizeW);
 
-  auto outputs = at::max_pool2d_with_indices(input,
-                              IntArrayRef({kernel_sizeH, kernel_sizeW}),
-                              IntArrayRef({strideH, strideW}),
-                              IntArrayRef({0, 0}),
-                              IntArrayRef({1, 1}),
-                              false);
-
-  output.copy_(std::get<0>(outputs));
-  indices.copy_(std::get<1>(outputs));
+  at::max_pool2d_with_indices_out(const_cast<Tensor&>(output),
+                                  const_cast<Tensor&>(indices), input,
+                                  IntArrayRef({kernel_sizeH, kernel_sizeW}),
+                                  IntArrayRef({strideH, strideW}),
+                                  IntArrayRef({0, 0}),
+                                  IntArrayRef({1, 1}),
+                                  false);
 }
 
 TORCH_IMPL_FUNC(adaptive_max_pool2d_backward_out_mps)
@@ -268,25 +234,23 @@ TORCH_IMPL_FUNC(adaptive_max_pool2d_backward_out_mps)
   int64_t osizeH = gradOutput.size(-2);
   int64_t osizeW = gradOutput.size(-1);
 
-  int64_t strideH, strideW, kernel_sizeH, kernel_sizeW;
+  int64_t strideH = 0, strideW = 0;
+  int64_t kernel_sizeH = 0, kernel_sizeW = 0;
 
   set_kernel_params(isizeH, isizeW,
                     osizeH, osizeW,
                     strideH, strideW,
                     kernel_sizeH, kernel_sizeW);
 
-  auto returnGradInput = at::max_pool2d_with_indices_backward(gradOutput,
-                                                              input,
-                                                              IntArrayRef({kernel_sizeH, kernel_sizeW}),
-                                                              IntArrayRef({strideH, strideW}),
-                                                              IntArrayRef({0, 0}),
-                                                              IntArrayRef({1, 1}),
-                                                              false,
-                                                              indices);
-
-  gradInput.copy_(returnGradInput);
-
+  at::max_pool2d_with_indices_backward_out(const_cast<Tensor&>(gradInput),
+                                           gradOutput, input,
+                                           IntArrayRef({kernel_sizeH, kernel_sizeW}),
+                                           IntArrayRef({strideH, strideW}),
+                                           IntArrayRef({0, 0}),
+                                           IntArrayRef({1, 1}),
+                                           false,
+                                           indices);
 }
 
-}
-}
+} // namespace native
+} // namespace at
