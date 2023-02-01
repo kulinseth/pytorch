@@ -245,6 +245,7 @@ Tensor& addmm_out_mps_impl(
   bool transpose_mat1_times_mat2 = false;
   bool transpose_mat1            = false;
   bool transpose_mat2            = false;
+  bool is_beta_non_zero          = beta.toDouble() != 0.0;
 
   prepare_matrices_for_broadcasting(&(*bias_), self, other, &beta, &transpose_mat1_times_mat2, transpose_mat1, transpose_mat2);
 
@@ -315,7 +316,7 @@ Tensor& addmm_out_mps_impl(
                                                                               secondaryTensor:alphaTensor
                                                                                          name:@"MM/alpha*(mat1@mat2)"];
           MPSGraphTensor* biasTimesBetaTensor = biasTensor;
-          if (beta.toDouble() != 0.0) {
+          if (is_beta_non_zero) {
             biasTimesBetaTensor = [mpsGraph multiplicationWithPrimaryTensor:biasTensor
                                                             secondaryTensor:betaTensor
                                                                        name:@"MM/beta*input"];
@@ -328,7 +329,7 @@ Tensor& addmm_out_mps_impl(
                                                        name: nil];
 
           MPSGraphTensor* outputTensor = productTimesAlphaTensor;
-          if (beta.toDouble() != 0.0) {
+          if (is_beta_non_zero) {
             outputTensor = [mpsGraph additionWithPrimaryTensor:productTimesAlphaTensor
                                                secondaryTensor:biasTimesBetaTensor
                                                           name:@"MM/beta*input + alpha*(mat1@mat2)"];
