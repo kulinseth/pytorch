@@ -9795,19 +9795,8 @@ class TestConsistency(TestCase):
         'unfold': ['f16', 'f32'],
         'trace': ['f32'],
 
-        # Hard crash
-        'linalg.norm': ['f16'],
-        'linalg.norm_subgradients': ['f16'],
-        'max': ['f16', 'f32'],
-        'maximum': ['f16', 'f32'],
-        'min': ['f16', 'f32'],
-        'minimum': ['f16', 'f32'],
-        'nn.functional.linear': ['f32'],
-        'nn.functional.prelu': ['f32'],
-        'nn.functional.tanhshrink': ['f32'],
-        'sigmoid': ['f32'],
-
         # Correctness issues
+        'nn.functional.prelu': ['f32'],
         'nn.functional.conv_transpose2d': ['f32'],
         'atanh': ['f32'],
         'div': ['f16'],
