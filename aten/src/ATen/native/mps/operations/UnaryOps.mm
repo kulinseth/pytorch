@@ -311,11 +311,8 @@ TORCH_IMPL_FUNC(sgn_out_mps) (const Tensor& self, const Tensor& output)
 
   MPSDataType selfDataType = getMPSScalarType(self.scalar_type());
   // Workaround for `constantWithScalar` crashes due to unsupported bool data type
-  // The issue is fixed in macOS Ventura (13.0)
-  if (!is_macos_13_or_newer()) {
-     if (self.scalar_type() == kBool) {
-      selfDataType = MPSDataTypeInt8;
-     }
+  if (self.scalar_type() == kBool) {
+    selfDataType = MPSDataTypeInt8;
   }
 
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();

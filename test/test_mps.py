@@ -9827,7 +9827,6 @@ class TestConsistency(TestCase):
     # All the entries in this list should be removed
     BLOCKLIST = {
         # Functions that hard crash
-        'sgn': [torch.bool],
         'linalg.inv': [torch.float32],
         'linalg.inv_ex': [torch.float32],
         'linalg.matrix_power': [torch.float32],
