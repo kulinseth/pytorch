@@ -243,6 +243,15 @@ class TestAvgPool(TestCase):
 
 
 class TestMPS(TestCase):
+    def help_extra_unit(self, opname, op):
+        if opname not in OP_UNIT_TEST:
+            return
+        for test in OP_UNIT_TEST[opname]:
+            mps_args = test.sample()
+            mps_out = op(*mps_args)
+            mps_out = (mps_out, ) if isinstance(mps_out, torch.Tensor) else mps_out
+            self.assertEqual(test.expected(), mps_out)
+
     def test_exp(self, device="mps", dtype=torch.float):
         for v in (2, -2) + ((1j, 1 + 1j) if dtype.is_complex else ()):
             b = torch.arange(18, device="cpu") / 3 * math.pi
@@ -1101,6 +1110,8 @@ class TestMPS(TestCase):
         res = torch.norm(d[0, :, :]), torch.norm(d[1, :, :])
         res_cpu = torch.norm(d_cpu[0, :, :]), torch.norm(d_cpu[1, :, :])
         self.assertEqual(res, res_cpu)
+
+        self.help_extra_unit('norm', torch.norm)
 
     def test_layer_norm(self):
         # TODO: Test non-contiguous
@@ -8620,6 +8631,35 @@ MPS_DTYPES = get_all_dtypes()
 for t in [torch.double, torch.cdouble, torch.cfloat, torch.int8, torch.bfloat16]:
     del MPS_DTYPES[MPS_DTYPES.index(t)]
 
+abbrs_to_torch_dtype_dict = {value : key for (key, value) in dtype_abbrs.items()}
+class UnitTestSample:
+    def __init__(self, dtype, args, params, out):
+        requires_grad = (dtype.is_floating_point or dtype.is_complex)
+        self.args_ = [t.detach().to('mps').requires_grad_(requires_grad) for t in args]
+        self.params_ = params
+        self.out_ = out
+    def sample(self):
+        return self.args_ + self.params_
+    def expected(self):
+        return tuple(self.out_)
+
+CUDA_RESULT = dict()
+OP_UNIT_TEST = dict()
+dirname = os.path.dirname(__file__)
+filename = os.path.join(dirname, "cuda_results.yaml")
+with open(filename) as f:
+    data = yaml.safe_load(f)
+    for key,value in data['ConsistencyTest'].items():
+        CUDA_RESULT[key]= torch.as_tensor(value)
+    for key, samples in data['UnitTest'].items():
+        unit_tests = []
+        for sample in samples:
+            dtype = abbrs_to_torch_dtype_dict[sample['dtype']]
+            args = [torch.as_tensor(arg).to(dtype) for arg in sample['args']]
+            params = sample['params']
+            out = [torch.as_tensor(res).to(dtype) for res in sample['res']]
+            unit_tests.append(UnitTestSample(dtype, args, params, out))
+        OP_UNIT_TEST[key] = unit_tests
 
 class TestConsistency(TestCase):
     # TODO: This is only used while some ops are being added.
@@ -9943,7 +9983,6 @@ class TestConsistency(TestCase):
 
         # Functions with correctness issues
         'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'norm': [torch.float16],
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
         'cumulative_trapezoid': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'addr': [torch.float16],
@@ -10352,14 +10391,6 @@ class TestConsistency(TestCase):
         'nn.functional.conv_transpose2d': [torch.float32],
     }
 
-    dirname = os.path.dirname(__file__)
-    filename = os.path.join(dirname, "cuda_results.yaml")
-    with open(filename) as f:
-        data = yaml.safe_load(f)
-    CUDA_RESULT = dict()
-    for key, value in data.items():
-        CUDA_RESULT[key] = torch.as_tensor(value)
-
     MPS_SKIP_LIST = reduce(lambda x, y: dict(x, **y), (
         FAST_MATH_PRECISION_ISSUES, BLOCKLIST, UNDEFINED_BEHAVIOUR, EXPECTED_FAILURES, UNIMPLEMENTED_OPS))
 
@@ -10385,7 +10416,7 @@ class TestConsistency(TestCase):
         return None
 
     def compare_with_CUDA(self, op, mps_out, atol, rtol):
-        cuda_out = self.CUDA_RESULT[op.name]
+        cuda_out = CUDA_RESULT[op.name]
         try:
             self.assertEqual(cuda_out, mps_out, atol=atol, rtol=rtol)
         except Exception as e:
@@ -10476,6 +10507,9 @@ class TestConsistency(TestCase):
                 elif (op.name == "native_layer_norm"):
                     atol = 1e-4
                     rtol = 1.3e-5
+                elif op.name == "norm" and dtype == torch.float16:
+                    atol = 7e-4
+                    rtol = 1.5e-3
                 else:
                     atol = None
                     rtol = None
@@ -10486,7 +10520,7 @@ class TestConsistency(TestCase):
                 if any(s in str(e).lower() for s in ["int64", "macos 13"]):
                     self.skipTest(f"{str(e)}")
 
-                if op.name in self.CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
+                if op.name in CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
                     continue
 
                 if not generate_new_truth:
