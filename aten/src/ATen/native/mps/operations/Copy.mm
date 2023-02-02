@@ -92,14 +92,14 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool
   MPSStream* stream = getCurrentMPSStream();
   Tensor dst;
   Tensor src;
-  if (!dst_.is_contiguous(dst_mem_format) || (dst_mem != src_mem)) {
+  if (!dst_.is_contiguous(dst_mem_format) || (dst_mem_format != src_mem_format)) {
     dst = at::empty_like(dst_, LEGACY_CONTIGUOUS_MEMORY_FORMAT);
   } else {
     dst = dst_;
   }
 
   auto storage_byte_offset = src_.storage_offset() * src_.itemsize();
-  if (!src_.is_contiguous(src_mem) || (dst_mem != src_mem)) {
+  if (!src_.is_contiguous(src_mem_format) || (dst_mem_format != src_mem_format)) {
     Tensor emptyShell = Tensor();
     src = gatherViewTensor(src_, emptyShell);
     if (src.has_storage()) {
