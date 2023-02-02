@@ -959,26 +959,20 @@ TORCH_IMPL_FUNC(gelu_backward_out_mps) (
 }
 
 void elu_variants_out_mps (
-  const Tensor& self_,
+  const Tensor& self,
   const Scalar& alpha,
   const Scalar& scale,
   const Scalar& input_scale,
-  const Tensor& result_,
+  const Tensor& result,
   string func_name) {
 
   using namespace mps;
-  TORCH_CHECK(self_.is_mps());
+  bool executeGatherOp = self.suggest_memory_format() != result.suggest_memory_format();
 
-  auto self = self_;
-  self = self.to(MemoryFormat::Contiguous);
-
-  Tensor result = result_;
-  if (!result_.is_contiguous()) {
-    result = empty_like(result, MemoryFormat::Contiguous);
-  }
   // Empty output
-  if(result.numel() == 0)
+  if(result.numel() == 0) {
     return;
+  }
 
   struct CachedGraph : public MPSCachedGraph
   {
@@ -1059,8 +1053,8 @@ void elu_variants_out_mps (
       cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
 
-    Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self);
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result_.is_contiguous() ? result_ : result, nil, false);
+    Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self, nil, executeGatherOp);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result, nil, false);
 
     // Create dictionary of inputs and outputs
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
@@ -1072,10 +1066,7 @@ void elu_variants_out_mps (
     };
 
     runMPSGraph(stream, cachedGraph->graph(), feeds, results);
-    if (!result_.is_contiguous())
-      result_.copy_(result);
   }
-
 }
 
 // scale * (max(0, x) + min(0, alpha * (exp(input_scale * x) - 1) ))
@@ -1096,20 +1087,16 @@ TORCH_IMPL_FUNC(elu_backward_out_mps) (
   const Scalar& input_scale,
   bool is_result,
   const Tensor& self_or_result,
-  const Tensor& grad_input_
+  const Tensor& grad_input
 ) {
-
   using namespace mps;
-  TORCH_CHECK(grad_output.is_mps());
-
-  auto grad_input = grad_input_;
- if (!grad_input_.is_contiguous()){
-    grad_input = empty_like(grad_input_, MemoryFormat::Contiguous);
-  }
+  bool executeGatherOp = (grad_output.suggest_memory_format() != self_or_result.suggest_memory_format()) ||
+                         (grad_output.suggest_memory_format() != grad_input.suggest_memory_format());
 
   // Empty output
-  if(grad_input.numel() == 0)
+  if(grad_input.numel() == 0) {
     return;
+  }
 
   struct CachedGraph : public MPSCachedGraph
   {
@@ -1210,14 +1197,14 @@ TORCH_IMPL_FUNC(elu_backward_out_mps) (
       cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
 
-    Placeholder gradOutputPlaceholder = Placeholder(cachedGraph->gradOutputTensor_, grad_output);
+    Placeholder gradOutputPlaceholder = Placeholder(cachedGraph->gradOutputTensor_, grad_output, nil, executeGatherOp);
     Placeholder selfPlaceholder = Placeholder();
     Placeholder resultPlaceholder = Placeholder();
     if(is_result)
-      resultPlaceholder = Placeholder(cachedGraph->resultTensor_, self_or_result);
+      resultPlaceholder = Placeholder(cachedGraph->resultTensor_, self_or_result, nil, executeGatherOp);
     else
-      selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self_or_result);
-    Placeholder gradInputPlaceholder = Placeholder(cachedGraph->gradInputTensor_, grad_input_.is_contiguous() ? grad_input_ : grad_input, nil, false);
+      selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self_or_result, nil, executeGatherOp);
+    Placeholder gradInputPlaceholder = Placeholder(cachedGraph->gradInputTensor_, grad_input, nil, false);
 
     // Create dictionary of inputs and outputs
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = nil;
@@ -1238,9 +1225,6 @@ TORCH_IMPL_FUNC(elu_backward_out_mps) (
     };
 
     runMPSGraph(stream, cachedGraph->graph(), feeds, results);
-    if (!grad_input_.is_contiguous()) {
-      grad_input_.copy_(grad_input);
-    }
   }
 }
 

@@ -85,18 +85,21 @@ void copy_cast_mps(at::Tensor& dst, const at::Tensor& src,
 
 static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool non_blocking)
 {
+  auto dst_mem_format = dst_.suggest_memory_format();
+  auto src_mem_format = src_.suggest_memory_format();
+
   id<MTLDevice> device = MPSDevice::getInstance()->device();
   MPSStream* stream = getCurrentMPSStream();
   Tensor dst;
   Tensor src;
-  if (!dst_.is_contiguous()) {
+  if (!dst_.is_contiguous(dst_mem_format) || (dst_mem != src_mem)) {
     dst = at::empty_like(dst_, LEGACY_CONTIGUOUS_MEMORY_FORMAT);
   } else {
     dst = dst_;
   }
 
   auto storage_byte_offset = src_.storage_offset() * src_.itemsize();
-  if (!src_.is_contiguous()) {
+  if (!src_.is_contiguous(src_mem) || (dst_mem != src_mem)) {
     Tensor emptyShell = Tensor();
     src = gatherViewTensor(src_, emptyShell);
     if (src.has_storage()) {
