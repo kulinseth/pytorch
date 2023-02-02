@@ -420,6 +420,9 @@ TORCH_IMPL_FUNC(sigmoid_backward_out_mps)(
   using namespace mps;
   TORCH_CHECK(grad_input.is_mps());
 
+  if (grad_output.numel() == 0) {
+    return;
+  }
   struct CachedGraph : public MPSCachedGraph
   {
     CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
@@ -496,6 +499,9 @@ TORCH_IMPL_FUNC(tanh_backward_out_mps)(
   using namespace mps;
   TORCH_CHECK(grad_input.is_mps());
 
+  if (grad_output.numel() == 0) {
+    return;
+  }
   struct CachedGraph : public MPSCachedGraph
   {
     CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
@@ -1734,6 +1740,33 @@ std::tuple<Tensor, Tensor> prelu_backward_mps(const Tensor& grad_output, const T
 
     Tensor grad_input = at::empty_like(self, self.suggest_memory_format());
     Tensor weight_grad = at::empty_like(weight_, at::MemoryFormat::Contiguous);
+
+    if (grad_output.numel() == 0) {
+      return std::tuple<Tensor, Tensor>{grad_input, weight_grad};
+    }
+    TORCH_CHECK(
+      weight_.dim() == 1 || weight_.dim() == 0,
+      "prelu: Expected `weight` to be a scalar or 1D tensor, but got ndim = ", weight_.dim()
+    );
+
+    if (weight_num != 1) {
+      int64_t input_ndim = self.dim();
+      TORCH_CHECK(input_ndim > 0, "Not allow zero-dim input tensor.");
+
+      int64_t channel_size = 1; // channel_size default to 1
+      if (input_ndim > 1) {
+        channel_size = self.size(1); // channel is the 2nd dim of input
+      }
+      TORCH_CHECK(channel_size == weight_num,
+        "Mismatch of parameter numbers and input channel size. Found parameter numbers = ", weight_num,
+        " and channel size = ", channel_size, "."
+      );
+
+      for (const auto i : c10::irange(input_ndim)) {
+        if (i == 1) continue;
+        [reduce_dims addObject:[NSNumber numberWithInt:i]];
+      }
+    }
 
     struct CachedGraph : public MPSCachedGraph
     {
