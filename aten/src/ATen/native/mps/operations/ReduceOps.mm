@@ -1047,7 +1047,10 @@ TORCH_IMPL_FUNC(any_all_out_mps)(const Tensor& input_t, const Tensor& output_t)
 {
     namespace native_mps = at::native::mps;
     using CachedGraph = native_mps::MPSUnaryCachedGraph;
-    if (output_t.numel() == 0 || input_t.numel() == 0) {
+    if (input_t.numel() == 0) {
+      output_t.fill_(0);
+    }
+    else if (output_t.numel() == 0) {
       return;
     }
 
