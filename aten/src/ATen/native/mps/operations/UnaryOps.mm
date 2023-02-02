@@ -301,6 +301,12 @@ TORCH_IMPL_FUNC(sgn_out_mps) (const Tensor& self, const Tensor& output)
       realOutput = flatOutput;
     }
 
+    MPSDataType selfDataType = getMPSScalarType(self.scalar_type());
+    // Workaround for `constantWithScalar` crashes due to unsupported bool data type
+    if (self.scalar_type() == kBool) {
+      selfDataType = MPSDataTypeInt8;
+    }
+
     MPSGraphCache* cache_ = MPSGraphCache::getInstance();
     @autoreleasepool {
       string key = string("sgn_out_mps") + getTensorsStringKey({realInput}) + graphSuffix;

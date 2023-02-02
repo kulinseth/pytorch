@@ -9077,20 +9077,6 @@ class TestConsistency(TestCase):
         'masked.sum': [torch.bool],
 
         # Functions that hard crash
-        'std': [torch.float16],
-        'stft': [torch.float32], 'var': [torch.float16],
-        # + forward when requires_grad=True or running backward
-        'nn.functional.embedding': [torch.float32, torch.float16],
-        '__rpow__': [torch.int64],
-
-        'as_strided_scatter': [torch.uint8],
-        'atan2': [torch.int64],
-        'bfloat16': None,
-        'block_diag': [torch.uint8],
-        'byte': None,
-        'chalf': None,
-        'diag_embed': [torch.uint8],
-        'diagonal_scatter': [torch.uint8],
         'linalg.inv': [torch.float32],
         'long': None,
         'nn.functional.conv1d': [torch.int64],
