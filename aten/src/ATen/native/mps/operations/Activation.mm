@@ -417,6 +417,9 @@ TORCH_IMPL_FUNC(sigmoid_backward_out_mps)(
   using namespace mps;
   TORCH_CHECK(grad_input.is_mps());
 
+  if (grad_output.numel() == 0) {
+    return;
+  }
   struct CachedGraph : public MPSCachedGraph
   {
     CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
@@ -493,6 +496,9 @@ TORCH_IMPL_FUNC(tanh_backward_out_mps)(
   using namespace mps;
   TORCH_CHECK(grad_input.is_mps());
 
+  if (grad_output.numel() == 0) {
+    return;
+  }
   struct CachedGraph : public MPSCachedGraph
   {
     CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
@@ -1770,6 +1776,9 @@ std::tuple<Tensor, Tensor> prelu_backward_mps(const Tensor& grad_output, const T
     Tensor grad_input = at::empty_like(self, self.suggest_memory_format());
     Tensor weight_grad = at::empty_like(weight_, at::MemoryFormat::Contiguous);
 
+    if (grad_output.numel() == 0) {
+      return std::tuple<Tensor, Tensor>{grad_input, weight_grad};
+    }
     TORCH_CHECK(
       weight_.dim() == 1 || weight_.dim() == 0,
       "prelu: Expected `weight` to be a scalar or 1D tensor, but got ndim = ", weight_.dim()
