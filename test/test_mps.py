@@ -8503,8 +8503,10 @@ class UnitTestSample:
         self.args_ = [t.detach().to('mps').requires_grad_(requires_grad) for t in args]
         self.params_ = params
         self.out_ = out
+
     def sample(self):
         return self.args_ + self.params_
+
     def expected(self):
         return tuple(self.out_)
 
@@ -8514,8 +8516,8 @@ dirname = os.path.dirname(__file__)
 filename = os.path.join(dirname, "cuda_results.yaml")
 with open(filename) as f:
     data = yaml.safe_load(f)
-    for key,value in data['ConsistencyTest'].items():
-        CUDA_RESULT[key]= torch.as_tensor(value)
+    for key, value in data['ConsistencyTest'].items():
+        CUDA_RESULT[key] = torch.as_tensor(value)
     for key, samples in data['UnitTest'].items():
         unit_tests = []
         for sample in samples:
