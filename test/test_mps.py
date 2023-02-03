@@ -9805,7 +9805,6 @@ class TestConsistency(TestCase):
         'linalg.solve_triangular': ['f32'],
         'linalg.vector_norm': ['f16'],
         'nn.functional.bilinear': ['f32'],
-        'nn.functional.gelu': ['f32'],
         'nn.functional.layer_norm': ['f32'],
         'nn.functional.smooth_l1_loss': ['f32'],
         'std': ['f16'],
