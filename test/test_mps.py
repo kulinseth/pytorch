@@ -9855,7 +9855,7 @@ class TestConsistency(TestCase):
 
         # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
         'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
-        '__rpow__': [torch.int16, torch.int32, torch.uint8, torch.int64],
+        '__rpow__': [torch.uint8],
 
         # failures before macOS 13.3
         'nn.functional.conv_transpose2d': [torch.float32],
@@ -10199,6 +10199,8 @@ class TestConsistency(TestCase):
         'as_strided_scatter': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         # duplicate indices are used in the testcase - undefined behaviour
         'index_put': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        # problem 104760543, zero to negative integer powers are undefined
+        '__rpow__': [torch.int16, torch.int32, torch.int64],
     }
 
     FAST_MATH_PRECISION_ISSUES = {
