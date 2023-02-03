@@ -9807,7 +9807,6 @@ class TestConsistency(TestCase):
         'nn.functional.bilinear': ['f32'],
         'nn.functional.gelu': ['f32'],
         'nn.functional.layer_norm': ['f32'],
-        'nn.functional.smooth_l1_loss': ['f32'],
         'std': ['f16'],
         'triangular_solve': ['f32'],
         'var': ['f16'],
