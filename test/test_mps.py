@@ -9935,16 +9935,11 @@ class TestConsistency(TestCase):
         'nn.functional.conv_transpose2d': ['f32'],
         'atanh': ['f32'],
         'div': ['f16'],
-        'gradient': ['f16'],
-        'kron': ['f16'],
         'linalg.solve_triangular': ['f32'],
-        'linalg.vector_norm': ['f16'],
         'nn.functional.bilinear': ['f32'],
         'nn.functional.gelu': ['f32'],
         'nn.functional.layer_norm': ['f32'],
-        'std': ['f16'],
         'triangular_solve': ['f32'],
-        'var': ['f16'],
         'nn.functional.embedding': ['f16'],
 
         # Unsupported dtype
@@ -10360,10 +10355,12 @@ class TestConsistency(TestCase):
     }
 
     FP16_LOW_PRECISION_LIST = {
-        "add", "sub", "div",
-        "__rdiv__", "__rmul__",
-        "nn.functional.huber_loss",
-        "true_divide"
+        'add', 'sub', 'div',
+        '__rdiv__', '__rmul__',
+        'nn.functional.huber_loss',
+        'true_divide', 'kron',
+        'gradient', 'var', 'std',
+        'linalg.vector_norm',
     }
 
     BLOCKLIST_MACOS_12 = {
