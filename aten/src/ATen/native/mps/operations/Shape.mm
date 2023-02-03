@@ -256,9 +256,6 @@ TORCH_IMPL_FUNC(cat_out_mps)
               "torch.cat(): all input tensors and out must be on the same device, but inputs are on ",
               notSkippedTensor.device(), " and out is on ", out.device());
 
-  if (out.suggest_memory_format() == MemoryFormat::ChannelsLast) {
-    out.unsafeGetTensorImpl()->empty_tensor_restride(MemoryFormat::Contiguous);
-  }
   std::vector<int64_t> size(notSkippedTensor.sizes().vec());
 
   // Compute size of the result in the cat dimension
@@ -281,6 +278,19 @@ TORCH_IMPL_FUNC(cat_out_mps)
   }
   if (out.numel() == 0) {
     return;
+  }
+
+  if (memory_format !=  MemoryFormat::Contiguous) {
+    switch (dimension) {
+      case 0:
+        break;
+      case 1:
+        dimension = out.dim() - dimension;
+        break;
+      default:
+        dimension--;
+        break;
+    }
   }
 
   struct CachedGraph : public MPSCachedGraph {
@@ -333,8 +343,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
                                          toType:MPSDataTypeBool
                                            name:@"outputTensor"];
           }
-          newCachedGraph->outputTensor_ = memory_format == MemoryFormat::ChannelsLast ?
-                                         convertNHWCtoNCHW(mpsGraph, outputTensor) : outputTensor;
+          newCachedGraph->outputTensor_ = outputTensor;
         }
         return newCachedGraph;
       });
@@ -362,7 +371,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
       outputDataType = MPSDataTypeInt8;
     }
     Placeholder outputPlaceholder = Placeholder(
-      cachedGraph->outputTensor_, out, /*mpsShape=*/nil, /*gatherTensorData=*/false, outputDataType);
+      cachedGraph->outputTensor_, out, /*mpsShape=*/getMPSShape(out, memory_format), /*gatherTensorData=*/false, outputDataType);
 
     NSMutableDictionary *feeds = [[NSMutableDictionary new] autorelease];
     for (int i = 0; i < inputPlaceholders.size(); i++) {

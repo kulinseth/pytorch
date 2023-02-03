@@ -2186,6 +2186,7 @@ class TestMPS(TestCase):
             cpu_result = rotate_subset(data)
             mps_result = rotate_subset(mps_data)
             self.assertEqual(cpu_result, mps_result.to("cpu"))
+            self.assertEqual(cpu_result.is_contiguous(), mps_result.is_contiguous())
 
     # See https://github.com/pytorch/pytorch/issues/85967
     def test_from_numpy_non_contiguous(self):
@@ -10333,6 +10334,9 @@ class TestConsistency(TestCase):
                     rtol = None
 
                 self.assertEqual(cpu_out, mps_out, atol=atol, rtol=rtol)
+
+                if op.name in ["cat"]:
+                    self.assertEqual(cpu_out.is_contiguous(), mps_out.is_contiguous())
 
             except Exception as e:
                 if any(s in str(e).lower() for s in ["int64", "macos 13"]):
