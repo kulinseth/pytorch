@@ -52,6 +52,9 @@ std::string getArrayRefString(const IntArrayRef s);
 // use has_storage() on the returned tensor to determine if src actually is a view
 Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst);
 Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output, id<MTLBuffer> updatesBuffer = nil);
+Tensor& gatherScatterViewTensor(const at::Tensor& src, at::Tensor& output);
+Tensor gatherScatterView(const at::Tensor& src, at::Tensor& dst);
+
 bool canSliceViewTensor(const Tensor& src, MPSShape *mpsShape);
 MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mpsShape, const MPSDataType mpsDataType);
 
@@ -89,6 +92,33 @@ void resize_tensor(Tensor* output);
 MPSGraphTensor* trunc_tensor(MPSGraph* mpsGraph, MPSGraphTensor* inputTensor);
 MPSGraphTensor* convertNHWCtoNCHW(MPSGraph *mpsGraph, MPSGraphTensor* tensor);
 MPSGraphTensor* castMPSTensor(MPSGraph *mpsGraph, MPSGraphTensor* tensor, ScalarType toType);
+// Helper function to choose the kernel name for advanced indexing
+bool getIndexFunctionName(ScalarType scalar_type, std::string& indexFunctionName, bool index_select, bool accumulate);
+static std::string getMetalScalarType(ScalarType scalar_type) {
+  std::string res = "";
+  switch (scalar_type) {
+    case ScalarType::Float:
+      res = "float"; break;
+    case ScalarType::Half:
+      res = "half";  break;
+    case ScalarType::Long:
+      res = "long";  break;
+    case ScalarType::Int:
+      res = "float";   break;
+    case ScalarType::Short:
+      res = "half"; break;
+    case ScalarType::Char:
+      res = "char"; break;
+    case ScalarType::Byte:
+      res = "char"; break;
+    case ScalarType::Bool:
+      res = "char";  break;
+    default:
+      break;
+  }
+  return res;
+}
+
 MPSGraphTensorData *getMPSGraphTensorData(MPSGraph* mpsGraph, MPSStream* mpsStream, const Tensor& tensor);
 MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, MPSScalar& scalar);
 
