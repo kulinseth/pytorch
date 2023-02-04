@@ -9939,7 +9939,6 @@ class TestConsistency(TestCase):
         'div': ['f16'],
         'linalg.solve_triangular': ['f32'],
         'nn.functional.bilinear': ['f32'],
-        'nn.functional.layer_norm': ['f32'],
         'triangular_solve': ['f32'],
         'nn.functional.embedding': ['f16'],
 
