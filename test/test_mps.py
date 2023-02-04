@@ -9237,6 +9237,7 @@ class TestConsistency(TestCase):
         'trace': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'transpose': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'trapezoid': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'cumulative_trapezoid': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'trapz': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'triangular_solve': ['f32'],
         'tril': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -9829,7 +9830,6 @@ class TestConsistency(TestCase):
         # Functions with correctness issues
         'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
-        'cumulative_trapezoid': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'addr': [torch.float16],
         'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'trace': [torch.int64],
