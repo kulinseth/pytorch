@@ -7,21 +7,9 @@
 #include <torch/library.h>
 #include <ATen/mps/IndexKernels.h>
 
-#define ENABLE_LOG 0
-#define ENABLE_VIEW_KERNELS 1
-#define SHOW_NOT_SUPPORTED_VIEWS 0
-
-#define COMMIT_AND_CONTINUE   1
 namespace at {
 namespace native {
 namespace mps {
-
-
-enum class ScatterGatherOpViewType {
-  MTL_SCATTER,
-  MTL_GATHER,
-  MTL_GATHER_SCATTER
-};
 
 struct ViewCachedGraph : public MPSCachedGraph
 {
@@ -894,7 +882,6 @@ Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output, id<MTLBuffe
 
   return output;
 }
-
 
 } // namespace mps
 
