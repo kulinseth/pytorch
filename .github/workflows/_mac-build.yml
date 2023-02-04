@@ -106,6 +106,7 @@ jobs:
           environment-file: ${{ inputs.environment-file }}
 
       - name: Install macOS homebrew dependencies
+        if: ${{ runner.arch == 'X64' }}
         run: |
           # Install dependencies
           brew install libomp
