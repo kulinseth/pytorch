@@ -1928,6 +1928,15 @@ class TestMPS(TestCase):
             x_mps = x_cpu.to('mps')
             self.assertEqual(x_mps.to(torch.float32), x_cpu.to(torch.float32))
 
+    @unittest.skipIf(True, "non-contiguous tensor to mps is incorrect.")
+    def test_to_non_contiguous(self):
+        x = torch.arange(16, dtype=torch.float32).reshape(2, 2, 2, 2)
+        x1 = x[:, :, :1, :]
+        x2 = x[:, :, 1:, :]
+        self.assertFalse(x1.is_contiguous())
+        self.assertFalse(x2.is_contiguous())
+        self.assertEqual(x1, x1.detach().to("mps"))
+        self.assertEqual(x2, x2.detach().to("mps"))
 
     def test_setitem_scalar(self) -> None:
         device = 'mps'
