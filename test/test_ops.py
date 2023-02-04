@@ -1449,7 +1449,6 @@ class TestCompositeCompliance(TestCase):
     )
     @ops(op_db, allowed_dtypes=(torch.float,))
     def test_operator(self, device, dtype, op):
-        print(op.name)
         msg = self.get_mps_error_msg(device, dtype, op)
         if msg is not None:
             self.skipTest(msg)
@@ -1467,7 +1466,6 @@ class TestCompositeCompliance(TestCase):
     )
     @ops([op for op in op_db if op.supports_autograd], allowed_dtypes=(torch.float,))
     def test_backward(self, device, dtype, op):
-        print(op.name)
         msg = self.get_mps_error_msg(device, dtype, op)
         if msg is not None:
             self.skipTest(msg)
@@ -1489,7 +1487,6 @@ class TestCompositeCompliance(TestCase):
     )
     @ops(op_db, allowed_dtypes=(torch.float,))
     def test_forward_ad(self, device, dtype, op):
-        print(op.name)
         msg = self.get_mps_error_msg(device, dtype, op)
         if msg is not None:
             self.skipTest(msg)
