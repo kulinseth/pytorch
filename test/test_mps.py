@@ -4785,6 +4785,19 @@ class TestNLLLoss(TestCase):
         helper(torch.half, torch.long)
         helper(torch.float, torch.int)
 
+    def test_avg_pool2d_count_include_pad(self):
+        cpu_x = torch.randn((1, 3, 9, 9), device='cpu', dtype=torch.float, requires_grad=True)
+        x = cpu_x.detach().clone().to('mps').requires_grad_()
+        pool = torch.nn.AvgPool2d(kernel_size=(3, 3), padding=(1, 1), stride=(1, 1), ceil_mode=True, count_include_pad=True)
+        ref_y = pool(cpu_x)
+        y = pool(x)
+        self.assertEqual(y, ref_y)
+        cpu_grad = torch.randn(ref_y.shape)
+        grad = cpu_grad.to('mps')
+        ref_y.backward(gradient=cpu_grad)
+        y.backward(gradient=grad)
+        self.assertEqual(x.grad, cpu_x.grad)
+
     # Test adaptive avg pool2d - when the input size is a multiple of output size
     # Not testing for channels last right now
     def test_adaptive_avg_pool2d_simple(self):
@@ -9847,8 +9860,6 @@ class TestConsistency(TestCase):
 
         # failures due to issue #103039644: Wrong results from avgPooling2DWithSourceTensor()
         # when both ceilMode and includeZeroPadToAverage are True
-        'nn.functional.avg_pool1d': [torch.float32, torch.int64],
-        'nn.functional.avg_pool2d': [torch.float32, torch.int64],
         'nn.functional.adaptive_avg_pool1d': [torch.float32],
         'nn.functional.adaptive_avg_pool2d': [torch.float32],
 
@@ -9985,7 +9996,6 @@ class TestConsistency(TestCase):
         'nn.functional.avg_pool3d': [torch.float32, torch.int64],
         'nn.functional.ctc_loss': [torch.float32],
         'nn.functional.embedding_bag': [torch.float16, torch.float32],
-        'nn.functional.max_pool2d': [torch.float32],
         'nn.functional.hardshrink': [torch.float32],
         'nn.functional.hardsigmoid': [torch.float32],
         'nn.functional.logsigmoid': [torch.float32],
