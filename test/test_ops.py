@@ -18,6 +18,7 @@ from torch.testing import make_tensor
 from torch.testing._internal.common_dtype import (
     floating_and_complex_types_and,
     all_types_and_complex_and,
+    get_all_dtypes,
 )
 from test_proxy_tensor import xfail, skip, skipOps
 
@@ -59,6 +60,7 @@ from torch.testing._internal.common_device_type import (
     onlyCPU,
     onlyNativeDeviceTypes,
     OpDTypes,
+    skipMPSIf,
     skipMeta,
 )
 from torch._subclasses.fake_tensor import (
@@ -107,6 +109,11 @@ _ops_and_refs = op_db + python_ref_db
 _ops_and_refs_with_no_numpy_ref = [op for op in _ops_and_refs if op.ref is None]
 
 aten = torch.ops.aten
+
+
+MPS_DTYPES = get_all_dtypes()
+for t in [torch.double, torch.cdouble, torch.cfloat, torch.int8, torch.bfloat16]:
+    del MPS_DTYPES[MPS_DTYPES.index(t)]
 
 # Tests that apply to all operators and aren't related to any particular
 #   system
@@ -245,6 +252,7 @@ class TestCommon(TestCase):
     @onlyNativeDeviceTypes
     @suppress_warnings
     @ops(_ref_test_ops, allowed_dtypes=(torch.float64, torch.long, torch.complex128))
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_numpy_ref(self, device, dtype, op):
         # Sets the default dtype to NumPy's default dtype of double
         with set_default_dtype(torch.double):
@@ -291,6 +299,7 @@ class TestCommon(TestCase):
     @onlyNativeDeviceTypes
     @ops(python_ref_db)
     @skipIfTorchInductor("Takes too long for inductor")
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_python_ref_meta(self, device, dtype, op):
         with FakeTensorMode() as mode:
             pass
@@ -457,6 +466,7 @@ class TestCommon(TestCase):
     @onlyNativeDeviceTypes
     @ops(python_ref_db)
     @skipIfTorchInductor("Takes too long for inductor")
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_python_ref(self, device, dtype, op):
         # In this test, primTorch refs call into the refs namespace
         # For example, a ref with torch.foo in it will calls refs.foo instead
@@ -470,6 +480,7 @@ class TestCommon(TestCase):
     @onlyNativeDeviceTypes
     @ops(python_ref_db)
     @skipIfTorchInductor("Takes too long for inductor")
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_python_ref_torch_fallback(self, device, dtype, op):
         # In this test, refs call into the torch namespace (after the initial invocation)
         # For example, a ref with torch.foo in it will call torch.foo instead of refs.foo
@@ -532,6 +543,7 @@ class TestCommon(TestCase):
     @skipMeta
     @onlyNativeDeviceTypes
     @ops([op for op in op_db if op.error_inputs_func is not None], dtypes=OpDTypes.none)
+    @skipMPSIf(True, "Test crashes")
     def test_errors(self, device, op):
         error_inputs = op.error_inputs(device)
         for ei in error_inputs:
@@ -544,6 +556,7 @@ class TestCommon(TestCase):
     @onlyNativeDeviceTypes
     @ops([op for op in python_ref_db if op.error_inputs_func is not None], dtypes=OpDTypes.none)
     @skipIfTorchInductor("Takes too long for inductor")
+    @skipMPSIf(True, "Test crashes")
     def test_python_ref_errors(self, device, op):
         mode = FakeTensorMode()
         with mode:
@@ -570,6 +583,7 @@ class TestCommon(TestCase):
     @onlyNativeDeviceTypes
     @suppress_warnings
     @ops(op_db, allowed_dtypes=(torch.float32, torch.long, torch.complex64))
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_noncontiguous_samples(self, device, dtype, op):
         test_grad = dtype in op.supported_backward_dtypes(torch.device(device).type)
         sample_inputs = op.sample_inputs(device, dtype, requires_grad=test_grad)
@@ -659,6 +673,7 @@ class TestCommon(TestCase):
     # Cases test here:
     #   - out= with the correct dtype and device, but the wrong shape
     @ops(_ops_and_refs, dtypes=OpDTypes.none)
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_out_warning(self, device, op):
         # Prefers running in float32 but has a fallback for the first listed supported dtype
         supported_dtypes = op.supported_dtypes(self.device_type)
@@ -787,6 +802,7 @@ class TestCommon(TestCase):
     #   - if device, dtype are NOT passed, any combination of dtype/device should be OK for out
     #   - if device, dtype are passed, device and dtype should match
     @ops(_ops_and_refs, dtypes=OpDTypes.any_one)
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_out(self, device, dtype, op):
         # Prefers running in float32 but has a fallback for the first listed supported dtype
         samples = op.sample_inputs(device, dtype)
@@ -973,6 +989,7 @@ class TestCommon(TestCase):
     #   same values for the cross-product of op variants (method, inplace)
     #   against eager's gold standard op function variant
     @_variant_ops(op_db)
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_variant_consistency_eager(self, device, dtype, op):
         # Acquires variants (method variant, inplace variant, operator variant, inplace_operator variant, aliases)
 
@@ -1151,6 +1168,7 @@ class TestCommon(TestCase):
     # NOTE: We test against complex64 as NumPy doesn't have a complex32 equivalent dtype.
     @ops(op_db, allowed_dtypes=(torch.complex32,))
     @skipIfTorchInductor("Inductor does not support complex dtype yet")
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_complex_half_reference_testing(self, device, dtype, op):
         if not op.supports_dtype(torch.complex32, device):
             unittest.skip("Does not support complex32")
@@ -1182,6 +1200,7 @@ class TestCommon(TestCase):
     @ops(op_db, allowed_dtypes=(torch.bool,))
     @unittest.skipIf(TEST_WITH_UBSAN, "Test uses undefined behavior")
     @skipIfTorchInductor("Inductor does not support view with dtype yet")
+    @skipMPSIf(True, "Test crashes")
     def test_non_standard_bool_values(self, device, dtype, op):
         # Test boolean values other than 0x00 and 0x01 (gh-54789)
         def convert_boolean_tensors(x):
@@ -1211,6 +1230,7 @@ class TestCommon(TestCase):
     @skipMeta
     @onlyNativeDeviceTypes
     @ops(ops_and_refs, dtypes=OpDTypes.none)
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_dtypes(self, device, op):
         # Check complex32 support only if the op claims.
         # TODO: Once the complex32 support is better, we should add check for complex32 unconditionally.
@@ -1415,11 +1435,25 @@ class TestCompositeCompliance(TestCase):
     # Checks if the operator (if it is composite) is written to support most
     # backends and Tensor subclasses. See "CompositeImplicitAutograd Compliance"
     # in aten/src/ATen/native/README.md for more details
+    MPS_BLOCKLIST = ["fft", "nn.functional.conv_transpose3d", "stft"]
+
+    def get_mps_error_msg(self, device, dtype, op):
+        if torch.backends.mps.is_available() and device == "mps" and dtype not in MPS_DTYPES:
+           return f"MPS doesn't support {str(dtype)} datatype"
+        if op.name.startswith(tuple(self.MPS_BLOCKLIST)):
+           return "MPS doesn't support op " + str(op.name)
+        return None
+
     @unittest.skipIf(
         IS_FBCODE or IS_SANDCASTLE, "__torch_dispatch__ does not work in fbcode"
     )
     @ops(op_db, allowed_dtypes=(torch.float,))
     def test_operator(self, device, dtype, op):
+        print(op.name)
+        msg = self.get_mps_error_msg(device, dtype, op)
+        if msg is not None:
+            self.skipTest(msg)
+
         samples = op.sample_inputs(device, dtype, requires_grad=False)
 
         for sample in samples:
@@ -1433,6 +1467,11 @@ class TestCompositeCompliance(TestCase):
     )
     @ops([op for op in op_db if op.supports_autograd], allowed_dtypes=(torch.float,))
     def test_backward(self, device, dtype, op):
+        print(op.name)
+        msg = self.get_mps_error_msg(device, dtype, op)
+        if msg is not None:
+            self.skipTest(msg)
+
         samples = op.sample_inputs(device, dtype, requires_grad=True)
 
         for sample in samples:
@@ -1450,6 +1489,11 @@ class TestCompositeCompliance(TestCase):
     )
     @ops(op_db, allowed_dtypes=(torch.float,))
     def test_forward_ad(self, device, dtype, op):
+        print(op.name)
+        msg = self.get_mps_error_msg(device, dtype, op)
+        if msg is not None:
+            self.skipTest(msg)
+
         if torch.float not in op.supported_backward_dtypes(device):
             raise unittest.SkipTest("Does not support autograd")
 
@@ -1582,6 +1626,7 @@ class TestMathBits(TestCase):
 
     @ops(ops_and_refs, allowed_dtypes=(torch.cfloat,))
     @skipIfTorchInductor("Inductor does not support complex dtype yet")
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_conj_view(self, device, dtype, op):
         if not op.test_conjugated_samples:
             self.skipTest("Operation doesn't support conjugated inputs.")
@@ -1605,6 +1650,7 @@ class TestMathBits(TestCase):
 
     @ops(ops_and_refs, allowed_dtypes=(torch.double,))
     @skipIfTorchInductor("Inductor does not support complex dtype yet")
+    @skipMPSIf(True, "MPS doesn't support double data type")
     def test_neg_view(self, device, dtype, op):
         if not op.test_neg_view:
             self.skipTest("Operation not tested with tensors with negative bit.")
@@ -1625,6 +1671,7 @@ class TestMathBits(TestCase):
 
     @ops(ops_and_refs, allowed_dtypes=(torch.cdouble,))
     @skipIfTorchInductor("Inductor does not support complex dtype yet")
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_neg_conj_view(self, device, dtype, op):
         if not op.test_neg_view:
             self.skipTest("Operation not tested with tensors with negative bit.")
@@ -2114,10 +2161,12 @@ class TestFakeTensor(TestCase):
                     op(input, *args, **kwargs)
 
     @ops(op_db, dtypes=OpDTypes.any_one)
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_fake(self, device, dtype, op):
         self._test_fake_helper(device, dtype, op, contextlib.nullcontext)
 
     @ops(op_db, dtypes=OpDTypes.any_one)
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_fake_autocast(self, device, dtype, op):
         if op.name in fake_autocast_device_skips[device]:
             self.skipTest("Skip failing test")
