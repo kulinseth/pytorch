@@ -1049,7 +1049,12 @@ void elu_variants_out_mps (
   string func_name) {
 
   using namespace mps;
-  bool executeGatherOp = self.suggest_memory_format() != result.suggest_memory_format();
+  auto resultMemFormat = result.suggest_memory_format();
+  bool executeGatherOp = self.is_contiguous(resultMemFormat) != result.is_contiguous(resultMemFormat);
+  Tensor out;
+  if (executeGatherOp && resultMemFormat == MemoryFormat::ChannelsLast) {
+    out = at::empty_like(result, MemoryFormat::Contiguous);
+  }
 
   // Empty output
   if(result.numel() == 0) {
@@ -1136,7 +1141,7 @@ void elu_variants_out_mps (
     }
 
     Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self, nil, executeGatherOp);
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result, nil, false);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, out.has_storage() ? out : result, nil, false);
 
     // Create dictionary of inputs and outputs
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
@@ -1148,6 +1153,9 @@ void elu_variants_out_mps (
     };
 
     runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+    if (out.has_storage()) {
+      result.copy_(out);
+    }
   }
 }
 
@@ -1172,8 +1180,13 @@ TORCH_IMPL_FUNC(elu_backward_out_mps) (
   const Tensor& grad_input
 ) {
   using namespace mps;
-  bool executeGatherOp = (grad_output.suggest_memory_format() != self_or_result.suggest_memory_format()) ||
-                         (grad_output.suggest_memory_format() != grad_input.suggest_memory_format());
+  auto gradMemFormat = grad_input.suggest_memory_format();
+  bool executeGatherOp = (grad_output.is_contiguous(gradMemFormat) != self_or_result.is_contiguous(gradMemFormat)) ||
+                         (grad_output.is_contiguous(gradMemFormat) != grad_input.is_contiguous(gradMemFormat));
+  Tensor out;
+  if (executeGatherOp && gradMemFormat == MemoryFormat::ChannelsLast) {
+    out = at::empty_like(grad_input, MemoryFormat::Contiguous);
+  }
 
   // Empty output
   if(grad_input.numel() == 0) {
@@ -1286,7 +1299,7 @@ TORCH_IMPL_FUNC(elu_backward_out_mps) (
       resultPlaceholder = Placeholder(cachedGraph->resultTensor_, self_or_result, nil, executeGatherOp);
     else
       selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self_or_result, nil, executeGatherOp);
-    Placeholder gradInputPlaceholder = Placeholder(cachedGraph->gradInputTensor_, grad_input, nil, false);
+    Placeholder gradInputPlaceholder = Placeholder(cachedGraph->gradInputTensor_, out.has_storage() ? out : grad_input, nil, false);
 
     // Create dictionary of inputs and outputs
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = nil;
@@ -1307,6 +1320,9 @@ TORCH_IMPL_FUNC(elu_backward_out_mps) (
     };
 
     runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+    if (out.has_storage()) {
+      grad_input.copy_(out);
+    }
   }
 }
 
