@@ -242,7 +242,7 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_, boo
 
   // If dst is contiguous and there is no byte offset, we can save directly the result of
   // gather into dst. This reduces the overhead of doing an additional blit for most cases
-  bool returnGatherOutput = (dst_.is_contiguous() && !dst_byte_offset && src_.dtype() == dst_.dtype());
+  bool returnGatherOutput = dst_.is_contiguous();
   Tensor src;
   auto sameMemFormat = src_.is_contiguous(dst_.suggest_memory_format()) && dst_.is_contiguous(dst_.suggest_memory_format());
 
@@ -251,8 +251,9 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_, boo
     src = gatherViewTensor(src_, returnGatherOutput ? dst_ : emptyShell);
 
     if (src.has_storage()) {
-      if (returnGatherOutput)
+      if (returnGatherOutput) {
         return dst_;
+      }
 
       src_byte_offset = 0;
     } else {
