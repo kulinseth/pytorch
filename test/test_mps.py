@@ -9074,11 +9074,36 @@ class TestConsistency(TestCase):
         'vsplit': ['f16', 'f32'],
         'vstack': ['f16', 'f32'],
         'zero_': ['f16', 'f32'],
-        'linalg.solve_triangular': ['f32'],
-        'triangular_solve': ['f32'],
-        '_native_batch_norm_legit': ['f32'],
-        'native_batch_norm': ['f32'],
-        'native_layer_norm': ['f32'],
+        'zeros': ['f16', 'f32'],
+        'zeros_like': ['f16', 'f32'],
+    }
+
+    BLOCKLIST_OP_GRAD = {
+        # Unimplemented ops
+        '__getitem__': ['f16'],
+        'combinations': ['f16', 'f32'],
+        'logaddexp2': ['f32'],
+        'masked_select': ['f16', 'f32'],
+        'nn.functional.binary_cross_entropy_with_logits': ['f16', 'f32'],
+        'nn.functional.group_norm': ['f32'],
+        'prod': ['f32'],
+        'sgn': ['f16', 'f32'],
+        'unfold_copy': ['f16', 'f32'],
+        'unfold': ['f16', 'f32'],
+        'trace': ['f32'],
+
+        # Correctness issues
+        'nn.functional.prelu': ['f32'],
+        'nn.functional.conv_transpose2d': ['f32'],
+        'atanh': ['f32'],
+        'div': ['f16'],
+        'nn.functional.bilinear': ['f32'],
+        'nn.functional.embedding': ['f16'],
+
+        # Unsupported dtype
+        'special.ndtr': ['f32'],
+        'trapezoid': ['f16', 'f32'],
+        'trapz': ['f16', 'f32'],
     }
 
     # These ops that are problematic. So never run them even when
