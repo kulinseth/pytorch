@@ -20,6 +20,10 @@ TORCH_IMPL_FUNC(triu_mps_out)
  const Tensor &output) {
 
   using namespace mps;
+
+  if (self.numel() == 0) {
+    return;
+  }
   MPSStream* stream = getCurrentMPSStream();
 
   // Derive from MPSCachedGraph
@@ -99,6 +103,10 @@ TORCH_IMPL_FUNC(tril_mps_out)
  const Tensor &output) {
 
   using namespace mps;
+
+  if (self.numel() == 0) {
+    return;
+  }
   MPSStream* stream = getCurrentMPSStream();
 
   // Derive from MPSCachedGraph

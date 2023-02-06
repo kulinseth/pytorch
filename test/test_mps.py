@@ -9825,9 +9825,7 @@ class TestConsistency(TestCase):
         'nn.functional.conv_transpose2d': ['f32'],
         'atanh': ['f32'],
         'div': ['f16'],
-        'linalg.solve_triangular': ['f32'],
         'nn.functional.bilinear': ['f32'],
-        'triangular_solve': ['f32'],
         'nn.functional.embedding': ['f16'],
 
         # Unsupported dtype

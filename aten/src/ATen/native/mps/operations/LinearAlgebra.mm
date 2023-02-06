@@ -1,18 +1,8 @@
 //  Copyright © 2022 Apple Inc.
 
-#include <ATen/ATen.h>
-#include <ATen/Tensor.h>
-#include <ATen/Utils.h>
-#include <ATen/mps/MPSStream.h>
-#include <ATen/native/LinearAlgebraUtils.h>
 #include <ATen/native/mps/OperationUtils.h>
-#include <torch/library.h>
+#include <ATen/native/LinearAlgebraUtils.h>
 #include <ATen/native/Resize.h>
-
-#ifdef __OBJC__
-#include <MetalPerformanceShaders/MetalPerformanceShaders.h>
-#endif
-
 
 namespace at {
 namespace native {
@@ -378,6 +368,7 @@ Tensor& bmm_out_mps_impl(
               || batch1.scalar_type() == ScalarType::Half, "MPS device does not support bmm for non-float inputs");
 
   if (batch1.numel() == 0 || batch2.numel() == 0) {
+    result.zero_();
     return result;
   }
 
@@ -624,14 +615,23 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
   }
 
   checkInputsSolver(A, B, left, "linalg.solve_triangular");
-  Tensor A_, B_;
-  std::tie(B_, A_) = _linalg_broadcast_batch_dims(B, A, /*don't check errors*/nullptr);
-  at::native::resize_output(out, B_.sizes());
+  Tensor A_t, B_t;
+  std::tie(B_t, A_t) = _linalg_broadcast_batch_dims(B, A, /*don't check errors*/nullptr);
+  at::native::resize_output(out, B_t.sizes());
 
   if (A.numel() == 0 || B.numel() == 0 || out.numel() == 0) {
+    out.zero_();
     return out;
   }
 
+  Tensor A_ = A_t;
+  Tensor B_ = B_t;
+  if (A_t.is_view() || !A_t.is_contiguous()) {
+    A_ = A_t.clone(at::MemoryFormat::Contiguous);
+  }
+  if (B_t.is_view() || !B_t.is_contiguous()) {
+    B_ = B_t.clone(at::MemoryFormat::Contiguous);
+  }
   id<MTLBuffer> aBuffer = getMTLBufferStorage(A_);
   id<MTLBuffer> bBuffer = getMTLBufferStorage(B_);
   id<MTLBuffer> outBuffer = getMTLBufferStorage(out);
@@ -641,14 +641,6 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
   dispatch_sync(mpsStream->queue(), ^(){
     @autoreleasepool {
       id<MTLCommandBuffer> commandBuffer = mpsStream->commandBuffer();
-      MPSMatrixSolveTriangular *filter = [[[MPSMatrixSolveTriangular alloc] initWithDevice:device
-                                                                                    right:!left
-                                                                                    upper:upper
-                                                                                transpose:transpose
-                                                                                     unit:unitriangular
-                                                                                    order:left ? B_.size(-2) : B_.size(-1)
-                                                                   numberOfRightHandSides:left ? B_.size(-1) : B_.size(-2)
-                                                                                    alpha:1.0f] autorelease];
       uint64_t batchSize = A_.sizes().size() > 2 ? A_.size(0) : 1;
       uint64_t aRows = A_.size(-2);
       uint64_t bRows = B_.size(-2);
@@ -656,6 +648,15 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
       uint64_t bCols = B_.size(-1);
       uint64_t aElemSize = A_.element_size();
       uint64_t bElemSize = B_.element_size();
+
+      MPSMatrixSolveTriangular *filter = [[[MPSMatrixSolveTriangular alloc] initWithDevice:device
+                                                                                     right:!left
+                                                                                     upper:upper
+                                                                                 transpose:transpose
+                                                                                      unit:unitriangular
+                                                                                     order:left ? bRows : bCols
+                                                                    numberOfRightHandSides:left ? bCols : bRows
+                                                                                     alpha:1.0f] autorelease];
 
       MPSMatrixDescriptor* sourceMatrixDesc = [MPSMatrixDescriptor matrixDescriptorWithRows:aRows
                                                                                     columns:aCols
