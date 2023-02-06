@@ -77,9 +77,7 @@ void copy_cast_mps(at::Tensor& dst, const at::Tensor& src,
                                    autorelease];
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{cachedGraph->inputTensor_: srcData};
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{cachedGraph->outputTensor_: dstData};
-    runMPSGraph(stream, cachedGraph->graph(), feeds, results);
-    if (!non_blocking)
-      stream->synchronize(SyncType::COMMIT_AND_WAIT);
+    stream->executeMPSGraph(cachedGraph->graph(), feeds, results, !non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT_ADAPTIVE);
   }
 }
 
