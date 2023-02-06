@@ -9867,11 +9867,6 @@ class TestConsistency(TestCase):
         'grid_sampler_2d': [torch.float32],
         'nn.functional.grid_sample': [torch.float32],
 
-        # failures due to issue #103039644: Wrong results from avgPooling2DWithSourceTensor()
-        # when both ceilMode and includeZeroPadToAverage are True
-        'nn.functional.adaptive_avg_pool1d': [torch.float32],
-        'nn.functional.adaptive_avg_pool2d': [torch.float32],
-
         # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
         'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
         '__rpow__': [torch.uint8],
@@ -10372,8 +10367,8 @@ class TestConsistency(TestCase):
                 self.assertEqual(cpu_out, mps_out, atol=atol, rtol=rtol)
 
             except Exception as e:
-                if any(s in str(e).lower() for s in ["int64", "macos 13"]):
-                    self.skipTest(f"{str(e)}")
+                if any(s in str(e).lower() for s in ["int64", "macos 13", "adaptive pool mps"]):
+                    self.skipTest(f"Expected Runtime Error: {str(e)}")
 
                 if op.name in CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
                     continue
