@@ -91,7 +91,6 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool
   MPSStream* stream = getCurrentMPSStream();
   Tensor dst;
   Tensor src;
-  // std::cout << "copy_from_mps_" << std::endl;
   if (!dst_.is_contiguous(MemoryFormat::Contiguous) && !sameMemFormat) {
     dst = at::empty_like(dst_, LEGACY_CONTIGUOUS_MEMORY_FORMAT);
   } else {
@@ -241,8 +240,9 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_, boo
   auto src_byte_offset = src_.storage_offset() * src_.itemsize();
   auto dst_byte_offset = dst_.storage_offset() * dst_.itemsize();
 
-  // Save directly the result of gather into dst if dst is contiguous
-  bool returnGatherOutput = (dst_.is_contiguous());
+  // If dst is contiguous and there is no byte offset, we can save directly the result of
+  // gather into dst. This reduces the overhead of doing an additional blit for most cases
+  bool returnGatherOutput = (dst_.is_contiguous() && !dst_byte_offset && src_.dtype() == dst_.dtype());
   Tensor src;
   auto sameMemFormat = src_.is_contiguous(dst_.suggest_memory_format()) && dst_.is_contiguous(dst_.suggest_memory_format());
 
