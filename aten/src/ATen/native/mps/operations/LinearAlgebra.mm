@@ -626,10 +626,10 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
 
   Tensor A_ = A_t;
   Tensor B_ = B_t;
-  if (A_t.is_view() || !A_t.is_contiguous()) {
+  if (!A_t.is_contiguous()) {
     A_ = A_t.clone(at::MemoryFormat::Contiguous);
   }
-  if (B_t.is_view() || !B_t.is_contiguous()) {
+  if (!B_t.is_contiguous()) {
     B_ = B_t.clone(at::MemoryFormat::Contiguous);
   }
   id<MTLBuffer> aBuffer = getMTLBufferStorage(A_);
@@ -671,15 +671,17 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
                                                                                        matrixBytes:bRows * bCols * bElemSize
                                                                                           dataType:getMPSDataType(B_.scalar_type())];
       for (const auto i: c10::irange(batchSize)) {
+        const uint64_t aBatchOffset = i * aRows * aCols;
+        const uint64_t bBatchOffset = i * bRows * bCols;
         MPSMatrix* sourceMatrix = [[[MPSMatrix alloc] initWithBuffer:aBuffer
-                                                              offset:i * aRows * aCols * aElemSize
+                                                              offset:(A_t.storage_offset() + aBatchOffset) * aElemSize
                                                           descriptor:sourceMatrixDesc] autorelease];
         MPSMatrix* rightHandSideMatrix = [[[MPSMatrix alloc] initWithBuffer:bBuffer
-                                                                    offset:i * bRows * bCols * bElemSize
-                                                                descriptor:rightHandSideMatrixDesc] autorelease];
+                                                                     offset:(B_t.storage_offset() + bBatchOffset) * bElemSize
+                                                                 descriptor:rightHandSideMatrixDesc] autorelease];
         MPSMatrix *solutionMatrix = [[[MPSMatrix alloc] initWithBuffer:outBuffer
-                                                               offset:i * bRows * bCols * bElemSize
-                                                           descriptor:rightHandSideMatrixDesc] autorelease];
+                                                                offset:(out.storage_offset() + bBatchOffset) * bElemSize
+                                                            descriptor:rightHandSideMatrixDesc] autorelease];
 
         [filter encodeToCommandBuffer:commandBuffer
                          sourceMatrix:sourceMatrix
@@ -697,14 +699,14 @@ Tensor& linalg_solve_triangular_mps_out( const Tensor& A, const Tensor& B, bool 
 }
 
 Tensor linalg_solve_triangular_mps(const Tensor& A, const Tensor& B, bool upper, bool left, bool unitriangular) {
-  Tensor out = at::empty({0}, A.options());
+  Tensor out = empty_mps({0}, A.scalar_type(), c10::nullopt, kMPS, c10::nullopt, MemoryFormat::Contiguous);
   linalg_solve_triangular_mps_impl(A, B, upper, /*transpose=*/false, left, unitriangular, out);
   return out;
 }
 
 TORCH_IMPL_FUNC(triangular_solve_mps_out)(const Tensor& self, const Tensor& A, bool upper, bool transpose, bool unitriangular, const Tensor& result, const Tensor& clone_A) {
   clone_A.copy_(A);
-  Tensor out = at::empty({0}, A.options());
+  Tensor out = empty_mps({0}, A.scalar_type(), c10::nullopt, kMPS, c10::nullopt, MemoryFormat::Contiguous);
   linalg_solve_triangular_mps_impl(A, self, upper, transpose, /*left=*/true, unitriangular, out);
   result.resize_(out.sizes());
   result.copy_(out);
