@@ -201,8 +201,6 @@ Tensor& addr_out_mps(const Tensor& self,
                  const Scalar& beta, const Scalar& alpha, Tensor &result) {
   using namespace mps;
 
-  result.resize_(self.sizes());
-
   TORCH_CHECK(result.is_mps());
   TORCH_CHECK(vec1.dim() == 1 && vec2.dim() == 1, "tensors must be 1-D");
   TORCH_CHECK(vec1.scalar_type() == ScalarType::Double
