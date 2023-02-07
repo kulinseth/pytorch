@@ -599,21 +599,6 @@ Tensor &addbmm_mps_(Tensor& self, const Tensor& batch1, const Tensor& batch2, co
 Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool upper, bool transpose, bool left, bool unitriangular, Tensor& out) {
   using namespace mps;
 
-  if (!is_macos_13_or_newer()) {
-    TORCH_WARN_ONCE("MPS: linalg_solve_triangular_out op is supported natively starting from macOS 13.0. ",
-                    "Falling back on CPU. This may have performance implications.");
-
-    Tensor cpu_out = out.cpu();
-    Tensor A_cpu = A.cpu();
-    Tensor B_cpu = B.cpu();
-    at::linalg_solve_triangular_out(
-      cpu_out, A_cpu, B_cpu, upper, left, unitriangular);
-    out.resize_(cpu_out.sizes(), cpu_out.suggest_memory_format());
-    out.copy_(cpu_out);
-
-    return out;
-  }
-
   checkInputsSolver(A, B, left, "linalg.solve_triangular");
   Tensor A_t, B_t;
   std::tie(B_t, A_t) = _linalg_broadcast_batch_dims(B, A, /*don't check errors*/nullptr);
