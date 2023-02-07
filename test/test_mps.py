@@ -61,6 +61,8 @@ if not torch.backends.mps.is_available():
     TestCase = object  # noqa: F811
     NNTestCase = object  # noqa: F811
 
+product_version = float('.'.join(platform.mac_ver()[0].split('.')[:2]))
+
 class MPSReluTest(TestCase):
     def _npRelu(self, np_features):
         return np.maximum(np_features, np.zeros(np_features.shape)).astype(np_features.dtype)
@@ -2073,6 +2075,7 @@ class TestMPS(TestCase):
                 self.assertEqual(expected_inverse.view(additional_shape), y_inverse)
                 self.assertEqual(expected_counts, y_counts)
 
+    @unittest.skipIf(product_version < 13.0, "Skipped on macOS 12")
     def test_unique_all_dtypes(self, device="mps"):
         def helper(dtype):
             def ensure_tuple(x):
@@ -4287,6 +4290,7 @@ class TestNLLLoss(TestCase):
         helper(1, 1, 4, 4)
         helper(7, 5, 3, 2)
 
+    @unittest.skipIf(product_version < 13.0, "Skipped on macOS 12")
     def test_interpolate(self):
         def helper(shape, output_size, scales, mode, align_corners=False):
             inputCPU = torch.randn(shape, device='cpu', dtype=torch.float, requires_grad=True)
@@ -9106,6 +9110,10 @@ class TestConsistency(TestCase):
         'trapz': ['f16', 'f32'],
     }
 
+    BLOCKLIST_OP_GRAD_MACOS_12 = {
+        'remainder': ['f16'],
+    }
+
     # These ops that are problematic. So never run them even when
     # generating the new allowlist.
     # If the dtype list is None, all dtypes are excluded.
@@ -9507,7 +9515,45 @@ class TestConsistency(TestCase):
         'masked.softmax': [torch.float32],
         'masked.softmin': [torch.float32],
         'masked.log_softmax': [torch.float32],
-        'dot': [torch.int64],
+        'cdist': [torch.float32],
+        '__rpow__': [torch.float32]
+    }
+
+    FP16_LOW_PRECISION_LIST = {
+        'add', 'sub', 'div',
+        '__rdiv__', '__rmul__',
+        'nn.functional.huber_loss',
+        'true_divide', 'kron',
+        'gradient', 'var', 'std',
+        'linalg.vector_norm',
+    }
+
+    BLOCKLIST_MACOS_12 = {
+        'nn.functional.conv_transpose2d': [torch.float32, torch.float16],
+        'H': [torch.int64],
+        'T': [torch.int64],
+        '__rdiv__': [torch.float16],
+        'bool': [torch.float16, torch.float32],
+        'mH': [torch.int64],
+        'mT': [torch.int64],
+        'masked.sum': [torch.float16],
+        'masked.var': [torch.float16],
+        'neg': [torch.uint8],
+        'nn.functional.interpolatenearest': [torch.float32],
+        'nn.functional.margin_ranking_loss': [torch.uint8],
+        'nn.functional.pairwise_distance': [torch.uint8],
+        'nn.functional.triplet_margin_loss': [torch.uint8],
+        'nn.functional.triplet_margin_with_distance_loss': [torch.uint8],
+        'nn.functional.upsample_nearest': [torch.float32],
+        'scatter': [torch.bool],
+        'sum_to_size': [torch.float16],
+        'transpose': [torch.int64],
+
+        'sum': [torch.float16],
+
+        'outer': [torch.float16],
+        'mul': [torch.float16],
+        'masked.normalize': [torch.float16],
     }
 
     dirname = os.path.dirname(__file__)
@@ -9525,6 +9571,30 @@ class TestConsistency(TestCase):
     NEW_ALLOW_LIST = defaultdict(list)
     NEW_ALLOW_LIST_GRAD = defaultdict(list)
 
+    def get_error_message(self, key, op_name, dtype):
+        if key in self.FAST_MATH_PRECISION_ISSUES and dtype in self.FAST_MATH_PRECISION_ISSUES[key]:
+            return f"Running test with {op_name} fails due to precision issues (fast math) so skipping"
+        elif key in self.BLOCKLIST and dtype in self.BLOCKLIST[key]:
+            return f"Running test with {op_name} fails so skipping"
+        elif key in self.UNDEFINED_BEHAVIOUR and dtype in self.UNDEFINED_BEHAVIOUR[key]:
+            return f"Running test with {op_name} fails due to undefined behaviour / random output so skipping"
+        elif key in self.EXPECTED_FAILURES and dtype in self.EXPECTED_FAILURES[key]:
+            return f"Running test with {op_name} expected to fail due to unsupported MPS data type so skipping"
+        elif key in self.UNIMPLEMENTED_OPS and dtype in self.UNIMPLEMENTED_OPS[key]:
+            return f"Running test with {op_name} expected to fail due to missing op implementation"
+        elif product_version < 13.0 and key in self.BLOCKLIST_MACOS_12 and dtype in self.BLOCKLIST_MACOS_12[key]:
+            return f"Running test with {op_name} expected to fail on macOS 12"
+        return None
+
+    def compare_with_CUDA(self, op, mps_out, atol, rtol):
+        cuda_out = CUDA_RESULT[op.name]
+        try:
+            self.assertEqual(cuda_out, mps_out, atol=atol, rtol=rtol)
+        except Exception as e:
+            return False
+        else:
+            return True
+
     @ops(op_db, allowed_dtypes=MPS_DTYPES)
     def test_output_match(self, device, dtype, op):
         self.assertEqual(device, "cpu")
@@ -9532,13 +9602,15 @@ class TestConsistency(TestCase):
             self.skipTest("MPS is not available")
 
         key = op.name + op.variant_test_name
-
-        if key in self.VENTURA_BLOCKLIST and torch.backends.mps.is_macos13_or_newer():
-            if dtype in self.VENTURA_BLOCKLIST[key]:
-                self.skipTest(f"{key}_{dtype} fails on Ventura, see https://github.com/pytorch/pytorch/issues/85758")
-        if key in self.BLOCKLIST:
-            if self.BLOCKLIST[key] is None or dtype in self.BLOCKLIST[key]:
-                self.skipTest(f"Running test with {op.name} hangs so skipping")
+        if key in self.MPS_SKIP_LIST:
+            msg = self.get_error_message(key, op.name, dtype)
+            if msg is not None and not (product_version >= 13.3 and
+                                        key in self.ALLOWLIST_MACOS_13_3 and dtype in self.ALLOWLIST_MACOS_13_3[key]):
+                self.skipTest(msg)
+        if product_version < 13.0 and key in self.BLOCKLIST_MACOS_12:
+            msg = self.get_error_message(key, op.name, dtype)
+            if msg is not None:
+                self.skipTest(msg)
 
         # Make this an expecttest manually
         # When this env variable is set, generate a new ALLOWLIST_OP
@@ -9556,7 +9628,10 @@ class TestConsistency(TestCase):
                 if dtype_abbrs[dtype] not in self.ALLOWLIST_OP[op.name]:
                     self.skipTest(f"{op.name} is in the allow list for MPS but {dtype} is excluded")
 
-            if op.name not in self.ALLOWLIST_OP_GRAD or dtype_abbrs[dtype] not in self.ALLOWLIST_OP_GRAD[op.name]:
+            if (op.name not in self.ALLOWLIST_OP_GRAD or dtype_abbrs[dtype] not in self.ALLOWLIST_OP_GRAD[op.name] or
+               (op.name in self.BLOCKLIST_OP_GRAD and dtype_abbrs[dtype] in self.BLOCKLIST_OP_GRAD[op.name]) or
+               (product_version < 13.0 and op.name in self.BLOCKLIST_OP_GRAD_MACOS_12 and
+               dtype_abbrs[dtype] in self.BLOCKLIST_OP_GRAD_MACOS_12[op.name])):
                 run_grad_test = False
 
         def get_samples():
