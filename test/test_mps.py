@@ -523,6 +523,13 @@ class TestMPS(TestCase):
         D = torch.addmm(A, B, C).to("cpu")
         torch.testing.assert_close(D, torch.full((5, 5), 7.0))
 
+    def test_addr(self):
+        A = torch.ones(5, 10).to("mps")
+        B = torch.ones(5).to("mps")
+        C = torch.ones(10).to("mps")
+        D = torch.addr(A, B, C).to("cpu")
+        torch.testing.assert_close(D, torch.full((5, 10), 2.0))
+
     def test_bmm(self):
         batch1_cpu = torch.randn(10, 3, 4)
         batch2_cpu = torch.randn(10, 4, 5)
@@ -6294,6 +6301,30 @@ class TestLinalgMPS(TestCase):
         m2 = maybe_transpose(t3, torch.randn(50, 25, device=device).to(dtype))
         self._test_addmm_addmv(torch.addmm, M, m1, m2, transpose_out=t4)
 
+    def _test_addr(self, f, t, m, v, alpha=None, beta=None):
+        dtype = t.dtype
+        numpy_dtype = dtype
+        alpha = 1.2 if alpha is None else alpha
+        beta = 0.8 if beta is None else beta
+        res1 = f(t, m, v, alpha=alpha, beta=beta)
+        res2 = alpha * np.outer(m.to(numpy_dtype).cpu().numpy(), v.to(numpy_dtype).cpu().numpy())
+        if beta != 0:
+            res2 += (torch.mul(t, beta)).to(numpy_dtype).cpu().numpy()
+        res2 = torch.from_numpy(res2).to(dtype)
+        self.assertEqual(res1, res2)
+
+    def test_addr(self, device="mps", dtype=torch.float32):
+        M = torch.randn(10, 25, device=device).to(dtype)
+        m1 = torch.randn(10, device=device).to(dtype)
+        m2 = torch.randn(25, device=device).to(dtype)
+        self._test_addr(torch.addr, M, m1, m2)
+
+        # Test beta=0, M=nan
+        M = torch.full((10, 25), math.nan, device=device).to(dtype)
+        m1 = torch.randn(10, device=device).to(dtype)
+        m2 = torch.randn(25, device=device).to(dtype)
+        self._test_addr(torch.addr, M, m1, m2, beta=0)
+
 class TestGatherScatter(TestCase):
     def test_slicing_with_step(self):
         # Slicing with step
@@ -8608,7 +8639,7 @@ class TestConsistency(TestCase):
         'addcmul': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'addmm': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'addmv': ['f32', 'i16', 'i32', 'i64', 'u8'],
-        'addr': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'addr': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'all': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'allclose': ['f16', 'f32'],
         'amax': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -9880,7 +9911,6 @@ class TestConsistency(TestCase):
         # Functions with correctness issues
         'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
-        'addr': [torch.float16],
         'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'trace': [torch.int64],
         'normalnumber_mean': [torch.float16, torch.float32],
@@ -10157,6 +10187,7 @@ class TestConsistency(TestCase):
         'addmmdecomposed': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'addbmm': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'addmm': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'addr': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'addmv': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'baddbmm': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'bmm': [torch.int16, torch.int32, torch.int64, torch.uint8],
@@ -10262,6 +10293,7 @@ class TestConsistency(TestCase):
         'true_divide', 'kron',
         'gradient', 'var', 'std',
         'linalg.vector_norm',
+        'addr'
     }
 
     BLOCKLIST_MACOS_12 = {
