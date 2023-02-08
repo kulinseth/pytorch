@@ -19,7 +19,10 @@ import torch
 
 # TODO: remove this global setting
 # NN tests use double as the default dtype
-torch.set_default_dtype(torch.double)
+if torch.backends.mps.is_available():
+    torch.set_default_dtype(torch.float32)
+else:
+    torch.set_default_dtype(torch.double)
 
 from torch._six import inf, nan
 import torch.autograd.forward_ad as fwAD
@@ -5491,6 +5494,7 @@ tensor(..., device='meta', size=(1,), requires_grad=True)""")
             with self.assertRaisesRegex(RuntimeError, "Expected all tensors to be on the same device"):
                 F.grid_sample(input.cuda(), grid, align_corners=False)
 
+    @skipMPSIf(True, "Test crashes")
     def test_affine_grid_error_checking(self):
         # 2D affine
         theta = torch.empty(1, 2, 3, dtype=torch.double)
@@ -6053,6 +6057,7 @@ tensor(..., device='meta', size=(1,), requires_grad=True)""")
                     for input_requires_grad in [False, True]:
                         test(N, C, D, H, W, mode, padding_mode, align_corners, input_requires_grad)
 
+    @skipMPSIf(True, "Test crashes")
     def test_affine_grid(self):
         # test known input on CPU
         input = torch.arange(1., 7).view(1, 2, 3)
@@ -6101,6 +6106,7 @@ tensor(..., device='meta', size=(1,), requires_grad=True)""")
                 self.assertEqual(out_cpu, out_cuda)
                 self.assertEqual(input_cpu.grad, input_gpu.grad)
 
+    @skipMPSIf(True, "Test crashes")
     def test_affine_grid_3d(self):
         # test known input on CPU
         input = torch.arange(1., 13).view(1, 3, 4)
@@ -7813,6 +7819,7 @@ class TestNNDeviceType(NNTestCase):
     @unittest.skipIf((not TEST_NUMPY) or (not TEST_SCIPY) or (scipy.__version__ < '1.0.0'),
                      "Scipy v1.0 and/or numpy not found")
     @tf32_on_and_off()
+    @skipMPSIf(True, "Test crashes")
     def test_affine_2d_rotate0(self, device):
         # scipy before 1.0.0 do not support homogeneous coordinate
         # scipy.ndimage.affine_transform, so we need to skip.
@@ -7852,6 +7859,7 @@ class TestNNDeviceType(NNTestCase):
     @unittest.skipIf((not TEST_NUMPY) or (not TEST_SCIPY) or (scipy.__version__ < '1.0.0'),
                      "Scipy v1.0 and/or numpy not found")
     @tf32_on_and_off(0.001)
+    @skipMPSIf(True, "Test crashes")
     def test_affine_2d_rotate90(self, device):
         # scipy before 1.0.0 do not support homogeneous coordinate
         # scipy.ndimage.affine_transform, so we need to skip.
@@ -7900,6 +7908,7 @@ class TestNNDeviceType(NNTestCase):
     @unittest.skipIf((not TEST_NUMPY) or (not TEST_SCIPY) or (scipy.__version__ < '1.0.0'),
                      "Scipy v1.0 and/or numpy not found")
     @tf32_on_and_off(0.005)
+    @skipMPSIf(True, "Test crashes")
     def test_affine_2d_rotate45(self, device):
         # scipy before 1.0.0 do not support homogeneous coordinate
         # scipy.ndimage.affine_transform, so we need to skip.
@@ -7940,6 +7949,7 @@ class TestNNDeviceType(NNTestCase):
     @unittest.skipIf((not TEST_NUMPY) or (not TEST_SCIPY) or (scipy.__version__ < '1.0.0'),
                      "Scipy v1.0 and/or numpy not found")
     @tf32_on_and_off(0.005)
+    @skipMPSIf(True, "Test crashes")
     def test_affine_2d_rotateRandom(self, device):
         # scipy before 1.0.0 do not support homogeneous coordinate
         # scipy.ndimage.affine_transform, so we need to skip.
@@ -7991,6 +8001,7 @@ class TestNNDeviceType(NNTestCase):
     @unittest.skipIf((not TEST_NUMPY) or (not TEST_SCIPY) or (scipy.__version__ < '1.0.0'),
                      "Scipy v1.0 and/or numpy not found")
     @tf32_on_and_off(0.005)
+    @skipMPSIf(True, "Test crashes")
     def test_affine_3d_rotateRandom(self, device):
         # scipy before 1.0.0 do not support homogeneous coordinate
         # scipy.ndimage.affine_transform, so we need to skip.
@@ -8053,6 +8064,7 @@ class TestNNDeviceType(NNTestCase):
 
     @dtypesIfCUDA(torch.float, torch.double, torch.half, torch.complex128)
     @dtypes(torch.float, torch.double, torch.bfloat16, torch.complex128)
+    @dtypesIfMPS(torch.half, torch.float)
     def test_conv_empty_input(self, device, dtype):
         def help(input, conv, memory_format):
             ref_out = conv(input)
@@ -8344,6 +8356,7 @@ class TestNNDeviceType(NNTestCase):
 
     @onlyNativeDeviceTypes
     @dtypes(torch.float64, torch.complex128)
+    @dtypesIfMPS(torch.float, torch.half)
     def test_pad(self, device, dtype):
         # Assert assertion errors are raised for invalid circular padding values
         inputs = torch.randn(1, 1, 4, device=device, dtype=dtype, requires_grad=True)
@@ -8880,6 +8893,7 @@ class TestNNDeviceType(NNTestCase):
 
     # verify that bogus reduction strings are errors
     @onlyNativeDeviceTypes
+    @skipMPSIf(True, "MPS doesn't support complex data types")
     def test_invalid_reduction_strings(self, device):
         input = torch.randn(3, 5, requires_grad=True, device=device)
         cinput = torch.randn(3, 5, requires_grad=True, device=device, dtype=torch.cfloat)
@@ -10800,6 +10814,7 @@ class TestNNDeviceType(NNTestCase):
     @dtypes(torch.float)
     @tf32_on_and_off(0.005)
     @skipIfTorchDynamo("TorchDynamo fails here for unknown reasons")
+    @skipMPSIf(True, "Test crashes")
     def test_variable_sequence(self, device, dtype):
         def pad(var, length):
             if var.size(0) == length:
@@ -11287,7 +11302,6 @@ class TestNNDeviceType(NNTestCase):
 
                 self.assertEqual(output_with_smoothing, output_with_manual_smoothing)
 
-
     def test_cross_entropy_label_smoothing_weight_ignore_indices(self, device):
         reductions = ['none', 'sum', 'mean']
         label_smoothings = [0.05, 0.15]
@@ -11396,7 +11410,6 @@ class TestNNDeviceType(NNTestCase):
             gradgradcheck(func, [x], check_fwd_over_rev=True)
             if device == 'cpu':
                 test_dtype(func, x, torch.bfloat16)
-
 
     def test_logsigmoid_out(self, device):
         # this isn't actually documented, but was broken previously:
@@ -11610,6 +11623,7 @@ class TestNNDeviceType(NNTestCase):
             b.backward(torch.ones(2, device=device))
 
     # Merge into OpInfo?
+    @skipMPSIf(True, "MPS doesn't support BFloat16")
     def test_leaky_relu_inplace_with_zero_slope(self, device):
         a = torch.tensor([-2., 0., 2.], device=device, requires_grad=True)
         b = torch.nn.functional.leaky_relu_(a.clone(), 0.0)
