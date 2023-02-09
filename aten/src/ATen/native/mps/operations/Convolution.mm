@@ -83,6 +83,13 @@ Tensor _mps_convolution_impl(
 
   auto memory_format = input_t.suggest_memory_format();
   bool is_channels_last = (memory_format == at::MemoryFormat::ChannelsLast);
+  bool gather_input_data = true;
+  // Perform the convolution directly in NCHW if the tensor is already contiguous in memory
+  if (is_channels_last && input_t.is_contiguous(memory_format)) {
+    is_channels_last = false;
+    gather_input_data = false;
+    memory_format = MemoryFormat::Contiguous;
+  }
   auto output_t = at::empty(
                     input_shape.has_value() ?
                     input_shape.value() :
@@ -215,7 +222,7 @@ Tensor _mps_convolution_impl(
       cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
 
-    auto inputPlaceholder = native_mps::Placeholder(cachedGraph->inputTensor_, input_t, inputShape);
+    auto inputPlaceholder = native_mps::Placeholder(cachedGraph->inputTensor_, input_t, inputShape, gather_input_data);
     auto weightsPlaceholder = native_mps::Placeholder(cachedGraph->weightTensor_, weight_t);
     auto biasPlaceholder = native_mps::Placeholder();
     // Reshape the bias to be broadcastable with output of conv2d
@@ -263,6 +270,12 @@ Tensor mps_convolution_backward_input(
   checkAllSameGPU(c, {grad_output, weight});
   auto memory_format = grad_output_t.suggest_memory_format();
   bool is_channels_last = (memory_format == at::MemoryFormat::ChannelsLast);
+  bool gather_input_data = true;
+  if (is_channels_last && grad_output_t.is_contiguous(memory_format)) {
+    is_channels_last = false;
+    gather_input_data = false;
+    memory_format = MemoryFormat::Contiguous;
+  }
   auto grad_input_t = at::empty( input_size, grad_output_t.options(), c10::nullopt);
 
   // Avoid "grad_input" when this is being used as transposed convolution
@@ -369,7 +382,7 @@ Tensor mps_convolution_backward_input(
       cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
 
-    auto gradOutputPlaceholder = Placeholder(cachedGraph->gradOutputTensor_, grad_output_t, gradOutputShape);
+    auto gradOutputPlaceholder = Placeholder(cachedGraph->gradOutputTensor_, grad_output_t, gradOutputShape, gather_input_data);
     auto weightsPlaceholder = Placeholder(cachedGraph->weightTensor_, weight_t);
     auto outputPlaceholder = Placeholder(cachedGraph->gradInputTensor_, *grad_input);
 
@@ -393,8 +406,16 @@ Tensor mps_convolution_backward_weights(
   namespace native_mps = at::native::mps;
   using namespace mps;
   CheckedFrom c = "mps_convolution_backward_weights";
-  auto memory_format = grad_output_t.suggest_memory_format();
+  auto memory_format = input_.suggest_memory_format();
   bool is_channels_last = (memory_format == at::MemoryFormat::ChannelsLast);
+  bool gather_input_data = true;
+  if (is_channels_last && input_t.is_contiguous(memory_format)) {
+    is_channels_last = false;
+    gather_input_data = false;
+    memory_format = MemoryFormat::Contiguous;
+  }
+  auto grad_output_t = grad_output_.to(memory_format);
+  auto input_t = input_.to(memory_format);
 
   MPSShape* gradOutputShape = mps::getMPSShape(grad_output_t, memory_format);
 
@@ -513,8 +534,8 @@ Tensor mps_convolution_backward_weights(
       cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
 
-    auto gradOutputPlaceholder = Placeholder(cachedGraph->gradOutputTensor_, grad_output_t, gradOutputShape);
-    auto inputPlaceholder = Placeholder(cachedGraph->inputTensor_, input_t);
+    auto gradOutputPlaceholder = Placeholder(cachedGraph->gradOutputTensor_, grad_output_t, gradOutputShape, gather_input_data);
+    auto inputPlaceholder = Placeholder(cachedGraph->inputTensor_, input_t, nil, gather_input_data);
     auto outputPlaceholder = Placeholder(cachedGraph->gradWeightTensor_, grad_weight_t);
 
     NSDictionary<MPSGraphTensor *, MPSGraphTensorData *> *feeds = @{
