@@ -27,6 +27,8 @@ public:
   virtual size_t getLowWatermarkLimit() const = 0;
   virtual size_t getHighWatermarkLimit() const = 0;
   virtual size_t getTotalAllocatedMemory() const = 0;
+  virtual size_t getCurrentAllocatedMemory() const = 0;
+  virtual size_t getDriverAllocatedMemory() const = 0;
 };
 
 class IMpsAllocatorCallback {
