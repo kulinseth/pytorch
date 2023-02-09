@@ -1,12 +1,10 @@
-#include <ATen/ATen.h>
 #include <ATen/mps/MPSAllocatorInterface.h>
 #include <ATen/mps/MPSGeneratorImpl.h>
 
 #include <torch/csrc/Generator.h>
 #include <torch/csrc/python_headers.h>
-#include <torch/csrc/utils/pybind.h>
+#include <torch/csrc/THP.h>
 #include <torch/csrc/utils/python_numbers.h>
-#include <torch/csrc/utils/python_strings.h>
 
 using namespace torch;
 
@@ -49,10 +47,44 @@ PyObject* MPSModule_isAvailable(PyObject* _unused, PyObject* noargs) {
   END_HANDLE_TH_ERRORS
 }
 
-PyObject* MPSModule_Synchronize(PyObject* _unused, PyObject* noargs) {
+PyObject* MPSModule_synchronize(PyObject* _unused, PyObject* noargs) {
   HANDLE_TH_ERRORS
   at::detail::getMPSHooks().deviceSynchronize();
   Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+static at::mps::IMPSAllocator* getMPSAllocator() {
+  auto allocator = static_cast<at::mps::IMPSAllocator*>(at::detail::getMPSHooks().getMPSDeviceAllocator());
+  THPUtils_assert(allocator, "failed to get MPSAllocator interface");
+  return allocator;
+}
+
+PyObject* MPSModule_emptyCache(PyObject* _unused, PyObject* noargs) {
+  HANDLE_TH_ERRORS
+  getMPSAllocator()->emptyCache();
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+PyObject* MPSModule_setMemoryFraction(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  THPUtils_assert(THPUtils_checkDouble(args), "invalid argument to setMemoryFraction()");
+  double highWatermarkRatio = THPUtils_unpackDouble(args);
+  getMPSAllocator()->setHighWatermarkRatio(highWatermarkRatio);
+  END_HANDLE_TH_ERRORS
+  Py_RETURN_NONE;
+}
+
+PyObject* MPSModule_currentAllocatedMemory(PyObject* _unused, PyObject* noargs) {
+  HANDLE_TH_ERRORS
+  return PyLong_FromUnsignedLongLong(getMPSAllocator()->getCurrentAllocatedMemory());
+  END_HANDLE_TH_ERRORS
+}
+
+PyObject* MPSModule_driverAllocatedMemory(PyObject* _unused, PyObject* noargs) {
+  HANDLE_TH_ERRORS
+  return PyLong_FromUnsignedLongLong(getMPSAllocator()->getDriverAllocatedMemory());
   END_HANDLE_TH_ERRORS
 }
 
@@ -61,8 +93,12 @@ PyObject* MPSModule_Synchronize(PyObject* _unused, PyObject* noargs) {
 // cppcoreguidelines-avoid-c-arrays)
 static struct PyMethodDef _MPSModule_methods[] = {
     {"_mps_init", MPSModule_initExtension, METH_NOARGS, nullptr},
-    {"_mps_synchronize", MPSModule_Synchronize, METH_NOARGS, nullptr},
+    {"_mps_synchronize", MPSModule_synchronize, METH_NOARGS, nullptr},
     {"_is_mps_available", MPSModule_isAvailable, METH_NOARGS, nullptr},
+    {"_mps_emptyCache", MPSModule_emptyCache, METH_NOARGS, nullptr},
+    {"_mps_setMemoryFraction", MPSModule_setMemoryFraction, METH_O, nullptr},
+    {"_mps_currentAllocatedMemory", MPSModule_currentAllocatedMemory, METH_NOARGS, nullptr},
+    {"_mps_driverAllocatedMemory", MPSModule_driverAllocatedMemory, METH_NOARGS, nullptr},
 };
 
 PyMethodDef* MPSModule_methods() {
