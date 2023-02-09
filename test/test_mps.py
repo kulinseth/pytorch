@@ -4701,7 +4701,7 @@ class TestNLLLoss(TestCase):
     def test_elu(self):
         def helper(shape, alpha=1.0, memory_format=torch.contiguous_format):
             cpu_x = torch.randn(shape, device='cpu', dtype=torch.float)
-            cpu_x = cpu_x.to(memory_format=torch.channels_last).requires_grad_()
+            cpu_x = cpu_x.to(memory_format=memory_format).requires_grad_()
 
             x = cpu_x.detach().clone().to('mps').requires_grad_(True)
             for activation_func in [torch.nn.ELU(alpha=alpha), torch.nn.CELU(alpha=alpha), torch.nn.SELU()]:
