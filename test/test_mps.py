@@ -10063,7 +10063,6 @@ class TestConsistency(TestCaseMPS):
         'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
         'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'trace': [torch.int64],
         'normalnumber_mean': [torch.float16, torch.float32],
         'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'multinomial': [torch.float32],
@@ -10397,6 +10396,7 @@ class TestConsistency(TestCaseMPS):
         'signal.windows.kaiser': [torch.float16],
         'stft': [torch.float32],
         'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        'trace': [torch.int64],
         'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8],
     }
