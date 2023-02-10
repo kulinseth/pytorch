@@ -10455,7 +10455,6 @@ class TestConsistency(TestCaseMPS):
         'nn.functional.triplet_margin_loss': [torch.uint8],
         'nn.functional.triplet_margin_with_distance_loss': [torch.uint8],
         'nn.functional.upsample_nearest': [torch.float32],
-        'scatter': [torch.bool],
         'sum_to_size': [torch.float16],
         'transpose': [torch.int64],
 
