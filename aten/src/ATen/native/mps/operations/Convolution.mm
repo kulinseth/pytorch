@@ -430,7 +430,7 @@ Tensor mps_convolution_backward_weights(
                           c10::nullopt,
                           kMPS,
                           c10::nullopt,
-                          memory_format);
+                          c10::nullopt);
   TensorArg grad_weight{ grad_weight_t, "result", 0 };
 
   convolution_shape_check(c, input, grad_weight, grad_output, padding, stride, dilation, groups);
