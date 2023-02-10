@@ -42,9 +42,8 @@ class TestModule(TestCase):
 
         def _check_module(items, name, device=device, dtype=dtype):
             for item_name, item in items:
-                # workaround for the tests checking the device (mps:0 with mps)
-
                 self.assertEqual(
+                    # workaround for the tests checking the device (mps:0 with mps)
                     item.device.type, device.type,
                     f'{name} {item_name} is on device {item.device} instead of the expected device {device}')
                 if item.dtype.is_floating_point:
