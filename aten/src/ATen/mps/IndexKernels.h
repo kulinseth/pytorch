@@ -222,10 +222,9 @@ kernel void scatter_kernel_4(uint linear_index              [[thread_position_in
     constant {0} * src = (constant {0} *)src_;
     device {1} * dst = (device {1} *)dst_;
 
-    const int sz = size[3] * size[2];
     packed_uint4 local_index;
-    local_index.x = linear_index / (sz * size[1]) % size[0];
-    local_index.y = linear_index / sz % size[1];
+    local_index.x = linear_index / (size[3] * size[2] * size[1]) % size[0];
+    local_index.y = linear_index / (size[3] * size[2]) % size[1];
     local_index.z = linear_index / size[3] % size[2];
     local_index.w = linear_index % size[3];
 
@@ -305,6 +304,7 @@ kernel void gather_kernel_5(uint linear_index               [[thread_position_in
     constant {0} * src = (constant {0} *)src_;
     device {1} * dst = (device {1} *)dst_;
 
+
     packed_uint5 local_index;
     local_index.x = linear_index / (size.u * size.w * size.z * size.y) % size.x;
     local_index.y = linear_index / (size.u * size.w * size.z) % size.y;
@@ -333,11 +333,9 @@ kernel void gather_kernel_4(uint linear_index               [[thread_position_in
     constant {0} * src = (constant {0} *)src_;
     device {1} * dst = (device {1} *)dst_;
 
-    const uint sz = size[3] * size[2];
-
     packed_uint4 local_index;
-    local_index.x = linear_index / (sz * size[1]) % size[0];
-    local_index.y = linear_index / sz % size[1];
+    local_index.x = linear_index / (size[3] * size[2] * size[1]) % size[0];
+    local_index.y = linear_index / (size[3] * size[2]) % size[1];
     local_index.z = linear_index / size[3] % size[2];
     local_index.w = linear_index % size[3];
 
