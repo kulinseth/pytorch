@@ -68,7 +68,18 @@ TORCH_IMPL_FUNC(topk_out_mps)
             newCachedGraph->selfTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSDataType(self.scalar_type()), input_shape);
 
             if (is_macos_13_or_newer()) {
-              MPSGraphTensor * sortedTensor = [mpsGraph sortWithTensor:newCachedGraph->selfTensor
+              MPSGraphTensor* castInputTensor = newCachedGraph->selfTensor;
+              MPSDataType dataType = getMPSDataType(self.scalar_type());
+              // #issue 104398441 sortWithTensor and argsortWithTensor
+              if (dataType != MPSDataTypeInt32 &&
+                  dataType != MPSDataTypeFloat32 &&
+                  dataType != MPSDataTypeFloat16) {
+                  dataType = (dataType & MPSDataTypeFloatBit) ? MPSDataTypeFloat32 : MPSDataTypeInt32;
+                  castInputTensor = [mpsGraph castTensor:newCachedGraph->selfTensor
+                                          toType:dataType
+                                            name:@"castInputTensor"];
+              }
+              MPSGraphTensor * sortedTensor = [mpsGraph sortWithTensor:castInputTensor
                                                                   axis:(NSUInteger)dim
                                                                   descending:largest
                                                                   name:nil];
@@ -77,7 +88,7 @@ TORCH_IMPL_FUNC(topk_out_mps)
                                                 start:((NSUInteger) 0) 
                                                 length:k
                                                 name:nil];
-              MPSGraphTensor* argSortedTensor = [mpsGraph argSortWithTensor:newCachedGraph->selfTensor
+              MPSGraphTensor* argSortedTensor = [mpsGraph argSortWithTensor:castInputTensor
                                                                        axis:(NSInteger)dim
                                                                        descending:largest
                                                                        name:@"argmax_out"];
