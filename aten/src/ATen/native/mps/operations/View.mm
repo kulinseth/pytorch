@@ -305,7 +305,7 @@ MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *i
             dstDimToSliceOffset[dstDim] + dstDimToSliceLength[dstDim] > [srcDimLengthOffset[@"length"] intValue]) {
 
           return nil;
-	}
+      }
         if (dstSizes[dstDim] > [srcDimLengthOffset[@"length"] intValue]) {
           // Try a reshape with the dimension above this to get required length
           tryReshape = true;
