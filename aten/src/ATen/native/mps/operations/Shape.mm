@@ -67,7 +67,7 @@ TORCH_IMPL_FUNC(topk_out_mps)
             newCachedGraph = new CachedGraph(mpsGraph);
             newCachedGraph->selfTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSDataType(self.scalar_type()), input_shape);
 
-            if (!is_macos_13_or_newer()) {
+            if (is_macos_13_or_newer()) {
               MPSGraphTensor * sortedTensor = [mpsGraph sortWithTensor:newCachedGraph->selfTensor
                                                                   axis:(NSUInteger)dim
                                                                   descending:largest
@@ -82,7 +82,7 @@ TORCH_IMPL_FUNC(topk_out_mps)
                                                                        descending:largest
                                                                        name:@"argmax_out"];
               argSortedTensor = [mpsGraph sliceTensor:argSortedTensor
-                                                        dimension:dim_
+                                                        dimension:dim
                                                         start:((NSUInteger) 0) 
                                                         length:k
                                                         name:nil];
