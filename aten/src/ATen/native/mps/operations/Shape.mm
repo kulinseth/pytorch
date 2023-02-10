@@ -27,12 +27,11 @@ TORCH_IMPL_FUNC(topk_out_mps)
 
   if (!is_macos_13_or_newer() && (k>16)) {
     TORCH_WARN_ONCE("torch.topk support for k>16 by MPS on MacOS 13+, please upgrade");
-    auto cpu_indices = indices.clone().to("cpu");
-    auto cpu_values = values.clone().to("cpu");
-    std::tuple<at::Tensor, at::Tensor> cpu_output{cpu_values, cpu_indices};
-    cpu_output = at::topk(self.to(at::Device(kCPU)), k, dim, largest, sorted);
-    at::_copy_from_and_resize(cpu_values, values);
-    at::_copy_from_and_resize(cpu_indices, indices);
+    Tensor cpu_indices = indices.clone().to("cpu");
+    Tensor cpu_values = values.clone().to("cpu");
+    at::topk_out(cpu_values, cpu_indices, self.to(at::Device(kCPU)), k, dim_, largest, sorted);
+    values.copy_(cpu_values);
+    indices.copy_(cpu_indices);
     return;
   }
 
