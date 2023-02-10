@@ -221,11 +221,7 @@ class TestModule(TestCase):
     def test_repr(self, device, dtype, module_info, training):
         # Test module can be represented with repr and str without errors.
 
-        MPS_BLOCKLIST = [
-            # "nn.LSTM" # hard crash
-        ]
-
-        msg = _get_mps_error_msg(device, dtype, module_info, MPS_BLOCKLIST)
+        msg = _get_mps_error_msg(device, dtype, module_info, [])
         if msg is not None:
             self.skipTest(msg)
 
