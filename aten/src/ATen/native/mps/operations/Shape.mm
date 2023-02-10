@@ -85,7 +85,7 @@ TORCH_IMPL_FUNC(topk_out_mps)
                                                                   name:nil];
               sortedTensor = [mpsGraph sliceTensor:sortedTensor
                                                 dimension:(NSUInteger)dim
-                                                start:((NSUInteger) 0) 
+                                                start:((NSUInteger) 0)
                                                 length:k
                                                 name:nil];
               MPSGraphTensor* argSortedTensor = [mpsGraph argSortWithTensor:castInputTensor
@@ -94,7 +94,7 @@ TORCH_IMPL_FUNC(topk_out_mps)
                                                                        name:@"argmax_out"];
               argSortedTensor = [mpsGraph sliceTensor:argSortedTensor
                                                         dimension:dim
-                                                        start:((NSUInteger) 0) 
+                                                        start:((NSUInteger) 0)
                                                         length:k
                                                         name:nil];
               newCachedGraph->valuesTensor = sortedTensor;
