@@ -752,23 +752,20 @@ static id<MTLComputePipelineState> getPipelineState(id<MTLDevice> device,
 }
 
 Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst) {
-  if (src.numel() == 0) {
-    return dst;
-  }
-
   Tensor output = dst;
   if (!dst.has_storage()) {
     output = at::native::empty_mps(src.sizes(), src.scalar_type(), c10::nullopt, kMPS);
   }
+
+  if (src.numel() == 0 || output.numel() == 0) {
+    return dst;
+  }
+
   if (src.dim() > 5) {
     ViewCachedGraph* cachedGraph = createViewGraph(src.is_complex() ?  at::view_as_real(src) : src,
                                                   dst, src.sizes(), src.strides(),
                                                   src.storage_offset(), /*needsScatter*/ false);
     return runViewGraph(cachedGraph, src, dst.has_storage() ? dst : output, /*needsScatter*/ false);
-  }
-
-  if (output.numel() == 0) {
-    return dst;
   }
 
   id<MTLBuffer> outputBuffer = dst.has_storage() ? getMTLBufferStorage(dst) : getMTLBufferStorage(output);
