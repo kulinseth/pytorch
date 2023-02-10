@@ -32,16 +32,6 @@ lint:
 quicklint:
 	lintrunner
 
-cscope:
-	find  aten/ c10/ torch/ tools/ third_party/ -name "*.[cphm]" -print -o \
-																	 -name "*.cpp"  -print -o \
-																	 -name "*.cc" -print -o \
-																	 -name "*.cu" -print >./cscope.files
-	cscope -b -q -k
-
-ctags:
-	/opt/homebrew/bin/ctags -R --c++-kinds=+p --fields=+iaS --extra=+q torch/ aten/ c10/ tools/ third_party/
-
 triton:
 	$(PIP) uninstall -y triton
 	$(PIP) install -U "git+https://github.com/openai/triton@$(shell cat .github/ci_commit_pins/triton.txt)#subdirectory=python"
