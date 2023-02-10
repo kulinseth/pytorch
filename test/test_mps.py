@@ -10028,7 +10028,6 @@ class TestConsistency(TestCaseMPS):
         'sgn': ['f16', 'f32'],
         'unfold_copy': ['f16', 'f32'],
         'unfold': ['f16', 'f32'],
-        'trace': ['f32'],
 
         # Correctness issues
         'nn.functional.prelu': ['f32'],
