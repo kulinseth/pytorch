@@ -10440,12 +10440,8 @@ class TestConsistency(TestCaseMPS):
 
     BLOCKLIST_MACOS_12 = {
         'nn.functional.conv_transpose2d': [torch.float32, torch.float16],
-        'H': [torch.int64],
-        'T': [torch.int64],
         '__rdiv__': [torch.float16],
         'bool': [torch.float16, torch.float32],
-        'mH': [torch.int64],
-        'mT': [torch.int64],
         'masked.sum': [torch.float16],
         'masked.var': [torch.float16],
         'neg': [torch.uint8],
