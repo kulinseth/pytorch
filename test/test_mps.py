@@ -10464,7 +10464,7 @@ class TestConsistency(TestCaseMPS):
     BLOCKLIST_MACOS_12 = {
         '__rdiv__': [torch.float16],
         'masked.var': [torch.float16],
-        'sum': [torch.float16],
+        'neg': [torch.uint8],
         'mul': [torch.float16],
 
         # expected failures
