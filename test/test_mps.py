@@ -4283,12 +4283,16 @@ class TestNLLLoss(TestCaseMPS):
         helper((2, 8, 4, 5))
 
     def test_remainder(self):
-        res_cpu = torch.remainder(torch.tensor([-3, -2, -1, 1, 2, 3], dtype=torch.int32, device="cpu"), torch.tensor(2, device="cpu", dtype=torch.int32))
-        res_mps = torch.remainder(torch.tensor([-3, -2, -1, 1, 2, 3], dtype=torch.int32, device="mps"), torch.tensor(2, device="mps", dtype=torch.int32))
+        res_cpu = torch.remainder(
+            torch.tensor([-3, -2, -1, 1, 2, 3], dtype=torch.int32, device="cpu"), torch.tensor(2, device="cpu", dtype=torch.int32))
+        res_mps = torch.remainder(
+            torch.tensor([-3, -2, -1, 1, 2, 3], dtype=torch.int32, device="mps"), torch.tensor(2, device="mps", dtype=torch.int32))
         self.assertEqual(res_cpu, res_mps)
 
-        res_cpu = torch.remainder(torch.tensor([1, 2, 3, 4, 5], dtype=torch.int32, device="cpu"), -1.5)
-        res_mps = torch.remainder(torch.tensor([1, 2, 3, 4, 5], dtype=torch.int32, device="mps"), -1.5)
+        res_cpu = torch.remainder(
+            torch.tensor([1, 2, 3, 4, 5], dtype=torch.int32, device="cpu"), -1.5)
+        res_mps = torch.remainder(
+            torch.tensor([1, 2, 3, 4, 5], dtype=torch.int32, device="mps"), -1.5)
         self.assertEqual(res_cpu, res_mps)
 
     def test_expand(self):
