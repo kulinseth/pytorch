@@ -10027,7 +10027,6 @@ class TestConsistency(TestCaseMPS):
 
         # Correctness issues
         'nn.functional.prelu': ['f32'],
-        'nn.functional.conv_transpose2d': ['f32'],
         'atanh': ['f32'],
         'div': ['f16'],
         'nn.functional.bilinear': ['f32'],
