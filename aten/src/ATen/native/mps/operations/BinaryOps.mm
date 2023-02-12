@@ -355,9 +355,6 @@ Tensor& floor_divide_mps_(Tensor& self, const Tensor& other) {
 }
 
 TORCH_IMPL_FUNC(remainder_out_mps) (const Tensor& self, const Tensor& other, const Tensor& output) {
-  TORCH_CHECK(self.scalar_type() != kLong && other.scalar_type() != kLong,
-              "MPS: does not support remainder op with int64 input");
-
   mps::div_mode_template(self, other, "floor", output, "remainder_out_mps");
 }
 
