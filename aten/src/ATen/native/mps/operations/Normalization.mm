@@ -96,7 +96,6 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
   const bool has_weight = (weight_opt.has_value() && weight_opt->defined());
   const bool has_bias = (bias_opt.has_value() && bias_opt->defined());
 
-  const auto memory_format = self.suggest_memory_format();
   auto memory_format = self.suggest_memory_format();
   bool executeGatherOp = true;
   if (self.is_contiguous(memory_format)) {
