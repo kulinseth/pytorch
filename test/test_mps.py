@@ -4282,6 +4282,19 @@ class TestNLLLoss(TestCaseMPS):
         helper((2, 6, 3, 5))
         helper((2, 8, 4, 5))
 
+    def test_remainder(self):
+        res_cpu = torch.remainder(
+            torch.tensor([-3, -2, -1, 1, 2, 3], dtype=torch.int32, device="cpu"), torch.tensor(2, device="cpu", dtype=torch.int32))
+        res_mps = torch.remainder(
+            torch.tensor([-3, -2, -1, 1, 2, 3], dtype=torch.int32, device="mps"), torch.tensor(2, device="mps", dtype=torch.int32))
+        self.assertEqual(res_cpu, res_mps)
+
+        res_cpu = torch.remainder(
+            torch.tensor([1, 2, 3, 4, 5], dtype=torch.int32, device="cpu"), -1.5)
+        res_mps = torch.remainder(
+            torch.tensor([1, 2, 3, 4, 5], dtype=torch.int32, device="mps"), -1.5)
+        self.assertEqual(res_cpu, res_mps)
+
     def test_expand(self):
         def helper(n, c):
             values = [[1.0], [4.0], [7.0]]
@@ -10231,7 +10244,6 @@ class TestConsistency(TestCaseMPS):
         'polygammapolygamma_n_4': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'qr': [torch.float32],
         'quantile': [torch.float32],
-        'remainder': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8],
         'renorm': [torch.float16, torch.float32],
         'roll': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'rsub': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
