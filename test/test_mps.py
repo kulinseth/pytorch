@@ -10403,7 +10403,7 @@ class TestConsistency(TestCaseMPS):
         'signal.windows.kaiser': [torch.float16],
         'stft': [torch.float32],
         'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8],
-        'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],  
+        'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8],
     }
 
@@ -10591,7 +10591,7 @@ class TestConsistency(TestCaseMPS):
                 elif op.name == "norm" and dtype == torch.float16:
                     atol = 7e-4
                     rtol = 1.5e-3
-                elif op.name == "unique" and cpu_kwargs["sorted"] == False:
+                elif op.name == "unique" and cpu_kwargs["sorted"] is False:
                     continue
                 else:
                     atol = None
