@@ -10067,7 +10067,6 @@ class TestConsistency(TestCaseMPS):
         'topk': [torch.int16, torch.int32, torch.int64, torch.uint8],
 
         # Functions with correctness issues
-        'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
         'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'trace': [torch.int64],
@@ -10317,6 +10316,7 @@ class TestConsistency(TestCaseMPS):
         'symeig': [torch.float32],
         'take': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'to_sparse': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'unique': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'var_mean': [torch.float16, torch.float32],
         'var_meanunbiased': [torch.float16, torch.float32],
         'vdot': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
@@ -10403,7 +10403,7 @@ class TestConsistency(TestCaseMPS):
         'signal.windows.kaiser': [torch.float16],
         'stft': [torch.float32],
         'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8],
-        'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],  
         'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8],
     }
 
@@ -10591,6 +10591,8 @@ class TestConsistency(TestCaseMPS):
                 elif op.name == "norm" and dtype == torch.float16:
                     atol = 7e-4
                     rtol = 1.5e-3
+                elif op.name == "unique" and cpu_kwargs["sorted"] == False:
+                    continue
                 else:
                     atol = None
                     rtol = None
