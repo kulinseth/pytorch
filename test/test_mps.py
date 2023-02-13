@@ -10453,7 +10453,7 @@ class TestConsistency(TestCaseMPS):
         'addr',
 
         # for macOS 12
-        'masked.normalize','masked.sum',
+        'masked.normalize', 'masked.sum',
         'outer',
         'sum_to_size',
     }
