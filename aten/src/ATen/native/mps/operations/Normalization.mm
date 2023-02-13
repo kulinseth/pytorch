@@ -97,11 +97,6 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
   const bool has_bias = (bias_opt.has_value() && bias_opt->defined());
 
   auto memory_format = self.suggest_memory_format();
-  bool executeGatherOp = true;
-  if (self.is_contiguous(memory_format)) {
-    memory_format = MemoryFormat::Contiguous;
-    executeGatherOp = false;
-  }
 
   if (output.numel() == 0) {
     return std::tuple<Tensor&, Tensor&, Tensor&>(output, save_mean, save_var);;
@@ -152,6 +147,12 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
       channelsDim = 1;
     else
       channelsDim = num_input_dims - 1;
+
+    bool executeGatherOp = true;
+    if (self.is_contiguous(memory_format)) {
+      memory_format = MemoryFormat::Contiguous;
+      executeGatherOp = false;
+    }
 
     if(!cachedGraph) {
       native_mps::MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ native_mps::MPSCachedGraph * () {
