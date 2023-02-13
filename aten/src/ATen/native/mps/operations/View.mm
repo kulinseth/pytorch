@@ -230,7 +230,12 @@ MPSGraphTensor* asStridedLayer_reshapePattern(MPSGraph *graph, MPSGraphTensor *i
   return outputTensor;
 }
 
-MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *inputTensor, int dstRank, const IntArrayRef& dstSizes, const IntArrayRef& dstStrides, int offset) {
+MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *inputTensor, int dstRank, const IntArrayRef& dstSizes, const IntArrayRef& dstStridesIn, int offset) {
+  std::vector<long long> dstStrides(dstStridesIn.begin(), dstStridesIn.end());
+  // Set stride to 0 for dimensions with length 1
+  for (NSInteger dstDim = 0; dstDim < dstRank; dstDim++) if (dstSizes[dstDim] == 1) {
+    dstStrides[dstDim] = 0;
+  }
 
   // Duplicate strides cannot be done
   {
@@ -276,7 +281,10 @@ MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *i
   std::vector<int32_t> dstDimToSliceLength(dstRank);
   std::vector<int32_t> dstDimToSliceOffset(dstRank);
   bool needsBroadcast = false;
-  {
+  bool tryReshape = false;
+  do {
+    needsBroadcast = false;
+    tryReshape = false;
     for (NSInteger dstDim = dstRank - 1; dstDim >= 0; dstDim--) {
       if (dstStrides[dstDim] == 0) {
         // This dimension should be a broadcast
@@ -295,14 +303,38 @@ MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *i
         if (!srcDimLengthOffset ||
             // the offset + length of destination should not be larger than source's length when slicing
             dstDimToSliceOffset[dstDim] + dstDimToSliceLength[dstDim] > [srcDimLengthOffset[@"length"] intValue]) {
+
           return nil;
+      }
+        if (dstSizes[dstDim] > [srcDimLengthOffset[@"length"] intValue]) {
+          // Try a reshape with the dimension above this to get required length
+          tryReshape = true;
+          [dstDimOrder removeAllObjects];
+
+          NSInteger srcDim = [srcDimLengthOffset[@"dim"] intValue];
+          NSInteger outerSrcDim = srcDim - 1;
+          if (outerSrcDim < 0)
+              return nil;
+
+          NSMutableArray *reshapedShape = [[[NSMutableArray alloc] initWithArray:[flatInputTensor shape]] autorelease];
+          NSInteger mergedSize = [reshapedShape[srcDim] intValue] * [reshapedShape[outerSrcDim] intValue];
+          reshapedShape[srcDim] = [NSNumber numberWithInt:mergedSize];
+          [reshapedShape removeObjectAtIndex:outerSrcDim];
+          flatInputTensor = [graph reshapeTensor: flatInputTensor
+                                       withShape: reshapedShape
+                                            name: nil];
+
+          srcRank -= 1;
+          srcStrideToDimLengthOffset = getStrideToDimLengthOffsetDict(flatInputTensor, srcRank, offset);
+          break;
         }
+
         // Get the src dimension corresponding to the requested stride
         NSNumber *srcDim = srcDimLengthOffset[@"dim"];
         [dstDimOrder insertObject:srcDim atIndex:0];
       }
     }
-  }
+  } while (tryReshape);
 
   // 2. Slice out any unused dimensions
   NSMutableArray *missingSrcDims = [[NSMutableArray alloc] init];
@@ -414,6 +446,177 @@ MPSGraphTensor* asStridedLayer_genericPattern(MPSGraph *graph, MPSGraphTensor *i
   return broadcastTensor;
 }
 
+MPSGraphTensor* asStridedLayer_reshapeTransposePattern(MPSGraph *graph, MPSGraphTensor *inputTensor, int dstRank, const IntArrayRef& dstSizes, const IntArrayRef& dstStrides, int offset) {
+  NSUInteger inputVolume = 1;
+  for(NSNumber *val : [inputTensor shape])
+      inputVolume *= [val integerValue];
+
+  // 1. Sort the strides in descending order, and determine the dimension order
+  // to permute the sorted strides back to the requested strides
+  NSMutableArray *dimOrder = [[NSMutableArray new] autorelease];
+  NSMutableArray *sortedTargetStrides = [[NSMutableArray new] autorelease];
+  {
+    for (NSUInteger i = 0; i < dstRank; i++) {
+      dimOrder[i] = [NSNumber numberWithInteger: i];
+      sortedTargetStrides[i] = [NSNumber numberWithInteger: dstStrides[i]];
+    }
+
+    // Must use a stable sort to preserve requested order of dimensions with duplicate strides
+    for (NSInteger i = dstRank - 1; i >= 0; i--) {
+      NSNumber *minStride = sortedTargetStrides[i];
+      NSInteger minStrideIndex = i;
+      for (NSInteger j = i - 1; j >= 0; j--) {
+        if ([sortedTargetStrides[j] integerValue] < [minStride integerValue]) {
+          minStride = sortedTargetStrides[j];
+          minStrideIndex = j;
+        } else if ([sortedTargetStrides[j] integerValue] == [minStride integerValue] && dstSizes[[dimOrder[j] integerValue]] == 1) {
+            // Tie break cases with dest size of 1
+            minStrideIndex = j;
+        }
+      }
+      // Swap if i is not min
+      if (minStrideIndex != i) {
+        sortedTargetStrides[minStrideIndex] = sortedTargetStrides[i];
+        sortedTargetStrides[i] = minStride;
+        NSNumber *tmp = dimOrder[i];
+        dimOrder[i] = dimOrder[minStrideIndex];
+        dimOrder[minStrideIndex] = tmp;
+      }
+    }
+
+    // Verify strides make sense
+    for (NSInteger i = dstRank - 2; i >= 0; i--) {
+      NSInteger innerStride = [sortedTargetStrides[i + 1] integerValue];
+      NSInteger outerStride = [sortedTargetStrides[i] integerValue];
+      // Strides must be multiples of inner strides
+      if (outerStride % innerStride != 0)
+        return nil;
+
+      // Strides must be at least inner stride * matching dim length
+      NSUInteger innerLength = dstSizes[[dimOrder[i + 1] integerValue]];
+      if (outerStride < innerStride * innerLength)
+        return nil;
+    }
+  }
+
+  // Stride in inner dim is a strided slice
+  BOOL isStridedSlice = ([sortedTargetStrides[dstRank - 1] integerValue] != 1);
+
+  // 2. Reshape to the congruent shape layout, save shape and slice info for later
+  MPSGraphTensor *reshapeTensor = inputTensor;
+  NSMutableArray *congruentShape = [[NSMutableArray new] autorelease];
+  NSMutableArray *sliceMap = [[NSMutableArray new] autorelease];
+  NSMutableArray *offsetMap = [[NSMutableArray new] autorelease];
+  {
+    // Use dimOrder to get the matching congruent shape for sorted strides
+    for (NSNumber *dim : dimOrder)
+      [congruentShape addObject:[NSNumber numberWithInteger:dstSizes[[dim integerValue]]]];
+
+    // For strided slice add a new inner dim with stride 1 and length 1
+    if (isStridedSlice) {
+      dstRank++;
+      [sortedTargetStrides addObject:[NSNumber numberWithInteger:1]];
+      [congruentShape addObject:[NSNumber numberWithInteger:1]];
+    }
+
+    // Straighten out the sizes congruent shape to match the strides, infer the actual dim length from strides and account for slices
+    NSUInteger currStride = [sortedTargetStrides[dstRank - 1] integerValue];
+    NSUInteger currVolume = 1;
+    for (NSInteger i = dstRank - 1; i > 0; i--) {
+      NSUInteger dimLength = [congruentShape[i] integerValue];
+      NSUInteger inferredDimLength  = [sortedTargetStrides[i - 1] integerValue] / currStride;
+
+      [sliceMap insertObject:congruentShape[i] atIndex: 0];
+      [offsetMap insertObject:[NSNumber numberWithInteger: offset % inferredDimLength] atIndex: 0];
+      offset /= inferredDimLength;
+
+      // Skip dimensions with dim length of 1, stride is irrelevant for these layers
+      if (inferredDimLength == 1) {
+        continue;
+      }
+
+      if (dimLength < inferredDimLength) {
+        // There is a slice at this dim, replace the dim with the inferred and do slice later
+        congruentShape[i] = [NSNumber numberWithInteger:inferredDimLength];
+      } else if (dimLength > inferredDimLength) {
+        // This dimension overlaps with the dimension above it, not possible without gather-type op
+        return nil;
+      }
+      currVolume *= [congruentShape[i] integerValue];
+      currStride = [sortedTargetStrides[i - 1] integerValue];
+    }
+    // Infer the length for the outermost dim using total volume
+    if (inputVolume % currVolume != 0)
+      return nil;
+    // Check if remaining offset, cannot offset outside of input tensor
+    if (offset != 0)
+      return nil;
+
+    NSUInteger outerDimLength = [congruentShape[0] integerValue];
+    NSUInteger inferredDimLength = inputVolume / currVolume;
+    [sliceMap insertObject:congruentShape[0] atIndex: 0];
+    [offsetMap insertObject:[NSNumber numberWithInteger: offset % inferredDimLength]  atIndex: 0];
+    if (outerDimLength < inferredDimLength) {
+      // There is a slice at this dim, replace the dim with the inferred and do slice later
+      congruentShape[0] = [NSNumber numberWithInteger:inferredDimLength];
+    } else if (outerDimLength > inferredDimLength) {
+      // This dimension indexes beyond the source array, invalid
+      return nil;
+    }
+
+    reshapeTensor = [graph reshapeTensor:reshapeTensor
+                               withShape:congruentShape
+                                    name:nil];
+  }
+
+  // 3. Slice
+  MPSGraphTensor *slicedTensor = reshapeTensor;
+  {
+    for (NSInteger i = 0; i < dstRank; i++) {
+      NSInteger offset = [offsetMap[i] integerValue];
+      NSInteger length = [sliceMap[i] integerValue];
+      if (offset + length > [congruentShape[i] integerValue])
+        return nil;
+      if (offset != 0 || length != [congruentShape[i] integerValue])
+        slicedTensor = [graph sliceTensor:slicedTensor
+                                dimension:i
+                                    start:offset
+                                   length:length
+                                     name:nil];
+    }
+  }
+
+  // 4. Transpose the congruent tensor to get the desired strides
+  MPSGraphTensor *transposedTensor = slicedTensor;
+  {
+    // Inverse the dimension order from dest->congruent to congruent->dest
+    NSMutableArray *permuteOrder = [[NSMutableArray new] autorelease];
+    // For strided slice just index the outer most dimensions which exist in user provided shapes
+    NSUInteger dimOrderRank = isStridedSlice ? dstRank - 1 : dstRank;
+    for (NSUInteger i = 0; i < dimOrderRank; i++)
+      [permuteOrder addObject: [NSNumber numberWithInteger:0]];
+    for (NSUInteger i = 0; i < dimOrderRank; i++)
+      permuteOrder[[dimOrder[i] integerValue]] = [NSNumber numberWithInteger:i];
+
+    // For strided slice case permute of outer dims is unchanged, add identity dim for inner most dim
+    if (isStridedSlice)
+      [permuteOrder addObject:[NSNumber numberWithInteger:dstRank - 1]];
+
+    transposedTensor = permuteTensor(graph, transposedTensor, permuteOrder);
+  }
+
+  // 5. Squeeze out the inner dim for strided slice case
+  MPSGraphTensor *squeezedTensor = transposedTensor;
+  if (isStridedSlice) {
+    squeezedTensor = [graph squeezeTensor:transposedTensor
+                                     axis:-1
+                                     name:nil];
+  }
+
+  MPSGraphTensor *resultTensor = squeezedTensor;
+  return resultTensor;
+}
+
 MPSGraphTensor* asStridedLayer_pattern(MPSGraph *graph, MPSGraphTensor *inputTensor, int dstRank, const IntArrayRef& dstSizes, const IntArrayRef& dstStrides, int offset) {
   if (!dstRank)
     return nil;
@@ -424,6 +627,8 @@ MPSGraphTensor* asStridedLayer_pattern(MPSGraph *graph, MPSGraphTensor *inputTen
     outputTensor = asStridedLayer_reshapePattern(graph, inputTensor, dstRank, dstSizes, dstStrides, offset);
   if (!outputTensor)
     outputTensor = asStridedLayer_genericPattern(graph, inputTensor, dstRank, dstSizes, dstStrides, offset);
+  if (!outputTensor)
+    outputTensor = asStridedLayer_reshapeTransposePattern(graph, inputTensor, dstRank, dstSizes, dstStrides, offset);
 
   return outputTensor;
 }
