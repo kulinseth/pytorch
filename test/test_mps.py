@@ -10068,11 +10068,14 @@ class TestConsistency(TestCaseMPS):
 
         # Functions with correctness issues
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
-        'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'trace': [torch.int64],
         'normalnumber_mean': [torch.float16, torch.float32],
         'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'multinomial': [torch.float32],
+
+        # cpu result off, showing random values
+        'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        # cpu result off, showing inf values
         'dist': [torch.float16],
 
         # failure due to issue: atan2() may generate NAN in output with
