@@ -10627,8 +10627,11 @@ class TestConsistency(TestCaseMPS):
         '__rpow__': [torch.uint8],
 
         # failures before macOS 13.3
-        'nn.functional.conv_transpose2d': [torch.float32],
-        'nn.functional.pairwise_distance': [torch.float16],
+        'nn.functional.avg_pool2d': [torch.float32, torch.int64],
+        'nn.functional.adaptive_avg_pool1d': [torch.float32],
+
+        # failures before macOS 13.3
+        'nn.functional.adaptive_avg_pool2d': [torch.float32],
     }
 
     UNIMPLEMENTED_OPS = {
