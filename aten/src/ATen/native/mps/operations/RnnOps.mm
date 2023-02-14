@@ -25,6 +25,13 @@ std::vector<long long> getTensorShape(MPSGraphTensor* mpsTensor) {
 
 std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor> _lstm_mps(const Tensor& input, TensorList hx, TensorList params, bool has_biases, int64_t num_layers, double dropout_p, bool train, bool bidirectional, bool batch_first) {
     using namespace mps;
+
+    //Projections are not currently supported, raise an error if needed
+    bool has_projections = (hx[0].size(2) != hx[1].size(2);
+    if(has_projections) {
+        AT_ERROR("LSTM with projections is not currently supported with MPS.");
+    }
+
     std::vector<Tensor> kernel_weights;
     std::vector<Tensor> recurrent_kernel_weights;
     std::vector<Tensor> biases;
