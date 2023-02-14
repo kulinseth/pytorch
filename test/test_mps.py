@@ -10456,16 +10456,14 @@ class TestConsistency(TestCaseMPS):
         'addr',
 
         # for macOS 12
-        'masked.normalize', 'masked.sum',
+        'masked.normalize', 'masked.sum', 'masked.var',
         'outer',
-        'sum_to_size',
+        'sum_to_size', 'sum',
+        'mul',
     }
 
     BLOCKLIST_MACOS_12 = {
         '__rdiv__': [torch.float16],
-        'masked.var': [torch.float16],
-        'sum': [torch.float16],
-        'mul': [torch.float16],
 
         # expected failures
         'nn.functional.interpolatenearest': [torch.float32],
