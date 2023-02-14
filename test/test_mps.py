@@ -10450,25 +10450,24 @@ class TestConsistency(TestCaseMPS):
         'true_divide', 'kron',
         'gradient', 'var', 'std',
         'linalg.vector_norm',
-        'addr'
+        'addr',
+
+        # for macOS 12
+        'masked.normalize', 'masked.sum',
+        'outer',
+        'sum_to_size',
     }
 
     BLOCKLIST_MACOS_12 = {
-        'nn.functional.conv_transpose2d': [torch.float32, torch.float16],
         '__rdiv__': [torch.float16],
-        'bool': [torch.float16, torch.float32],
-        'masked.sum': [torch.float16],
         'masked.var': [torch.float16],
+        'sum': [torch.float16],
+        'mul': [torch.float16],
+
+        # expected failures
         'nn.functional.interpolatenearest': [torch.float32],
         'nn.functional.upsample_nearest': [torch.float32],
-        'sum_to_size': [torch.float16],
-        'transpose': [torch.int64],
-
-        'sum': [torch.float16],
-
-        'outer': [torch.float16],
-        'mul': [torch.float16],
-        'masked.normalize': [torch.float16],
+        'nn.functional.conv_transpose2d': [torch.float32]
     }
 
     ALLOWLIST_MACOS_13_3 = {
