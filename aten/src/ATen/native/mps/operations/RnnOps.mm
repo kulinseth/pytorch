@@ -120,16 +120,6 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> _lstm_mps(const Tenso
                                                      secondaryTensor:recurrentBiasList[i]
                                                                 name:nil];
                 }
-                MPSGraphTensor* stateTensor_ = [mpsGraph sliceTensor:stateTensor
-                                                           dimension:0
-                                                               start:i
-                                                              length:1
-                                                                name:nil];
-                MPSGraphTensor* cellStateTensor_ = [mpsGraph sliceTensor:cellStateTensor
-                                                               dimension:0
-                                                                   start:i
-                                                                  length:1
-                                                                    name:nil];
                 outputs = [mpsGraph LSTMWithSourceTensor:inputTensor_
                                         recurrentWeight:recurrentKernelWeightsList[i]
                                             inputWeight:kernelWeightsList[i]
@@ -139,6 +129,16 @@ std::tuple<Tensor, Tensor, Tensor, Tensor, Tensor, Tensor> _lstm_mps(const Tenso
                                              descriptor:opDesc
                                                    name:nil];
 
+                stateTensor_ = [mpsGraph sliceTensor:stateTensor
+                                                            dimension:0
+                                                            start:i
+                                                            length:1
+                                                            name:nil];
+                cellStateTensor_ = [mpsGraph sliceTensor:cellStateTensor
+                                                                    dimension:0
+                                                                    start:i
+                                                                    length:1
+                                                                    name:nil];
                 inputTensor_ = [outputs objectAtIndex:0];
                 // no need to keep a final layer output copy as it is
                 // returned anyway and not used in backprop
@@ -531,9 +531,18 @@ std::tuple<Tensor, std::vector<Tensor>, std::vector<Tensor>> lstm_mps_backward(c
             }
         }
 
-        Tensor output_out = at::empty_like(input);
-        Tensor grad_state_out = at::empty_like(hx[0]);
-        Tensor grad_cell_state_out = at::empty_like(hx[1]);
+        Tensor output = at::empty_like(input);
+        Tensor grad_rec_weights = at::empty_like(recurrent_kernel_weights[0]);
+        Tensor grad_weights = at::empty_like(kernel_weights[0]);
+        Tensor grad_bias = at::empty((kernel_weights[0].size(0)), kernel_weights[0].options());
+        Tensor grad_state = at::empty_like(hx[0]);
+        Tensor grad_cell_state = at::empty_like(hx[1]);
+        Placeholder outputPlaceholder   = Placeholder(cachedGraph->outputTensors_[0], output);
+        Placeholder gradRecWeightsPlaceholder   = Placeholder(cachedGraph->outputTensors_[1], grad_rec_weights);
+        Placeholder gradWeightsPlaceholder   = Placeholder(cachedGraph->outputTensors_[2], grad_weights);
+        Placeholder gradBiasPlaceholder   = Placeholder(cachedGraph->outputTensors_[3], grad_bias);
+        Placeholder gradStatePlaceholder   = Placeholder(cachedGraph->outputTensors_[4], grad_state);
+        Placeholder gradCellStatePlaceholder   = Placeholder(cachedGraph->outputTensors_[5], grad_cell_state);
 
 
         std::vector<Tensor> grad_hx = {grad_state_out, grad_cell_state_out};
@@ -559,9 +568,21 @@ std::tuple<Tensor, std::vector<Tensor>, std::vector<Tensor>> lstm_mps_backward(c
         for (int i = 0; i < num_layers; i++) {
             Tensor grad_rec_weights = at::empty_like(recurrent_kernel_weights[i]);
             Tensor grad_weights = at::empty_like(kernel_weights[i]);
-            Tensor grad_bias = at::empty((kernel_weights[i].size(0)), kernel_weights[i].options());
+            Tensor grad_bias = at::empty((kernel_weights[0].size(0)), kernel_weights[0].options());
+            Tensor grad_state = at::empty_like(hx[0]);
+            Tensor grad_cell_state = at::empty_like(hx[1]);
             weights.push_back(grad_weights);
             weights.push_back(grad_rec_weights);
+            if(has_biases) {
+                weights.push_back(grad_bias);
+                weights.push_back(grad_bias);
+            }
+            gradOutPlaceholder = Placeholder([gradOutputArray objectAtIndex:i], output);
+            gradRecWeightsPlaceholder = Placeholder([gradRecWeightsArray objectAtIndex:i], grad_rec_weights);
+            gradWeightsPlaceholder = Placeholder([gradWeightsArray objectAtIndex:i], grad_weights);
+            gradBiasPlaceholder = Placeholder([gradBiasArray objectAtIndex:i], grad_bias);
+            gradStatePlaceholder = Placeholder([gradStateArray objectAtIndex:i], grad_state);
+            gradCellStatePlaceholder = Placeholder([gradCellStateArray objectAtIndex:i], grad_cell_state);
 
             if(has_biases) {
                 weights.push_back(grad_bias);
