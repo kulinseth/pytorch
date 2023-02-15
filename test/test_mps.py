@@ -10096,7 +10096,6 @@ class TestConsistency(TestCaseMPS):
         'trace': ['f32'],
 
         # Correctness issues
-        'nn.functional.prelu': ['f32'],
         'atanh': ['f32'],
         'div': ['f16'],
 
