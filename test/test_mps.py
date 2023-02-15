@@ -10042,7 +10042,6 @@ class TestConsistency(TestCaseMPS):
         'nn.functional.prelu': ['f32'],
         'atanh': ['f32'],
         'div': ['f16'],
-        'nn.functional.bilinear': ['f32'],
         'nn.functional.embedding': ['f16'],
 
         # Unsupported dtype
