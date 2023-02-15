@@ -2411,6 +2411,7 @@ aot_autograd_failures = {
     xfail('cov'),
     xfail('chalf'),  # RuntimeError: "sum_cpu" not implemented for 'ComplexHalf'
     xfail('sparse.sampled_addmm'),
+    xfail('normal', 'number_mean'),  # TypeError: randn_like(): argument 'input' (position 1) must be Tensor, not float
     xfail('sparse.mm', 'reduce'),
     skip('nn.functional.binary_cross_entropy_with_logits'),  # seems to fail sometimes?
     skip('nn.functional.margin_ranking_loss'),  # seems flaky
@@ -2557,7 +2558,6 @@ symbolic_aot_autograd_failures = {
     xfail('nn.functional.smooth_l1_loss', ''),  # could not find kernel
     xfail('nn.functional.unfold', ''),  # Cannot call sizes() on tensor with symbolic sizes/strides
     xfail('norm', 'nuc'),  # Cannot call sizes() on tensor with symbolic sizes/strides
-    xfail('normal', ''),  # Cannot call sizes() on tensor with symbolic sizes/strides
     xfail('normal', 'number_mean'),  # Cannot call sizes() on tensor with symbolic sizes/strides
     xfail('ormqr', ''),  # aten.ormqr.default - couldn't find symbolic meta function/decomposition
     xfail('pca_lowrank', ''),  # could not find kernel
