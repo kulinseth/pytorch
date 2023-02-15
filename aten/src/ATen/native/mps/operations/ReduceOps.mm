@@ -163,6 +163,9 @@ void reduction_out_mps(
     if (reduction_type == MPSReductionType::PROD) {
       output_t.fill_(1);
     }
+    else if (reduction_type == MPSReductionType::SUM) {
+      output_t.zero_();
+    }
     return;
   }
 
@@ -303,6 +306,7 @@ TORCH_IMPL_FUNC(sum_out_mps)(
   c10::optional<ScalarType> dtype,
   const Tensor& output_t) {
 
+  // output_t.zero_();
   reduction_out_mps(input_t, opt_dim, keepdim, dtype, output_t, MPSReductionType::SUM, "sum_out_mps");
 }
 
