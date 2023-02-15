@@ -10462,8 +10462,6 @@ class TestConsistency(TestCaseMPS):
     }
 
     BLOCKLIST_MACOS_12 = {
-        '__rdiv__': [torch.float16],
-
         # expected failures
         'nn.functional.interpolatenearest': [torch.float32],
         'nn.functional.upsample_nearest': [torch.float32],
