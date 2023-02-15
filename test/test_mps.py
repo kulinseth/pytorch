@@ -10686,9 +10686,6 @@ class TestConsistency(TestCaseMPS):
     }
 
     BLOCKLIST_MACOS_12 = {
-        # failures because of accumulate error exceeds atol/rtol
-        '__rdiv__': [torch.float16],
-
         # expected failures
         'nn.functional.interpolatenearest': [torch.float32],
         'nn.functional.upsample_nearest': [torch.float32],
