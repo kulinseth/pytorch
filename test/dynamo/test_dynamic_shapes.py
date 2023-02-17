@@ -61,7 +61,7 @@ unittest.expectedFailure(
 )
 
 unittest.expectedFailure(
-    DynamicShapesMiscTests.test_parsing_sdpa_dynamic_shapes
+    DynamicShapesMiscTests.test_autocast_sdpa_dynamic_shapes
     # Cannot call sizes() on tensor with symbolic sizes/strides
 )
 
