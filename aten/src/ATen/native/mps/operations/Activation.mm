@@ -1082,7 +1082,7 @@ void elu_variants_out_mps (
   MPSStream* stream = getCurrentMPSStream();
 
   @autoreleasepool {
-    string key = func_name + ":" + getTensorsStringKey({self}) + ":" +
+    string key = func_name + ":" + getTensorsStringKey({self, result}) + ":" +
                                        to_string(alpha.to<double>()) + ":" +
                                        to_string(scale.to<double>()) + ":" +
                                        to_string(input_scale.to<double>());
@@ -1215,7 +1215,7 @@ TORCH_IMPL_FUNC(elu_backward_out_mps) (
   MPSStream* stream = getCurrentMPSStream();
 
   @autoreleasepool {
-    string key = "elu_backward_out_mps:" + getTensorsStringKey({grad_output}) + ":" +
+    string key = "elu_backward_out_mps:" + getTensorsStringKey({grad_output, self_or_result, grad_input}) + ":" +
                                                  to_string(alpha.to<double>()) + ":" +
                                                  to_string(scale.to<double>()) + ":" +
                                                  to_string(input_scale.to<double>()) + ":" +
