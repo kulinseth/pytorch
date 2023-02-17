@@ -70,7 +70,7 @@ class Placeholder {
   Placeholder() : _placeholder(nullptr), _value(nullptr), _tensor(Tensor()) {}
   Placeholder(MPSGraphTensor* mpsGraphTensor) : _placeholder(mpsGraphTensor), _value(nullptr), _tensor(Tensor()) {}
   Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& self, MPSShape *mpsShape = nullptr,
-              bool gatherTensorData = true, MPSDataType dataType = MPSDataTypeInvalid);
+              bool gatherTensorData = true, MPSDataType dataType = MPSDataTypeInvalid, const char* str = __builtin_FUNCTION());
   MPSGraphTensor* getMPSGraphTensor() {
     return _placeholder;
   }
@@ -207,7 +207,7 @@ struct MPSGraphCache
   }
 
   MPSCachedGraph* LookUp(const std::string& key) const {
-
+    std::cout << "Running: " << key << std::endl;
     __block MPSCachedGraph* result = nullptr;
 
     MPSCacheKey hash = std::hash<std::string>{}(key);

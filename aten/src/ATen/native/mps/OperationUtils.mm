@@ -192,6 +192,11 @@ std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype) {
         } else {
           const NSString* ns_shape_key = [[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","];
           str += std::string(ns_shape_key.UTF8String);
+          auto mem_format = tensor.suggest_memory_format();
+          std::string mem_f = "UNDEFINED";
+          if (mem_format == MemoryFormat::ChannelsLast) mem_f = "(NHWC)";
+          else if (mem_format == MemoryFormat::Contiguous) mem_f = "(NCHW)";
+          str += " " + mem_f;
         }
         str += "]";
       } else {
@@ -258,8 +263,9 @@ MPSNDArray* ndArrayFromTensor(const Tensor& tensor, MPSShape *shape, MPSDataType
 }
 
 Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src, MPSShape *mpsShape,
-                         bool gatherTensorData, MPSDataType dataType) : _tensor(src)
+                         bool gatherTensorData, MPSDataType dataType, const char* str) : _tensor(src)
 {
+  std::cout << str << ": " << src.suggest_memory_format() << std::endl;
   TORCH_CHECK(src.is_mps(), "Placeholder storage has not been allocated on MPS device!");
   // extract the pointer to MTLBuffer from the Tensor's storage
   id<MTLBuffer> srcBuf = getMTLBufferStorage(src);
