@@ -478,19 +478,25 @@ bool canSliceViewTensor(const Tensor& src, MPSShape *mpsShape) {
   }
 
   IntArrayRef src_base_shape = getIMPSAllocator()->getBufferShape(src.storage().data());
+  std::vector<int64_t> src_base_squeezed_shape = getSqueezedBaseShape(src, src_base_shape);
   size_t src_ndim_base = src_base_shape.size();
-  std::vector<int64_t> src_view_shape = getViewShape(src, mpsShape, false);
-  size_t src_ndim_view = src_view_shape.size();
+  size_t src_squeezed_ndim_base = src_base_squeezed_shape.size();
+  std::vector<int64_t> src_view_squeezed_shape = getViewShape(src, mpsShape, true);
+  size_t src_ndim_view = getViewShape(src, mpsShape, false).size();
+  size_t src_squeezed_ndim_view = src_view_squeezed_shape.size();
 
-  if (src_ndim_base != src_ndim_view) {
+  if (src_squeezed_ndim_base != src_squeezed_ndim_view && src_ndim_base != src_ndim_view) {
     return false;
   }
 
-  for (const auto i: c10::irange(src_ndim_base)) {
-     if (src_view_shape[i] > src_base_shape[i]) {
-       return false;
-     }
-   }
+  if (src_squeezed_ndim_base == src_squeezed_ndim_view) {
+    for (const auto i: c10::irange(src_squeezed_ndim_base)) {
+      if (src_view_squeezed_shape[i] > src_base_squeezed_shape[i]) {
+        return false;
+      }
+    }
+  }
+
   return true;
 }
 
@@ -504,6 +510,25 @@ MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mp
   MPSNDArrayDescriptor *srcTensorNDArrayDesc = nil;
   MPSNDArray *srcTensorNDArray = nil;
   id<MTLCommandBuffer> commandBuffer = getCurrentMPSStream()->commandBuffer();
+  int64_t base_idx = 0;
+
+  std::vector<int64_t> src_base_shape_vec;
+
+  if (src_ndim_view != src_ndim_base) {
+    src_base_shape_vec.reserve(src_ndim_view);
+    for (const auto i : c10::irange(src_ndim_view)) {
+      if (src_view_shape[i] == 1 && src_base_shape[base_idx] != 1) {
+        src_base_shape_vec.emplace_back(1);
+      } else {
+        src_base_shape_vec.emplace_back(src_base_shape[base_idx]);
+        if (base_idx < src_ndim_base - 1)
+          base_idx += 1;
+      }
+    }
+    src_base_shape = IntArrayRef(src_base_shape_vec);
+    src_ndim_base = src_base_shape.size();
+  }
+
   int64_t base_idx = 0;
 
   std::vector<int64_t> src_base_shape_vec;
@@ -537,8 +562,9 @@ MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mp
   }
 
   int64_t sliceOffset = src.storage_offset() / view_numel;
-  [srcTensorNDArrayDesc sliceDimension:src_ndim_base - 1 - firstDimToSlice
-                          withSubrange:{static_cast<NSUInteger>(sliceOffset), static_cast<NSUInteger>(src.sizes()[firstDimToSlice])}];
+  // There are cases where both dimensions of a view can shrink
+  // E.g: x = torch.randn((3,6))[1, 1:3]
+  int64_t nextSliceOffset = src.storage_offset() % view_numel;
 
   // Slice any remaining dimensions
   for (const auto crtSliceOffset: c10::irange(firstDimToSlice + 1, src_base_shape.size())) {
