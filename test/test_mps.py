@@ -10290,9 +10290,6 @@ class TestConsistency(TestCaseMPS):
         'topk': [torch.int16, torch.int32, torch.int64, torch.uint8],
 
         # Functions with correctness issues
-        'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
-        'normalnumber_mean': [torch.float16, torch.float32],
-        'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'multinomial': [torch.float32],
 
         # cpu result off, showing random values
@@ -10640,7 +10637,9 @@ class TestConsistency(TestCaseMPS):
         'randint_like': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'randn_like': [torch.float16, torch.float32],
         'bernoulli': [torch.float32],
+        'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
         'normal': [torch.float16, torch.float32, torch.float16, torch.float32],
+        'normalnumber_mean': [torch.float16, torch.float32],
         'nn.functional.alpha_dropout': [torch.float32],
         'nn.functional.dropout': [torch.float32],
         'nn.functional.dropout2d': [torch.float32],
@@ -10649,6 +10648,7 @@ class TestConsistency(TestCaseMPS):
         'new_empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'empty_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         # problem 103190467, as_strided_scatter has non-deterministic behavior when the update indices are not unique
         'as_strided_scatter': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         # duplicate indices are used in the testcase - undefined behaviour
