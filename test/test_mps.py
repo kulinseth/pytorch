@@ -10123,7 +10123,6 @@ class TestConsistency(TestCaseMPS):
 
         # Functions with correctness issues
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
-        'trace': [torch.int64],
         'normalnumber_mean': [torch.float16, torch.float32],
         'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'multinomial': [torch.float32],
