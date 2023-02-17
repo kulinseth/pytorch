@@ -205,7 +205,10 @@ struct MPSGraphCache
   }
 
   MPSCachedGraph* LookUp(const std::string& key) const {
-    std::cout << "Running: " << key << std::endl;
+    // Only print when there is NHWC keyword
+    if (key.find("NHWC") != std::string::npos) {
+        std::cout << "Running: " << key << std::endl;
+    }
     __block MPSCachedGraph* result = nullptr;
 
     MPSCacheKey hash = std::hash<std::string>{}(key);
