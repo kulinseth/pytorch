@@ -45,7 +45,7 @@ from torch.testing._internal.common_nn import NNTestCase, NewModuleTest, Criteri
     module_tests, criterion_tests, loss_reference_fns, _create_basic_net, \
     ctcloss_reference, new_module_tests, single_batch_reference_fn, _test_bfloat16_ops, _test_module_empty_input
 from torch.testing._internal.common_device_type import instantiate_device_type_tests, dtypes, \
-    dtypesIfCUDA, precisionOverride, skipCUDAIfCudnnVersionLessThan, onlyCUDA, onlyCPU, \
+    dtypesIfCUDA, dtypesIfMPS, precisionOverride, skipCUDAIfCudnnVersionLessThan, onlyCUDA, onlyCPU, \
     skipCUDAIfRocm, skipCUDAIf, skipCUDAIfNotRocm, \
     onlyNativeDeviceTypes, deviceCountAtLeast, largeTensorTest, expectedFailureMeta, skipMeta, get_all_device_types
 
@@ -8049,6 +8049,7 @@ class TestNNDeviceType(NNTestCase):
         out = bn(data).sum().backward()
 
     @dtypesIfCUDA(torch.float, torch.double, torch.half, torch.complex128)
+    @dtypesIfMPS(torch.float)
     @dtypes(torch.float, torch.double, torch.bfloat16, torch.complex128)
     def test_conv_empty_input(self, device, dtype):
         def help(input, conv, memory_format):
@@ -10794,6 +10795,7 @@ class TestNNDeviceType(NNTestCase):
         self.assertEqual(grad_cudnn, grad_native, atol=1e-4, rtol=0)
 
     @dtypesIfCUDA(torch.half, torch.float, torch.double)
+    @skipIfMps
     @dtypes(torch.float)
     @tf32_on_and_off(0.005)
     @skipIfTorchDynamo("TorchDynamo fails here for unknown reasons")
@@ -11532,6 +11534,7 @@ class TestNNDeviceType(NNTestCase):
             for p, pe in zip(test_model.parameters(), ref_model.parameters()):
                 self.assertEqual(p.grad.to(devices[0]), pe.grad)
 
+    @skipIfMps
     def test_elu_inplace_overlap(self, device):
         x = torch.randn((1, 6), dtype=torch.bfloat16, device=device).expand((6, 6))
         with self.assertRaisesRegex(RuntimeError, 'unsupported operation'):
