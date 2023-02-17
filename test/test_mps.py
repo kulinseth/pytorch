@@ -10122,7 +10122,6 @@ class TestConsistency(TestCaseMPS):
         'topk': [torch.int16, torch.int32, torch.int64, torch.uint8],
 
         # Functions with correctness issues
-        'trace': [torch.int64],
         'multinomial': [torch.float32],
 
         # cpu result off, showing random values
