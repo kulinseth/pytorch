@@ -406,7 +406,7 @@ Tensor mps_convolution_backward_weights(
   namespace native_mps = at::native::mps;
   using namespace mps;
   CheckedFrom c = "mps_convolution_backward_weights";
-  auto memory_format = input_.suggest_memory_format();
+  auto memory_format = grad_output_t.suggest_memory_format();
   bool is_channels_last = (memory_format == at::MemoryFormat::ChannelsLast);
   bool gather_input_data = true;
   if (is_channels_last && input_t.is_contiguous(memory_format)) {
@@ -414,8 +414,6 @@ Tensor mps_convolution_backward_weights(
     gather_input_data = false;
     memory_format = MemoryFormat::Contiguous;
   }
-  auto grad_output_t = grad_output_.to(memory_format);
-  auto input_t = input_.to(memory_format);
 
   MPSShape* gradOutputShape = mps::getMPSShape(grad_output_t, memory_format);
 
