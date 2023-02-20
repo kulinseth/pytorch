@@ -1799,6 +1799,15 @@ class TestMPS(TestCaseMPS):
         x_cpu = x_cpu + 2
         self.assertEqual(x, x_cpu)
 
+    def test_slice_casting(self):
+        # generate random binary numbers
+        cpu_in = torch.bernoulli(torch.empty(1, 1, 128, 128).uniform_(0, 1)).to(torch.uint8)
+        mps_in = cpu_in.detach().clone().to("mps")
+        # check copy_cast(unit8 -> bool) on tensors with storage offset
+        cpu_out = cpu_in[:, :, 11 : 12, :12].to(torch.bool)
+        mps_out = mps_in[:, :, 11 : 12, :12].to(torch.bool)
+        self.assertEqual(cpu_out, mps_out)
+
     def test_slice_reshape_contg_view(self):
         import torch
 
@@ -8866,7 +8875,7 @@ class TestNoRegression(TestCase):
 
 
 MPS_DTYPES = get_all_dtypes()
-for t in [torch.double, torch.cdouble, torch.cfloat, torch.int8, torch.bfloat16]:
+for t in [torch.double, torch.cdouble, torch.cfloat, torch.bfloat16]:
     del MPS_DTYPES[MPS_DTYPES.index(t)]
 
 abbrs_to_torch_dtype_dict = {value : key for (key, value) in dtype_abbrs.items()}
