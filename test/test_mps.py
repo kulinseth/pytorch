@@ -29,7 +29,7 @@ from torch.testing._comparison import TensorLikePair
 from torch.testing._internal.common_dtype import get_all_dtypes, integral_types
 import torch.backends.mps
 from torch.distributions import Uniform, Exponential
-from functools import partial
+from functools import partial, reduce
 
 from torch.testing._internal.common_methods_invocations import (
     op_db,
@@ -2229,6 +2229,15 @@ class TestMPS(TestCaseMPS):
             x_mps = x_cpu.to('mps')
             self.assertEqual(x_mps.to(torch.float32), x_cpu.to(torch.float32))
 
+    @unittest.skipIf(True, "non-contiguous tensor to mps is incorrect.")
+    def test_to_non_contiguous(self):
+        x = torch.arange(16, dtype=torch.float32).reshape(2, 2, 2, 2)
+        x1 = x[:, :, :1, :]
+        x2 = x[:, :, 1:, :]
+        self.assertFalse(x1.is_contiguous())
+        self.assertFalse(x2.is_contiguous())
+        self.assertEqual(x1, x1.detach().to("mps"))
+        self.assertEqual(x2, x2.detach().to("mps"))
 
     def test_setitem_scalar(self) -> None:
         device = 'mps'
@@ -2841,6 +2850,20 @@ class TestSmoothL1Loss(TestCaseMPS):
 
 
 class TestNLLLoss(TestCaseMPS):
+    def test_nll2d_loss_backward(self, device='mps'):
+        a = torch.randn(3, 5, requires_grad=True, device=device)
+        b = torch.tensor([1, 0, 4], device=device)
+        loss = nn.NLLLoss()
+        out = loss(a, b)
+        self.assertIsNone(out.grad_fn._saved_weight)
+        loss = nn.NLLLoss(weight=torch.ones((5,), device=device))
+        out = loss(a, b)
+        self.assertEqual(out.grad_fn._saved_weight, torch.ones((5,)))
+
+        out.sum().backward()
+        with self.assertRaisesRegex(RuntimeError, "after they have already been freed"):
+            out.grad_fn._saved_weight
+
     def test_nll_loss_mismatched_batch(self, device='mps'):
         x = torch.randn((10, 3), requires_grad=True, device=device)
         # t should have size (10,)
@@ -4854,6 +4877,8 @@ class TestNLLLoss(TestCaseMPS):
         helper((2, 1, 6, 8), 2, nn.ReplicationPad2d)
         # verify if a change in shape of padding would cause problems with graph caching
         helper((2, 1, 6, 8), (2, 4, 3, 5), nn.ReplicationPad2d)
+        # negative padding
+        helper((1, 3, 4, 4), (-1, 1, -2, 1), nn.ReplicationPad2d)
         # Constant Pad 2D
         helper((2, 1, 6, 8), (2, 4, 3, 5), nn.ConstantPad2d)
         # input size < pad size
@@ -7592,6 +7617,8 @@ class TestViewOpsMPS(TestCaseMPS):
         self.assertEqual(t2, t1)
         b = torch.randn(10, device=device)
         self.assertEqual(b, b.T)
+        scalar = torch.tensor(5, device=device)
+        self.assertEqual(scalar, scalar.T)
 
     def test_transposes(self, device="mps", dtype=torch.float32):
         for op in ("T", "H", "mT", "mH", "adjoint"):
@@ -9190,6 +9217,8 @@ class TestConsistency(TestCaseMPS):
     # by doing `EXPECTTEST_ACCEPT=1 python test_mps.py TestConsistencyCPU`
     # You most likely do NOT want to modify this manually
     ALLOWLIST_OP = {
+        'H': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'T': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         '__getitem__': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         '__radd__': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         '__rand__': ['b8', 'i16', 'i32', 'i64', 'u8'],
