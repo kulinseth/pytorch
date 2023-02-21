@@ -313,20 +313,14 @@ at::Tensor& mps_copy_(at::Tensor& dst, const at::Tensor& src, bool non_blocking)
   }
 
   if (src.device().type() == at::kMPS && dst.device().type() == at::kCPU) {
-    if (needs_broadcasting)
-      return copy_from_mps_(dst, src.expand_as(dst), non_blocking);
-    return copy_from_mps_(dst, src, non_blocking);
+    return copy_from_mps_(dst, needs_broadcasting ? src.expand_as(dst) : src, non_blocking);
   }
   if (src.device().type() == at::kCPU && dst.device().type() == at::kMPS) {
-    if (needs_broadcasting)
-      return copy_to_mps_(dst, src.expand_as(dst), non_blocking);
-    return copy_to_mps_(dst, src, non_blocking);
+    return copy_to_mps_(dst, needs_broadcasting ? src.expand_as(dst) : src, non_blocking);
   }
 
   if (src.device().type() == at::kMPS && dst.device().type() == at::kMPS) {
-    if (needs_broadcasting)
-      return copy_kernel_mps(dst, src.expand_as(dst), non_blocking);
-    return copy_kernel_mps(dst, src, non_blocking);
+    return copy_kernel_mps(dst, needs_broadcasting ? src.expand_as(dst) : src, non_blocking);
   }
   TORCH_INTERNAL_ASSERT(
       src.device().type() == DeviceType::MPS,
