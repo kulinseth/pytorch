@@ -64,6 +64,11 @@ def mps_ops_modifier(ops):
         'masked.softmax': [torch.float32],
         'masked.softmin': [torch.float32],
         'masked.log_softmax': [torch.float32],
+
+        # These are passing with MacOS 13.3 but failing in previous SU
+        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        '__rpow__': [torch.uint8],
+        'nn.functional.conv_transpose2d': [torch.float32],
     }
 
     # Those ops are not expected to work
@@ -240,36 +245,12 @@ def mps_ops_modifier(ops):
         'special.bessel_j1': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'special.bessel_y0': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'special.bessel_y1': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'special.chebyshev_polynomial_t': [torch.bool,
-                                           torch.float16,
-                                           torch.float32,
-                                           torch.int16,
-                                           torch.int32,
-                                           torch.int64,
-                                           torch.uint8],
-        'special.chebyshev_polynomial_u': [torch.bool,
-                                           torch.float16,
-                                           torch.float32,
-                                           torch.int16,
-                                           torch.int32,
-                                           torch.int64,
-                                           torch.uint8],
+        'special.chebyshev_polynomial_t': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.chebyshev_polynomial_u': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'special.entr': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'special.erfcx': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'special.hermite_polynomial_h': [torch.bool,
-                                         torch.float16,
-                                         torch.float32,
-                                         torch.int16,
-                                         torch.int32,
-                                         torch.int64,
-                                         torch.uint8],
-        'special.hermite_polynomial_he': [torch.bool,
-                                          torch.float16,
-                                          torch.float32,
-                                          torch.int16,
-                                          torch.int32,
-                                          torch.int64,
-                                          torch.uint8],
+        'special.hermite_polynomial_h': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'special.hermite_polynomial_he': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'special.i0e': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'special.i1': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'special.i1e': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
@@ -9837,7 +9818,7 @@ class TestConsistency(TestCaseMPS):
         'logit': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'logspace': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'logsumexp': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'long': None,
+        'long': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'lt': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'lu': ['f32'],
         'lu_solve': ['f32'],
@@ -10793,104 +10774,33 @@ class TestConsistency(TestCaseMPS):
     # If the dtype list is None, all dtypes are excluded.
     # All the entries in this list should be removed
     BLOCKLIST = {
-        # Functions that hang
-        'masked_fill': [torch.bool, torch.uint8, torch.float32], 'where': [torch.bool],
-        # + forward when requires_grad=True or running backward
-        'masked.mean': [torch.bool, torch.float16],
-        'masked.prod': [torch.bool],
-        'masked.sum': [torch.bool],
-
         # Functions that hard crash
-        'std': [torch.float16],
-        'stft': [torch.float32], 'var': [torch.float16],
-        # + forward when requires_grad=True or running backward
-        'nn.functional.embedding': [torch.float32, torch.float16],
-        '__rpow__': [torch.int64],
+        'linalg.matrix_power': [torch.float32],
+        'resize_': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'resize_as_': [torch.float16, torch.float32],
+        'topk': [torch.int16, torch.int32, torch.int64, torch.uint8],
 
-        'as_strided_scatter': [torch.uint8],
-        'atan2': [torch.int64],
-        'bfloat16': None,
-        'block_diag': [torch.uint8],
-        'diag_embed': [torch.uint8],
-        'diagonal_scatter': [torch.uint8],
-        'nn.functional.conv_transpose3d': [torch.int64, torch.float32],
-        'nn.functional.local_response_norm': [torch.int64],
-        'nn.functional.padcircular': [torch.uint8],
+        # Functions with correctness issues
+        'multinomial': [torch.float32],
 
+        # cpu result off, showing random values
+        'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        # cpu result off, showing inf values
+        'dist': [torch.float16],
 
+        # failure due to issue: atan2() may generate NAN in output with
+        'atan2': [torch.bool, torch.int16, torch.int32, torch.uint8],
 
-        # These were moved from ALLOWLIST to BLOCK as they are not working
-        # locally
-        'tile': ['torch.float16', 'torch.float32', 'torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        '__radd__': ['torch.bool', 'torch.uint8'],
-        '__rmul__': ['torch.uint8'],
-        'neg': ['torch.uint8'],
-        'add': ['torch.bool', 'torch.uint8'],
-        'addr': ['torch.int16', 'torch.int32', 'torch.int64', 'torch.uint8'],
-        'diag': ['torch.int64'],
-        'diagflat': ['torch.int64'],
+        # Unsupported Border padding mode
+        'grid_sampler_2d': [torch.float32],
+        'nn.functional.grid_sample': [torch.float32],
 
-        # Functions that are flaky
-        # These are detected as "ok" by the expect case but actually fail to run sometimes
-        'as_strided': None,
-        'broadcast_tensors': None,
-        'broadcast': None,
-        'broadcast_to': None,
-        'diagonal': None,
-        'divfloor_rounding': None,
-        'divno_rounding_mode': None,
-        'divtrunc_rounding': None,
-        'dsplit': None,
-        'hsplit': None,
-        'empty': None,
-        'expand_as': None,
-        'expand': None,
-        'ge': None,
-        'ne': None,
-        'le': None,
-        'lt': None,
-        'gt': None,
-        'transpose': None,
-        'splitlist_args': None,
-        'select': None,
-        'reshape': None,
-        'reshape_as': None,
-        'permute': None,
-        'norm': None,
-        'nn.functional.pixel_unshuffle': None,
-        'nn.functional.pixel_shuffle': None,
-        'nn.functional.cross_entropy': None,
-        'nn.functional.one_hot': None,
-        'narrow': None,
-        'movedim': None,
-        'minreduction_with_dim': None,
-        'minreduction_no_dim': None,
-        'minbinary': None,
-        'meshgridvariadic_tensors': None,
-        'meshgridlist_of_tensors': None,
-        'maxreduction_with_dim': None,
-        'maxreduction_no_dim': None,
-        'maxbinary': None,
-        'maximum': None,
-        'minimum': None,
-        'outer': None,
-        'softmaxwith_dtype': None,
-        'rounddecimals_neg_3': None,
-        'rounddecimals_3': None,
-        'rounddecimals_0': None,
-        'normnuc': None,
-        'nn.functional.softminwith_dtype': None,
-        'nn.functional.feature_alpha_dropoutwith_train': None,
-        'log_softmaxwith_dtype': None,
-        'split_with_sizes': None,
-        'trapezoid': None,
-        'eq': None,
-        'mul': None,
-        'cartesian_prod': None,
-        'bool': None,
-        'inner': None,
-        'dstack': None,
-        'take_along_dim': None,
+        # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
+        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        '__rpow__': [torch.uint8],
+
+        # failures before macOS 13.3
+        'nn.functional.conv_transpose2d': [torch.float32],
     }
 
     FAST_MATH_PRECISION_ISSUES = {
@@ -10928,9 +10838,6 @@ class TestConsistency(TestCaseMPS):
     }
 
     ALLOWLIST_MACOS_13_3 = {
-        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
-        '__rpow__': [torch.uint8],
-        'nn.functional.conv_transpose2d': [torch.float32],
     }
 
     MPS_SKIP_LIST = reduce(lambda x, y: dict(x, **y), (
