@@ -84,7 +84,7 @@ jobs:
           ${CONDA_RUN} python3 test/run_test.py --mps --verbose
 
       - name: Run MPS Test Modules
-        id: test_2
+        id: test_mps_modules
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
         shell: arch -arch arm64 bash {0}
@@ -96,6 +96,18 @@ jobs:
           # TODO(https://github.com/pytorch/pytorch/issues/79293)
 
           ${CONDA_RUN} python3 test/test_modules.py -k mps --verbose
+
+      - name: Run test/nn/test_convolution.py
+        id: test_nn_test_convolution
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          # TODO(https://github.com/pytorch/pytorch/issues/79293)
+
+          ${CONDA_RUN} python3 test/nn/test_convolution.py -k mps --verbose
 
       - name: Print remaining test logs
         shell: bash
