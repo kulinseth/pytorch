@@ -60,6 +60,13 @@ _ref_test_ops = tuple(
 
 def mps_ops_modifier(ops):
     # Those ops worked on MacOS12, but broken on MacOS13, see https://github.com/pytorch/pytorch/issues/85758
+    MONTEREY_XFAILLIST = {
+        # expected failures
+        'nn.functional.interpolatenearest': [torch.float32],
+        'nn.functional.upsample_nearest': [torch.float32],
+        'nn.functional.conv_transpose2d': [torch.float32]
+    }
+
     VENTURA_XFAILLIST = {
         'masked.softmax': [torch.float32],
         'masked.softmin': [torch.float32],
@@ -112,6 +119,8 @@ def mps_ops_modifier(ops):
         'frexp': [torch.float16, torch.float32],
         'gcd': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'geqrf': [torch.float32],
+        'grid_sampler_2d': [torch.float32],            # Unsupported Border padding mode
+        'nn.functional.grid_sample': [torch.float32],  # Unsupported Border padding mode
         'heaviside': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
         'histc': [torch.float32],
         'histogram': [torch.float32],
@@ -289,13 +298,12 @@ def mps_ops_modifier(ops):
         'nn.functional.conv_transpose1d': [torch.int64],
         'nn.functional.conv_transpose2d': [torch.int64],
         'sigmoid': [torch.int64],
-        # Accuracy problems
-        'pow': [torch.float32],
     }
 
     XFAILLIST = {
         # Failures due to unsupported data types on MPS backend
         'bfloat16': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'byte': [torch.float16, torch.float32],
         'chalf': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'nn.functional.conv1d': [torch.int64],
         'nn.functional.conv2d': [torch.int64],
@@ -374,6 +382,26 @@ def mps_ops_modifier(ops):
         'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8],
         'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8],
+
+        'pow': [torch.float32],          # Accuracy problems fixed in MacOS 13.3+
+        # failures powerWithPrimaryTensor() with integer input may return wrong results
+        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        '__rpow__': [torch.uint8],
+        'topk': [torch.int16, torch.int32, torch.int64, torch.uint8],  # topk fails with duplicate indices
+        'multinomial': [torch.float32], # Functions with correctness issues
+
+        # cpu result off, showing random values
+        'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        # cpu result off, showing inf values
+        'dist': [torch.float16],
+
+        # failure due to issue: atan2() may generate NAN in output with
+        'atan2': [torch.bool, torch.int16, torch.int32, torch.uint8],
+        # Trace i64 is going to be fixed in #95231
+        'trace': [torch.int64],
+        # This is fixed in MacOS 13.3
+        'linalg.inv': [torch.float32],
+        'linalg.inv_ex': [torch.float32],
     }
 
     UNDEFINED_XFAILLIST = {
@@ -402,6 +430,8 @@ def mps_ops_modifier(ops):
         'index_put': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         # zero to negative integer powers are undefined
         '__rpow__': [torch.int16, torch.int32, torch.int64],
+        'resize_': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        'resize_as_': [torch.float16, torch.float32],
     }
 
     def addDecorator(op, d) -> None:
@@ -420,6 +450,11 @@ def mps_ops_modifier(ops):
             addDecorator(op, DecorateInfo(
                          unittest.expectedFailure,
                          dtypes=VENTURA_XFAILLIST[key]))
+
+        if key in MONTEREY_XFAILLIST and (not torch.backends.mps.is_macos13_or_newer()):
+            addDecorator(op, DecorateInfo(
+                         unittest.expectedFailure,
+                         dtypes=MONTEREY_XFAILLIST[key]))
         yield op
 
 # Same logic as test_cuda.py
@@ -10776,29 +10811,6 @@ class TestConsistency(TestCaseMPS):
     BLOCKLIST = {
         # Functions that hard crash
         'linalg.matrix_power': [torch.float32],
-        'resize_': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'resize_as_': [torch.float16, torch.float32],
-        'topk': [torch.int16, torch.int32, torch.int64, torch.uint8],
-
-        # Functions with correctness issues
-        'multinomial': [torch.float32],
-
-        # cpu result off, showing random values
-        'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
-        # cpu result off, showing inf values
-        'dist': [torch.float16],
-
-        # failure due to issue: atan2() may generate NAN in output with
-        'atan2': [torch.bool, torch.int16, torch.int32, torch.uint8],
-
-        # Unsupported Border padding mode
-        'grid_sampler_2d': [torch.float32],
-        'nn.functional.grid_sample': [torch.float32],
-
-        # failures due to issue #102048039: powerWithPrimaryTensor() with integer input may return wrong results
-        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
-        '__rpow__': [torch.uint8],
-
         # failures before macOS 13.3
         'nn.functional.conv_transpose2d': [torch.float32],
     }
@@ -10830,14 +10842,10 @@ class TestConsistency(TestCaseMPS):
         'mul',
     }
 
-    BLOCKLIST_MACOS_12 = {
-        # expected failures
-        'nn.functional.interpolatenearest': [torch.float32],
-        'nn.functional.upsample_nearest': [torch.float32],
-        'nn.functional.conv_transpose2d': [torch.float32]
-    }
-
     ALLOWLIST_MACOS_13_3 = {
+        'pow': [torch.int16, torch.int32, torch.int64, torch.uint8],
+        '__rpow__': [torch.uint8],
+        'nn.functional.conv_transpose2d': [torch.float32],
     }
 
     MPS_SKIP_LIST = reduce(lambda x, y: dict(x, **y), (
@@ -10852,14 +10860,6 @@ class TestConsistency(TestCaseMPS):
             return f"Running test with {op_name} fails due to precision issues (fast math) so skipping"
         elif key in self.BLOCKLIST and dtype in self.BLOCKLIST[key]:
             return f"Running test with {op_name} fails so skipping"
-        # elif key in self.UNDEFINED_BEHAVIOUR and dtype in self.UNDEFINED_BEHAVIOUR[key]:
-            # return f"Running test with {op_name} fails due to undefined behaviour / random output so skipping"
-        # elif key in self.EXPECTED_FAILURES and dtype in self.EXPECTED_FAILURES[key]:
-            # return f"Running test with {op_name} expected to fail due to unsupported MPS data type so skipping"
-        # elif key in self.UNIMPLEMENTED_OPS and dtype in self.UNIMPLEMENTED_OPS[key]:
-            # return f"Running test with {op_name} expected to fail due to missing op implementation"
-        elif product_version < 13.0 and key in self.BLOCKLIST_MACOS_12 and dtype in self.BLOCKLIST_MACOS_12[key]:
-            return f"Running test with {op_name} expected to fail on macOS 12"
         return None
 
     @ops(mps_ops_modifier(op_db), allowed_dtypes=MPS_DTYPES)
@@ -10870,10 +10870,6 @@ class TestConsistency(TestCaseMPS):
             msg = self.get_error_message(key, op.name, dtype)
             if msg is not None and not (product_version >= 13.3 and
                                         key in self.ALLOWLIST_MACOS_13_3 and dtype in self.ALLOWLIST_MACOS_13_3[key]):
-                self.skipTest(msg)
-        if product_version < 13.0 and key in self.BLOCKLIST_MACOS_12:
-            msg = self.get_error_message(key, op.name, dtype)
-            if msg is not None:
                 self.skipTest(msg)
 
         if key in self.BLOCKLIST:
