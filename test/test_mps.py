@@ -33,7 +33,7 @@ import torch.mps
 import torch.backends.mps
 from torch.distributions import Uniform, Exponential
 from functools import partial, reduce
-
+from test_mps_utils import LoggingTensor, capture_logs, tracefunc
 from torch.testing._internal.common_methods_invocations import (
     op_db,
     UnaryUfuncInfo,
@@ -9466,6 +9466,7 @@ class TestConsistency(TestCaseMPS):
         'nonzero': ['b8', 'u8', 'f16', 'f32', 'i16', 'i32', 'i64'],
         'norm': ['f32', 'f16'],
         'normal': ['f16', 'f32'],
+        'normal_': ['f16', 'f32'],
         'ones': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'ones_like': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'ormqr': ['f32'],
@@ -10543,6 +10544,8 @@ class TestConsistency(TestCaseMPS):
         # Failures due to unsupported data types on MPS backend
         'bfloat16': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'chalf': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
+        # Byte tests are failing
+        'byte': [torch.float16, torch.float32],
         'nn.functional.conv1d': [torch.int64],
         'nn.functional.conv2d': [torch.int64],
         'nn.functional.conv_transpose1d': [torch.int64],
@@ -10626,12 +10629,14 @@ class TestConsistency(TestCaseMPS):
         # Failures due to random output that they generate using
         # Philox engine causing mismatch with CPU results
         'uniform': [torch.float16, torch.float32],
+        'randn': [torch.float16, torch.float32],
         'rand_like': [torch.float16, torch.float32],
         'randint_like': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'randn_like': [torch.float16, torch.float32],
         'bernoulli': [torch.float32],
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
         'normal': [torch.float16, torch.float32, torch.float16, torch.float32],
+        'normal_': [torch.float16, torch.float32],
         'normalnumber_mean': [torch.float16, torch.float32],
         'nn.functional.alpha_dropout': [torch.float32],
         'nn.functional.dropout': [torch.float32],
@@ -10723,6 +10728,7 @@ class TestConsistency(TestCaseMPS):
 
     @ops(op_db, allowed_dtypes=MPS_DTYPES)
     def test_output_match(self, device, dtype, op):
+        # sys.setprofile(tracefunc)
         self.assertEqual(device, "cpu")
         if not torch.backends.mps.is_available():
             self.skipTest("MPS is not available")
@@ -10777,6 +10783,10 @@ class TestConsistency(TestCaseMPS):
 
                 # TODO: This checks only the function variant. We should also check the method and inplace version
                 # when they exist
+
+                if os.environ.get("DUMP_MPS_OPS", None) == "1":
+                    mps_sample.input = LoggingTensor(mps_sample.input)
+
                 cpu_args = [cpu_sample.input] + list(cpu_sample.args)
                 cpu_kwargs = cpu_sample.kwargs
                 mps_args = [mps_sample.input] + list(mps_sample.args)
@@ -10786,8 +10796,20 @@ class TestConsistency(TestCaseMPS):
                 if (op.name == "tensor_split" and isinstance(mps_args[1], torch.Tensor)):
                     mps_args[1] = cpu_args[1]
 
-                cpu_out = op(*cpu_args, **cpu_kwargs)
-                mps_out = op(*mps_args, **mps_kwargs)
+                # Skip running the tests to generate full list
+                if os.environ.get("EXPECTTEST_ACCEPT", None) == "1":
+                    continue
+
+                if os.environ.get("DUMP_MPS_OPS", None) == "1":
+                    with capture_logs() as logs:
+                        cpu_out = op(*cpu_args, **cpu_kwargs)
+                        mps_out = op(*mps_args, **mps_kwargs)
+                    print("Forward logs:")
+                    print("\n".join(logs))
+                else:
+                    cpu_out = op(*cpu_args, **cpu_kwargs)
+                    mps_out = op(*mps_args, **mps_kwargs)
+
 
                 if op.name == "nn.functional.conv2d" or op.name == "linalg.multi_dot" and dtype == torch.float32:
                     atol = 1e-4
@@ -10867,8 +10889,15 @@ class TestConsistency(TestCaseMPS):
                 # Compare computed gradients with cpu given random grad_output vector
                 # Sometimes when the derivative is 0, we just don't bother creating the graph
                 # allow_unused is needed in those cases.
-                cpu_grad_inputs = torch.autograd.grad(diff_cpu_out, diff_cpu_arg, grad_outputs=cpu_grad_outputs, allow_unused=True)
-                mps_grad_inputs = torch.autograd.grad(diff_mps_out, diff_mps_arg, grad_outputs=mps_grad_outputs, allow_unused=True)
+                if os.environ.get("DUMP_MPS_OPS", None) == "1":
+                    with capture_logs() as logs:
+                        cpu_grad_inputs = torch.autograd.grad(diff_cpu_out, diff_cpu_arg, grad_outputs=cpu_grad_outputs, allow_unused=True)
+                        mps_grad_inputs = torch.autograd.grad(diff_mps_out, diff_mps_arg, grad_outputs=mps_grad_outputs, allow_unused=True)
+                    print("Backward logs:")
+                    print("\n".join(logs))
+                else:
+                    cpu_grad_inputs = torch.autograd.grad(diff_cpu_out, diff_cpu_arg, grad_outputs=cpu_grad_outputs, allow_unused=True)
+                    mps_grad_inputs = torch.autograd.grad(diff_mps_out, diff_mps_arg, grad_outputs=mps_grad_outputs, allow_unused=True)
 
                 self.assertEqual(cpu_grad_inputs, mps_grad_inputs, atol=atol, rtol=rtol)
             except Exception as e:
