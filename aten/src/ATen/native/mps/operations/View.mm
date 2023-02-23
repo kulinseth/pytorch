@@ -815,7 +815,8 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst) {
   }
 
   if (src.dim() > 5) {
-  ViewCachedGraph* cachedGraph = createViewGraph(src, dst, src.sizes(), src.strides(),
+  ViewCachedGraph* cachedGraph = createViewGraph(src.is_complex() ?  at::view_as_real(src) : src,
+                                                 dst, src.sizes(), src.strides(),
                                                  src.storage_offset(), /*needsScatter*/ false);
     return runViewGraph(cachedGraph, src, dst.has_storage() ? dst : output, /*needsScatter*/ false);
   }
