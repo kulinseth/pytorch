@@ -1840,6 +1840,17 @@ class TestMPS(TestCaseMPS):
 
         self.assertEqual(r_mps, r_cpu)
 
+    def test_contiguous_slice(self):
+        t_mps = torch.randn([3, 4], device="mps")
+        t_cpu = t_mps.detach().clone().cpu()
+
+        y_mps = t_mps[2:, :2]
+        y_cpu = t_cpu[2:, :2]
+
+        x_mps = y_mps + 1
+        x_cpu = y_cpu + 1
+        self.assertEqual(x_mps, x_cpu)
+
     def test_view_slice(self):
         # https://github.com/pytorch/pytorch/issues/83995
         NUM_SAMPLES = 60

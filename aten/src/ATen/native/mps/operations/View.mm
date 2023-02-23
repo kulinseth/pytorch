@@ -547,9 +547,10 @@ MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mp
   // There are cases where both dimensions of a view can shrink
   // E.g: x = torch.randn((3,6))[1, 1:3]
   int64_t nextSliceOffset = src.storage_offset() % view_numel;
-
   [srcTensorNDArrayDesc sliceDimension:src_ndim_base - 1 - firstDimToSlice withSubrange:{static_cast<NSUInteger>(sliceOffset), static_cast<NSUInteger>(src.sizes()[firstDimToSlice])}];
-  if (nextSliceOffset) {
+  if ((firstDimToSlice < (src_base_shape.size() - 1)) &&
+      (src_view_shape[firstDimToSlice + 1] != src_base_shape[firstDimToSlice + 1])) {
+
     [srcTensorNDArrayDesc sliceDimension:src_ndim_base - 2 - firstDimToSlice withSubrange:{static_cast<NSUInteger>(nextSliceOffset), static_cast<NSUInteger>(src.sizes()[firstDimToSlice+1])}];
   }
 
