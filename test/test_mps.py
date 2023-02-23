@@ -10604,6 +10604,7 @@ class TestConsistency(TestCaseMPS):
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
         'normal': [torch.float16, torch.float32, torch.float16, torch.float32],
         'normal_': [torch.float16, torch.float32],
+        'normalin_place': [torch.float16, torch.float32],
         'normalnumber_mean': [torch.float16, torch.float32],
         'nn.functional.alpha_dropout': [torch.float32],
         'nn.functional.dropout': [torch.float32],
