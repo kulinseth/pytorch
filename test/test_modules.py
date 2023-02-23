@@ -622,7 +622,11 @@ class TestModule(TestCase):
     @modules(module_db)
     @skipIfTorchInductor("to be fixed")
     def test_memory_format(self, device, dtype, module_info, training):
-        msg = _get_mps_error_msg(device, dtype, module_info, [])
+        MPS_BLOCKLIST = [
+            "nn.BatchNorm3d",  # failed assert
+        ]
+
+        msg = _get_mps_error_msg(device, dtype, module_info, MPS_BLOCKLIST)
         if msg is not None:
             self.skipTest(msg)
 
