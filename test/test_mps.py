@@ -18,7 +18,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import itertools
 import yaml
-import platform
 from collections import defaultdict
 from torch import inf
 from torch.nn import Parameter
@@ -33,7 +32,7 @@ import torch.mps
 import torch.backends.mps
 from torch.distributions import Uniform, Exponential
 from functools import partial, reduce
-from test_mps_utils import LoggingTensor, capture_logs, tracefunc
+from test_mps_utils import LoggingTensor, capture_logs
 from torch.testing._internal.common_methods_invocations import (
     op_db,
     UnaryUfuncInfo,
@@ -8963,8 +8962,6 @@ class TestConsistency(TestCaseMPS):
     # by doing `EXPECTTEST_ACCEPT=1 python test_mps.py TestConsistencyCPU`
     # You most likely do NOT want to modify this manually
     ALLOWLIST_OP = {
-        'H': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'T': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         '__getitem__': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         '__radd__': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         '__rand__': ['b8', 'i16', 'i32', 'i64', 'u8'],
@@ -8976,7 +8973,6 @@ class TestConsistency(TestCaseMPS):
         '__rpow__': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         '__rsub__': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         '__rxor__': ['b8', 'i16', 'i32', 'i64', 'u8'],
-        '_native_batch_norm_legit': ['f32'],
         '_softmax_backward_data': ['f32'],
         'abs': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'acos': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -8990,8 +8986,6 @@ class TestConsistency(TestCaseMPS):
         'addr': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'all': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'allclose': ['f16', 'f32'],
-        'amax': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'amin': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'aminmax': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'angle': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'any': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -9067,9 +9061,7 @@ class TestConsistency(TestCaseMPS):
         'corrcoef': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'cos': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'cosh': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'count_nonzero': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'cov': ['f32', 'i16', 'i32', 'i64', 'u8'],
-        'cross': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'cummax': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'cummin': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'cumprod': ['f32', 'i16', 'i32', 'i64', 'u8'],
@@ -9187,15 +9179,12 @@ class TestConsistency(TestCaseMPS):
         'linalg.cholesky': ['f32'],
         'linalg.cholesky_ex': ['f32'],
         'linalg.cond': ['f32'],
-        'linalg.cross': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'linalg.det': ['f32'],
         'linalg.eig': ['f32'],
         'linalg.eigh': ['f32'],
         'linalg.eigvals': ['f32'],
         'linalg.eigvalsh': ['f32'],
         'linalg.householder_product': ['f32'],
-        'linalg.inv': ['f32'],
-        'linalg.inv_ex': ['f32'],
         'linalg.ldl_factor': ['f32'],
         'linalg.ldl_factor_ex': ['f32'],
         'linalg.ldl_solve': ['f32'],
@@ -9214,7 +9203,6 @@ class TestConsistency(TestCaseMPS):
         'linalg.slogdet': ['f32'],
         'linalg.solve': ['f32'],
         'linalg.solve_ex': ['f32'],
-        'linalg.solve_triangular': ['f32'],
         'linalg.svd': ['f32'],
         'linalg.svdvals': ['f32'],
         'linalg.tensorinv': ['f32'],
@@ -9244,10 +9232,6 @@ class TestConsistency(TestCaseMPS):
         'lu': ['f32'],
         'lu_solve': ['f32'],
         'lu_unpack': ['f32'],
-        'mH': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'mT': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'masked.amax': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'masked.amin': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.argmax': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.argmin': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.cumprod': ['f32', 'i16', 'i32', 'i64', 'u8'],
@@ -9255,15 +9239,12 @@ class TestConsistency(TestCaseMPS):
         'masked.log_softmax': ['f32'],
         'masked.logaddexp': ['f32'],
         'masked.logsumexp': ['f32', 'i16', 'i32', 'i64', 'u8'],
-        'masked.mean': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.median': ['f32'],
         'masked.norm': ['f16', 'f32'],
         'masked.normalize': ['f16', 'f32'],
-        'masked.prod': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.softmax': ['f32'],
         'masked.softmin': ['f32'],
         'masked.std': ['f32', 'i16', 'i32', 'i64', 'u8'],
-        'masked.sum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.var': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked_fill': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked_scatter': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -9273,7 +9254,6 @@ class TestConsistency(TestCaseMPS):
         'max': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'max_pool2d_with_indices_backward': ['f32'],
         'maximum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'mean': ['f16', 'f32'],
         'median': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'meshgrid': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'min': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -9293,7 +9273,6 @@ class TestConsistency(TestCaseMPS):
         'nansum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'narrow': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'narrow_copy': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'native_batch_norm': ['f32'],
         'native_dropout_backward': ['b8',
                                     'f16',
                                     'f32',
@@ -9463,7 +9442,6 @@ class TestConsistency(TestCaseMPS):
         'nn.functional.unfold': ['f16', 'f32'],
         'nn.functional.upsample_bilinear': ['f32'],
         'nn.functional.upsample_nearest': ['f32', 'u8'],
-        'nonzero': ['b8', 'u8', 'f16', 'f32', 'i16', 'i32', 'i64'],
         'norm': ['f32', 'f16'],
         'normal': ['f16', 'f32'],
         'normal_': ['f16', 'f32'],
@@ -9478,7 +9456,6 @@ class TestConsistency(TestCaseMPS):
         'polygamma': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'positive': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'pow': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'prod': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'put': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'qr': ['f32'],
         'quantile': ['f32'],
@@ -9642,11 +9619,9 @@ class TestConsistency(TestCaseMPS):
         'square': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'squeeze': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'stack': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'std': ['f16', 'f32'],
         'std_mean': ['f16', 'f32'],
         'stft': ['f32'],
         'sub': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'sum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'sum_to_size': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'svd': ['f32'],
         'svd_lowrank': ['f32'],
@@ -9661,12 +9636,10 @@ class TestConsistency(TestCaseMPS):
         'tile': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'to_sparse': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'topk': ['f32', 'i16', 'i32', 'i64', 'u8'],
-        'trace': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'transpose': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'trapezoid': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'cumulative_trapezoid': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'trapz': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'triangular_solve': ['f32'],
         'tril': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'tril_indices': ['i32', 'i64'],
         'triu': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -9678,9 +9651,7 @@ class TestConsistency(TestCaseMPS):
         'unfold': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'unfold_copy': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'uniform': ['f16', 'f32'],
-        'unique_consecutive': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'unsqueeze': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'var': ['f16', 'f32'],
         'var_mean': ['f16', 'f32'],
         'vdot': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'view': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -9707,9 +9678,6 @@ class TestConsistency(TestCaseMPS):
         'masked.mean': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.prod': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.sum': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'native_layer_norm': ['torch.float32'],
-        'nn.functional.layer_norm': ['torch.float32'],
-        'nn.functional.bilinear': ['f32'],
         'linalg.solve_triangular': ['f32'],
         'triangular_solve': ['f32'],
         'trace': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -9875,7 +9843,6 @@ class TestConsistency(TestCaseMPS):
         'hsplit': ['f16', 'f32'],
         'hstack': ['f16', 'f32'],
         'hypot': ['f16', 'f32'],
-        'index_select': ['f16', 'f32'],
         'i0': ['f32'],
         'index_add': ['f16', 'f32'],
         'index_copy': ['f16', 'f32'],
@@ -10637,6 +10604,7 @@ class TestConsistency(TestCaseMPS):
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
         'normal': [torch.float16, torch.float32, torch.float16, torch.float32],
         'normal_': [torch.float16, torch.float32],
+        'normalin_place': [torch.float16, torch.float32],
         'normalnumber_mean': [torch.float16, torch.float32],
         'nn.functional.alpha_dropout': [torch.float32],
         'nn.functional.dropout': [torch.float32],
@@ -10891,13 +10859,17 @@ class TestConsistency(TestCaseMPS):
                 # allow_unused is needed in those cases.
                 if os.environ.get("DUMP_MPS_OPS", None) == "1":
                     with capture_logs() as logs:
-                        cpu_grad_inputs = torch.autograd.grad(diff_cpu_out, diff_cpu_arg, grad_outputs=cpu_grad_outputs, allow_unused=True)
-                        mps_grad_inputs = torch.autograd.grad(diff_mps_out, diff_mps_arg, grad_outputs=mps_grad_outputs, allow_unused=True)
+                        cpu_grad_inputs = torch.autograd.grad(diff_cpu_out, diff_cpu_arg,
+                                                              grad_outputs=cpu_grad_outputs, allow_unused=True)
+                        mps_grad_inputs = torch.autograd.grad(diff_mps_out, diff_mps_arg,
+                                                              grad_outputs=mps_grad_outputs, allow_unused=True)
                     print("Backward logs:")
                     print("\n".join(logs))
                 else:
-                    cpu_grad_inputs = torch.autograd.grad(diff_cpu_out, diff_cpu_arg, grad_outputs=cpu_grad_outputs, allow_unused=True)
-                    mps_grad_inputs = torch.autograd.grad(diff_mps_out, diff_mps_arg, grad_outputs=mps_grad_outputs, allow_unused=True)
+                    cpu_grad_inputs = torch.autograd.grad(diff_cpu_out, diff_cpu_arg,
+                                                          grad_outputs=cpu_grad_outputs, allow_unused=True)
+                    mps_grad_inputs = torch.autograd.grad(diff_mps_out, diff_mps_arg,
+                                                          grad_outputs=mps_grad_outputs, allow_unused=True)
 
                 self.assertEqual(cpu_grad_inputs, mps_grad_inputs, atol=atol, rtol=rtol)
             except Exception as e:
