@@ -11,7 +11,7 @@ on:
 # When any other step fails, it's job will be retried once by retryBot.
 jobs:
   lintrunner:
-    runs-on: macos-m1-12
+    runs-on: macos-lintrunner
     steps:
       - name: Checkout PyTorch
         uses: pytorch/pytorch/.github/actions/checkout-pytorch@master
