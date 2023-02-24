@@ -31,7 +31,7 @@ jobs:
       MACOS_SCCACHE_S3_ACCESS_KEY_ID: ${{ secrets.MACOS_SCCACHE_S3_ACCESS_KEY_ID }}
       MACOS_SCCACHE_S3_SECRET_ACCESS_KEY: ${{ secrets.MACOS_SCCACHE_S3_SECRET_ACCESS_KEY }}
 
-  macos-12.5-py3-arm64-mps-test:
+  macos-12_5-py3-arm64-mps-test:
     name: macos-12.5-py3-arm64-mps
     uses: ./.github/workflows/_mac-test-mps.yml
     needs: macos-12-py3-arm64-build
@@ -40,7 +40,7 @@ jobs:
       build-environment: macos-12-py3-arm64
       runs-on: macos-arm-12_5
 
-  macos-13.1-py3-arm64-mps-test:
+  macos-13_1-py3-arm64-mps-test:
     name: macos-13.1-py3-arm64-mps
     uses: ./.github/workflows/_mac-test-mps.yml
     needs: macos-12-py3-arm64-build
@@ -48,7 +48,7 @@ jobs:
       build-environment: macos-12-py3-arm64
       runs-on: macos-arm-13_1
 
-  macos-13.2-py3-arm64-mps-test:
+  macos-13_2-py3-arm64-mps-test:
     name: macos-13.2-py3-arm64-mps
     uses: ./.github/workflows/_mac-test-mps.yml
     needs: macos-12-py3-arm64-build
@@ -56,7 +56,7 @@ jobs:
       build-environment: macos-12-py3-arm64
       runs-on: macos-arm-13_2
 
-  macos-13.3-py3-arm64-mps-test:
+  macos-13_3-py3-arm64-mps-test:
     name: macos-13.3-py3-arm64-mps
     uses: ./.github/workflows/_mac-test-mps.yml
     needs: macos-12-py3-arm64-build
