@@ -12,11 +12,11 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  macos-12-py3-arm64-build:
+  macos-py39-arm64-build:
     name: macos-12-py3-arm64
     uses: ./.github/workflows/_mac-build.yml
     with:
-      sync-tag: macos-12-py3-arm64-build
+      sync-tag: macos-py39-arm64-build
       build-environment: macos-12-py3-arm64
       xcode-version: "13.3.1"
       runner-type: macos-builder
@@ -34,7 +34,7 @@ jobs:
   macos-12_5-py3-arm64-mps-test:
     name: macos-12.5-py3-arm64-mps
     uses: ./.github/workflows/_mac-test-mps.yml
-    needs: macos-12-py3-arm64-build
+    needs: macos-py39-arm64-build
     with:
       sync-tag: macos-12-py3-arm64-mps-test
       build-environment: macos-12-py3-arm64
@@ -43,7 +43,7 @@ jobs:
   macos-13_1-py3-arm64-mps-test:
     name: macos-13.1-py3-arm64-mps
     uses: ./.github/workflows/_mac-test-mps.yml
-    needs: macos-12-py3-arm64-build
+    needs: macos-py39-arm64-build
     with:
       build-environment: macos-12-py3-arm64
       runs-on: macos-arm-13.1
@@ -51,7 +51,7 @@ jobs:
   macos-13_2-py3-arm64-mps-test:
     name: macos-13.2-py3-arm64-mps
     uses: ./.github/workflows/_mac-test-mps.yml
-    needs: macos-12-py3-arm64-build
+    needs: macos-py39-arm64-build
     with:
       build-environment: macos-12-py3-arm64
       runs-on: macos-arm-13.2
@@ -59,7 +59,7 @@ jobs:
   macos-13_3-py3-arm64-mps-test:
     name: macos-13.3-py3-arm64-mps
     uses: ./.github/workflows/_mac-test-mps.yml
-    needs: macos-12-py3-arm64-build
+    needs: macos-py39-arm64-build
     with:
       build-environment: macos-12-py3-arm64
       runs-on: macos-arm-13.3
