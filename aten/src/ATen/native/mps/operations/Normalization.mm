@@ -1091,7 +1091,9 @@ std::tuple<Tensor, Tensor, Tensor> layer_norm_backward_mps(
                         + std::to_string(has_weight) + ":"
                         + native_mps::getArrayRefString(normalized_shape) + ":"
                         + native_mps::getArrayRefString((*X).sizes()) + ":"
-                        + native_mps::getMPSTypeString((*X).scalar_type());
+                        + native_mps::getMPSTypeString((*X).scalar_type()) + ":"
+                        + mps::getTensorsStringKey({grad_out, input, mean, rstd}) + ":"
+                        + to_string(grad_input_mask[0]) + to_string(grad_input_mask[1]) + to_string(grad_input_mask[2]);
 
       CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
 
