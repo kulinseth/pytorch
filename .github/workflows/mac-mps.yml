@@ -41,7 +41,7 @@ jobs:
       runner-type: macos-builder
       build-generates-artifacts: true
       # To match the one pre-installed in the m1 runners
-      python_version: 3.8.12
+      python_version: 3.8
       # We need to set the environment file here instead of trying to detect it automatically because
       # MacOS arm64 is cross-compiled from x86-64. Specifically, it means that arm64 conda environment
       # is needed when building PyTorch MacOS arm64 from x86-64
