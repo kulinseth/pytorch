@@ -46,20 +46,20 @@ jobs:
           set -ex
           ${CONDA_RUN} lintrunner init
 
-      # - name: Do build steps necessary for linters
-      #   env:
-      #     ENV_NAME: conda-test-env-${{ github.run_id }}
-      #     PY_VERS: 3.9
-      #   shell: arch -arch arm64 bash {0}
-      #   run: |
-      #     # shellcheck disable=SC1090
-      #     set -ex
-      #     ${CONDA_RUN} python3 -m tools.linter.clang_tidy.generate_build_files
-      #     ${CONDA_RUN} python3 -m tools.generate_torch_version --is_debug=false
-      #     ${CONDA_RUN} python3 -m tools.pyi.gen_pyi \
-      #       --native-functions-path aten/src/ATen/native/native_functions.yaml \
-      #       --tags-path aten/src/ATen/native/tags.yaml \
-      #       --deprecated-functions-path "tools/autograd/deprecated.yaml"
+      - name: Do build steps necessary for linters
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          ${CONDA_RUN} python3 -m tools.linter.clang_tidy.generate_build_files
+          ${CONDA_RUN} python3 -m tools.generate_torch_version --is_debug=false
+          ${CONDA_RUN} python3 -m tools.pyi.gen_pyi \
+            --native-functions-path aten/src/ATen/native/native_functions.yaml \
+            --tags-path aten/src/ATen/native/tags.yaml \
+            --deprecated-functions-path "tools/autograd/deprecated.yaml"
 
       - name: Run lintrunner on all files (nonretryable)
         env:
