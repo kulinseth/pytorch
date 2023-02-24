@@ -38,7 +38,7 @@ jobs:
     with:
       sync-tag: macos-12-py3-arm64-mps-test
       build-environment: macos-12-py3-arm64
-      runs-on: macos-arm-12_5
+      runs-on: macos-arm-12.5
 
   macos-13_1-py3-arm64-mps-test:
     name: macos-13.1-py3-arm64-mps
@@ -46,7 +46,7 @@ jobs:
     needs: macos-12-py3-arm64-build
     with:
       build-environment: macos-12-py3-arm64
-      runs-on: macos-arm-13_1
+      runs-on: macos-arm-13.1
 
   macos-13_2-py3-arm64-mps-test:
     name: macos-13.2-py3-arm64-mps
@@ -54,7 +54,7 @@ jobs:
     needs: macos-12-py3-arm64-build
     with:
       build-environment: macos-12-py3-arm64
-      runs-on: macos-arm-13_2
+      runs-on: macos-arm-13.2
 
   macos-13_3-py3-arm64-mps-test:
     name: macos-13.3-py3-arm64-mps
@@ -62,4 +62,4 @@ jobs:
     needs: macos-12-py3-arm64-build
     with:
       build-environment: macos-12-py3-arm64
-      runs-on: macos-arm-13_3
+      runs-on: macos-arm-13.3
