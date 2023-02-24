@@ -31,7 +31,7 @@ jobs:
       MACOS_SCCACHE_S3_ACCESS_KEY_ID: ${{ secrets.MACOS_SCCACHE_S3_ACCESS_KEY_ID }}
       MACOS_SCCACHE_S3_SECRET_ACCESS_KEY: ${{ secrets.MACOS_SCCACHE_S3_SECRET_ACCESS_KEY }}
 
-  macos-py39-arm64-build:
+  macos-py38-arm64-build:
     name: macos-12-py38-arm64
     uses: ./.github/workflows/_mac-build.yml
     with:
