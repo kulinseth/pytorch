@@ -7490,7 +7490,7 @@ class TestConvolutionMPS(TestCaseMPS):
                 helper(stride, padding)
 
 
-    def test_conv1d_channels_last(self):
+    def te   st_conv1d_channels_last(self):
         # https://github.com/pytorch/pytorch/issues/81557
         model_cpu = torch.nn.Conv1d(1, 128, 3)
         a_cpu = torch.arange((128 * 176), dtype=torch.float32)
