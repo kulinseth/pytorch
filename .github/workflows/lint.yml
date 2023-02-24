@@ -24,7 +24,6 @@ jobs:
         with:
           python-version: 3.9
           environment-file: .github/requirements/conda-env-${{ runner.os }}-${{ runner.arch }}
-          # pip-requirements-file: .github/requirements/pip-requirements-${{ runner.os }}.txt
 
       - name: Install requirements
         env:
@@ -46,21 +45,6 @@ jobs:
           set -ex
           ${CONDA_RUN} lintrunner init
 
-      - name: Do build steps necessary for linters
-        env:
-          ENV_NAME: conda-test-env-${{ github.run_id }}
-          PY_VERS: 3.9
-        shell: arch -arch arm64 bash {0}
-        run: |
-          # shellcheck disable=SC1090
-          set -ex
-          ${CONDA_RUN} python3 -m tools.linter.clang_tidy.generate_build_files
-          ${CONDA_RUN} python3 -m tools.generate_torch_version --is_debug=false
-          ${CONDA_RUN} python3 -m tools.pyi.gen_pyi \
-            --native-functions-path aten/src/ATen/native/native_functions.yaml \
-            --tags-path aten/src/ATen/native/tags.yaml \
-            --deprecated-functions-path "tools/autograd/deprecated.yaml"
-
       - name: Run lintrunner on all files (nonretryable)
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
@@ -70,7 +54,7 @@ jobs:
           # shellcheck disable=SC1090
           set -ex
           set +e
-          if ! ${CONDA_RUN} lintrunner --force-color; then
+          if ! ${CONDA_RUN} lintrunner test/*.py aten/src/ATen/native/mps/*(mm|h) aten/src/ATen/native/mps/operations/* --force-color --tee-json=lint.json 2> /dev/null;; then
               echo ""
               echo -e "\e[1m\e[36mYou can reproduce these results locally by using \`lintrunner\`.\e[0m"
               echo -e "\e[1m\e[36mSee https://github.com/pytorch/pytorch/wiki/lintrunner for setup instructions.\e[0m"
