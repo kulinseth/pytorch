@@ -985,10 +985,10 @@ Tensor & masked_scatter__mps(Tensor& self, const Tensor& mask, const Tensor& sou
   }
 
   return at::index_put_out(
-            self,
-            *std::get<1>(mask_self_expanded),
-            c10::List<c10::optional<at::Tensor>>({*std::move(std::get<0>(mask_self_expanded))}),
-            source.resize_(indices[0].numel())
+    self,
+    *std::get<1>(mask_self_expanded),
+    c10::List<c10::optional<at::Tensor>>({*std::move(std::get<0>(mask_self_expanded))}),
+    source.resize_(indices[0].numel())
   );
 }
 
