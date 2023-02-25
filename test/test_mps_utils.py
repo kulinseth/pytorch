@@ -1,8 +1,8 @@
+# Owner(s): ["module: mps"]
+
 import torch
-from torch.testing._internal.common_utils import TestCase, run_tests
 from torch.utils._pytree import tree_map
 
-from typing import Iterator, List
 import logging
 import contextlib
 import itertools
@@ -90,14 +90,13 @@ def capture_logs():
     finally:
         logger.removeHandler(handler)
 
-def tracefunc(frame, event, arg, indent=[0]):
-      if event == "call":
-          indent[0] += 2
-          print("-" * indent[0] + "> call function", frame.f_code.co_name)
-      elif event == "return":
-          print("<" + "-" * indent[0], "exit function", frame.f_code.co_name)
-          indent[0] -= 2
-      return tracefunc
-
-import sys
-
+def tracefunc(frame, event, arg, indent=None):
+    if indent is None:
+        indent = [0]
+    if event == "call":
+        indent[0] += 2
+        print("-" * indent[0] + "> call function", frame.f_code.co_name)
+    elif event == "return":
+        print("<" + "-" * indent[0], "exit function", frame.f_code.co_name)
+        indent[0] -= 2
+    return tracefunc

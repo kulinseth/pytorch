@@ -17,7 +17,7 @@ on:
       runs-on:
         required: false
         type: string
-        default: "macos-m1-12"
+        default: "macos-arm-12.5"
         description: Hardware to run tests on
 
 jobs:
