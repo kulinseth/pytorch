@@ -273,10 +273,7 @@ class TestCommon(TestCase):
     @ops(_ops_and_refs_with_no_numpy_ref, dtypes=OpDTypes.any_common_cpu_cuda_one)
     def test_compare_cpu(self, device, dtype, op):
 
-        MPS_BLOCKLIST = [
-            "stft",     # hard crash on unsupoorted ComplexFloat
-        ]
-        msg = _get_mps_error_msg(device, dtype, op, MPS_BLOCKLIST)
+        msg = _get_mps_error_msg(device, dtype, op, [])
         if msg is not None:
             self.skipTest(msg)
 
@@ -504,11 +501,6 @@ class TestCommon(TestCase):
         if device == "mps" and executor == 'nvfuser':
             return
         MPS_BLOCKLIST = [
-            "_refs.fft.fft",        # hard crash on unsupoorted ComplexFloat
-            "_refs.fft.ifft",       # hard crash on unsupoorted ComplexFloat
-            "_refs.fft.ihfft",      # hard crash on unsupoorted ComplexFloat
-            "_refs.fft.rfft2",      # hard crash on unsupoorted ComplexFloat
-            "_refs.fft.rfft",       # hard crash on unsupoorted ComplexFloat
             "_refs.floor_divide",   # hard crash on unsupoorted ComplexFloat
             "_refs.where",          # hard crash on unsupoorted ComplexFloat
         ]
@@ -694,12 +686,6 @@ class TestCommon(TestCase):
     @ops(_ops_and_refs, dtypes=OpDTypes.none)
     @skipIfTorchInductor("Inductor does not support complex dtype yet")
     def test_out_warning(self, device, op):
-        MPS_BLOCKLIST = [
-            "_refs.fft.fft",     # hard crash on unsupoorted ComplexFloat
-            "_refs.fft.ifft",    # hard crash on unsupoorted ComplexFloat
-            "_refs.fft.ihfft",   # hard crash on unsupoorted ComplexFloat
-            "_refs.fft.rfft",    # hard crash on unsupoorted ComplexFloat
-        ]
         # Prefers running in float32 but has a fallback for the first listed supported dtype
         supported_dtypes = op.supported_dtypes(self.device_type)
         if len(supported_dtypes) == 0:
@@ -710,7 +696,7 @@ class TestCommon(TestCase):
             else list(supported_dtypes)[0]
         )
 
-        msg = _get_mps_error_msg(device, dtype, op, MPS_BLOCKLIST)
+        msg = _get_mps_error_msg(device, dtype, op, [])
         if msg is not None:
             self.skipTest(msg)
         samples = op.sample_inputs(device, dtype)
@@ -834,17 +820,7 @@ class TestCommon(TestCase):
     def test_out(self, device, dtype, op):
         MPS_BLOCKLIST = [
             "_refs._conversions.complex",  # hard crash on unsupoorted ComplexFloat
-            "_refs.fft.fft",               # hard crash on unsupoorted ComplexFloat
-            "_refs.fft.ifft",              # hard crash on unsupoorted ComplexFloat
-            "_refs.fft.ihfft",             # hard crash on unsupoorted ComplexFloat
-            "_refs.fft.rfft2",             # hard crash on unsupoorted ComplexFloat
-            "_refs.fft.rfft",              # hard crash on unsupoorted ComplexFloat
-            "bitwise_not",                 # hard crash on unsupoorted ComplexFloat
-            "fft.fft",                     # hard crash on unsupoorted ComplexFloat
-            "fft.ifft",                    # hard crash on unsupoorted ComplexFloat
-            "fft.ihfft",                   # hard crash on unsupoorted ComplexFloat
-            "fft.rfft2",                   # hard crash on unsupoorted ComplexFloat
-            "fft.rfft",                    # hard crash on unsupoorted ComplexFloat
+            "bitwise_not",                 # seg fault
         ]
         msg = _get_mps_error_msg(device, dtype, op, MPS_BLOCKLIST)
         if msg is not None:
@@ -1038,13 +1014,7 @@ class TestCommon(TestCase):
     def test_variant_consistency_eager(self, device, dtype, op):
         # Acquires variants (method variant, inplace variant, operator variant, inplace_operator variant, aliases)
         MPS_BLOCKLIST = [
-            "fft.fft",                      # hard crash on unsupoorted ComplexFloat
-            "fft.ifft",                     # hard crash on unsupoorted ComplexFloat
-            "fft.ihfft",                    # hard crash on unsupoorted ComplexFloat
-            "fft.rfft2",                    # hard crash on unsupoorted ComplexFloat
-            "fft.rfft",                     # hard crash on unsupoorted ComplexFloat
             "nn.functional.max_pool2d",     # hard crash: buffer is not large enough
-            "stft",                         # hard crash on unsupoorted ComplexFloat
         ]
         msg = _get_mps_error_msg(device, dtype, op, MPS_BLOCKLIST)
         if msg is not None:
@@ -1496,10 +1466,7 @@ class TestCompositeCompliance(TestCase):
     )
     @ops(op_db, allowed_dtypes=(torch.float,))
     def test_operator(self, device, dtype, op):
-        MPS_BLOCKLIST = [
-            "stft",  # hard crash on unsupoorted ComplexFloat
-        ]
-        msg = _get_mps_error_msg(device, dtype, op, MPS_BLOCKLIST)
+        msg = _get_mps_error_msg(device, dtype, op, [])
         if msg is not None:
             self.skipTest(msg)
         samples = op.sample_inputs(device, dtype, requires_grad=False)
@@ -1515,15 +1482,7 @@ class TestCompositeCompliance(TestCase):
     )
     @ops([op for op in op_db if op.supports_autograd], allowed_dtypes=(torch.float,))
     def test_backward(self, device, dtype, op):
-        MPS_BLOCKLIST = [
-            "fft.fft",              # hard crash on unsupoorted ComplexFloat
-            "fft.ifft",             # hard crash on unsupoorted ComplexFloat
-            "fft.ihfft",            # hard crash on unsupoorted ComplexFloat
-            "fft.rfft2",            # hard crash on unsupoorted ComplexFloat
-            "fft.rfft",             # hard crash on unsupoorted ComplexFloat
-            "stft",                 # hard crash on unsupoorted ComplexFloat
-        ]
-        msg = _get_mps_error_msg(device, dtype, op, MPS_BLOCKLIST)
+        msg = _get_mps_error_msg(device, dtype, op, [])
         if msg is not None:
             self.skipTest(msg)
 
@@ -1544,10 +1503,7 @@ class TestCompositeCompliance(TestCase):
     )
     @ops(op_db, allowed_dtypes=(torch.float,))
     def test_forward_ad(self, device, dtype, op):
-        MPS_BLOCKLIST = [
-            "stft",     # hard crash on unsupoorted ComplexFloat
-        ]
-        msg = _get_mps_error_msg(device, dtype, op, MPS_BLOCKLIST)
+        msg = _get_mps_error_msg(device, dtype, op, [])
         if msg is not None:
             self.skipTest(msg)
         if torch.float not in op.supported_backward_dtypes(device):
@@ -2271,15 +2227,7 @@ class TestFakeTensor(TestCase):
     @ops([op for op in op_db if op.supports_autograd], allowed_dtypes=(torch.float,))
     @skipOps('TestFakeTensor', 'test_fake_crossref_backward_no_amp', fake_backward_xfails)
     def test_fake_crossref_backward_no_amp(self, device, dtype, op):
-        MPS_BLOCKLIST = [
-            "fft.fft",      # hard crash on unsupoorted ComplexFloat
-            "fft.ifft",     # hard crash on unsupoorted ComplexFloat
-            "fft.ihfft",    # hard crash on unsupoorted ComplexFloat
-            "fft.rfft2",    # hard crash on unsupoorted ComplexFloat
-            "fft.rfft",     # hard crash on unsupoorted ComplexFloat
-            "stft",         # hard crash on unsupoorted ComplexFloat
-        ]
-        msg = _get_mps_error_msg(device, dtype, op, MPS_BLOCKLIST)
+        msg = _get_mps_error_msg(device, dtype, op, [])
         if msg is not None:
             self.skipTest(msg)
         self._test_fake_crossref_helper(device, dtype, op, contextlib.nullcontext)
