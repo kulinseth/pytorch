@@ -59,14 +59,6 @@ jobs:
       build-environment: macos-py39-arm64
       runs-on: macos-arm-12.5
 
-  macos-13_1-py3-arm64-mps-test:
-    name: macos-13.1-py3-arm64-mps
-    uses: ./.github/workflows/_mac-test-mps.yml
-    needs: macos-py39-arm64-build
-    with:
-      build-environment: macos-py39-arm64
-      runs-on: macos-arm-13.1
-
   macos-13_2-py3-arm64-mps-test:
     name: macos-13.2-py3-arm64-mps
     uses: ./.github/workflows/_mac-test-mps.yml
