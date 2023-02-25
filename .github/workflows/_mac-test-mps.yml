@@ -97,6 +97,19 @@ jobs:
 
           ${CONDA_RUN} python3 test/test_modules.py -k mps --verbose
 
+       - name: Run MPS Test Ops
+        id: test_3
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PYTORCH_TEST_WITH_SLOW: 1
+        shell: arch -arch arm64 bash {0}
+        # During bring up of NN don't show this as an error.
+        continue-on-error: true
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          ${CONDA_RUN} python3 test/test_ops.py -k mps --verbose
+
       - name: Print remaining test logs
         shell: bash
         if: always()
