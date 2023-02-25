@@ -262,6 +262,10 @@ class TestCommon(TestCase):
     @ops(_ops_and_refs_with_no_numpy_ref, dtypes=OpDTypes.any_common_cpu_cuda_one)
     def test_compare_cpu(self, device, dtype, op):
 
+        msg = _get_mps_error_msg(device, dtype, op, [])
+        if msg is not None:
+            self.skipTest(msg)
+
         def to_cpu(arg):
             if isinstance(arg, torch.Tensor):
                 return arg.to(device='cpu')
@@ -484,6 +488,15 @@ class TestCommon(TestCase):
     @parametrize('executor', ['aten', 'nvfuser'])
     @skipIfTorchInductor("Takes too long for inductor")
     def test_python_ref_executor(self, device, dtype, op, executor):
+        if device == "mps" and executor == 'nvfuser':
+            return
+        MPS_BLOCKLIST = [
+            "_refs.floor_divide",   # hard crash on unsupoorted ComplexFloat
+            "_refs.where",          # hard crash on unsupoorted ComplexFloat
+        ]
+        msg = _get_mps_error_msg(device, dtype, op, MPS_BLOCKLIST)
+        if msg is not None:
+            self.skipTest(msg)
         # TODO: Not all dtypes are supported with nvfuser
         from torch._prims_common import _torch_dtype_to_nvfuser_dtype_map
         if executor == "nvfuser" and dtype not in _torch_dtype_to_nvfuser_dtype_map:
@@ -673,6 +686,9 @@ class TestCommon(TestCase):
             else list(supported_dtypes)[0]
         )
 
+        msg = _get_mps_error_msg(device, dtype, op, [])
+        if msg is not None:
+            self.skipTest(msg)
         samples = op.sample_inputs(device, dtype)
         for sample in samples:
             # calls it normally to get the expected result
@@ -792,6 +808,13 @@ class TestCommon(TestCase):
     @ops(_ops_and_refs, dtypes=OpDTypes.any_one)
     @skipIfTorchInductor("Inductor does not support complex dtype yet")
     def test_out(self, device, dtype, op):
+        MPS_BLOCKLIST = [
+            "_refs._conversions.complex",  # hard crash on unsupoorted ComplexFloat
+            "bitwise_not",                 # seg fault
+        ]
+        msg = _get_mps_error_msg(device, dtype, op, MPS_BLOCKLIST)
+        if msg is not None:
+            self.skipTest(msg)
         # Prefers running in float32 but has a fallback for the first listed supported dtype
         samples = op.sample_inputs(device, dtype)
         for sample in samples:
@@ -980,7 +1003,12 @@ class TestCommon(TestCase):
     @skipIfTorchInductor("Inductor does not support complex dtype yet")
     def test_variant_consistency_eager(self, device, dtype, op):
         # Acquires variants (method variant, inplace variant, operator variant, inplace_operator variant, aliases)
-
+        MPS_BLOCKLIST = [
+            "nn.functional.max_pool2d",     # hard crash: buffer is not large enough
+        ]
+        msg = _get_mps_error_msg(device, dtype, op, MPS_BLOCKLIST)
+        if msg is not None:
+            self.skipTest(msg)
         method = op.method_variant
         inplace = op.inplace_variant
         operator = op.operator_variant
@@ -1431,6 +1459,9 @@ class TestCompositeCompliance(TestCase):
     )
     @ops(op_db, allowed_dtypes=(torch.float,))
     def test_operator(self, device, dtype, op):
+        msg = _get_mps_error_msg(device, dtype, op, [])
+        if msg is not None:
+            self.skipTest(msg)
         samples = op.sample_inputs(device, dtype, requires_grad=False)
 
         for sample in samples:
@@ -1444,6 +1475,10 @@ class TestCompositeCompliance(TestCase):
     )
     @ops([op for op in op_db if op.supports_autograd], allowed_dtypes=(torch.float,))
     def test_backward(self, device, dtype, op):
+        msg = _get_mps_error_msg(device, dtype, op, [])
+        if msg is not None:
+            self.skipTest(msg)
+
         samples = op.sample_inputs(device, dtype, requires_grad=True)
 
         for sample in samples:
@@ -1461,6 +1496,9 @@ class TestCompositeCompliance(TestCase):
     )
     @ops(op_db, allowed_dtypes=(torch.float,))
     def test_forward_ad(self, device, dtype, op):
+        msg = _get_mps_error_msg(device, dtype, op, [])
+        if msg is not None:
+            self.skipTest(msg)
         if torch.float not in op.supported_backward_dtypes(device):
             raise unittest.SkipTest("Does not support autograd")
 
@@ -2167,6 +2205,9 @@ class TestFakeTensor(TestCase):
     @ops([op for op in op_db if op.supports_autograd], allowed_dtypes=(torch.float,))
     @skipOps('TestFakeTensor', 'test_fake_crossref_backward_no_amp', fake_backward_xfails)
     def test_fake_crossref_backward_no_amp(self, device, dtype, op):
+        msg = _get_mps_error_msg(device, dtype, op, [])
+        if msg is not None:
+            self.skipTest(msg)
         self._test_fake_crossref_helper(device, dtype, op, contextlib.nullcontext)
 
     @skipIfRocm
