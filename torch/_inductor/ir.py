@@ -2302,7 +2302,7 @@ class ComputedBuffer(Buffer):
 
 class TemplateBuffer(Buffer):
     """
-    Represents a Triton (in the futurue other type) of template operator
+    Represents a Triton (in the future other type) of template operator
     that we can fuse an epilogue onto.
     """
 
@@ -2571,7 +2571,7 @@ class ExternKernel(InputsKernel):
         """
         In order to pass this to an extern kernel we need a
         ReinterpretView not a View.  This allows us to avoid some
-        uneeded copies.
+        unneeded copies.
         """
         assert isinstance(x, BaseView)
         if isinstance(x, ReinterpretView):
