@@ -102,6 +102,7 @@ def mps_ops_grad_modifier(ops):
         'atanh': [torch.float32],
         'div': [torch.float16],
         'argsort': [torch.float16],
+        'fmod': [torch.float16],
 
         # Unsupported dtype
         'special.ndtr': [torch.float32],
@@ -119,7 +120,6 @@ def mps_ops_grad_modifier(ops):
 
     for op in ops:
         key = op.name + op.variant_test_name
-
         if key in XFAILLIST_GRAD:
             addDecorator(op, DecorateInfo(
                          unittest.expectedFailure,
@@ -217,9 +217,6 @@ def mps_ops_modifier(ops):
         'digamma': None,
         'erfc': None,
         'erfinv': None,
-        'fmax': None,
-        'fmin': None,
-        'fmod': None,
         'frexp': None,
         'gcd': None,
         'geqrf': None,
@@ -229,7 +226,6 @@ def mps_ops_modifier(ops):
         'histc': None,
         'histogram': None,
         'histogramdd': None,
-        'hypot': None,
         'i0': None,
         'igamma': None,
         'igammac': None,
@@ -426,7 +422,6 @@ def mps_ops_modifier(ops):
         'log_softmaxwith_dtype': None,
         'softmaxwith_dtype': None,
         'float_power': None,
-        'full': None,
         'full_like': None,
         'linalg.matrix_rank': None,
         'linalg.matrix_rankhermitian': None,
@@ -463,8 +458,8 @@ def mps_ops_modifier(ops):
     UNDEFINED_XFAILLIST = {
         # Failures due to random output that they generate using
         # Philox engine causing mismatch with CPU results
-        '__rpow__': [torch.float16],  # RuntimeError: "log_vml_cpu" not implemented for 'Half'  
-        'addr': [torch.float16, torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # "addmv_impl_cpu" not implemented for 'Half' 
+        '__rpow__': [torch.float16],  # RuntimeError: "log_vml_cpu" not implemented for 'Half'
+        'addr': [torch.float16, torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # "addmv_impl_cpu" not implemented for 'Half'
         'atan2': [torch.bool, torch.int16, torch.int32, torch.uint8, torch.int8], # failure due to issue: atan2() may generate NAN in output with
         'dist': [torch.float16], # cpu result off, showing inf values
         'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # cpu result off, showing random values
