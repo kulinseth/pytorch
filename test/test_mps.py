@@ -63,7 +63,6 @@ def mps_ops_grad_modifier(ops):
     XFAILLIST_GRAD = {
         # Unimplemented ops
         '__getitem__': [torch.float16],
-        'combinations': [torch.float16, torch.float32],
         'logaddexp2': [torch.float32],
         'masked_select': [torch.float16, torch.float32],
         'nn.functional.binary_cross_entropy_with_logits': [torch.float16, torch.float32],
@@ -102,6 +101,7 @@ def mps_ops_grad_modifier(ops):
         # Correctness issues
         'atanh': [torch.float32],
         'div': [torch.float16],
+        'argsort': [torch.float16],
 
         # Unsupported dtype
         'special.ndtr': [torch.float32],
@@ -198,11 +198,9 @@ def mps_ops_modifier(ops):
         'rounddecimals_neg_3': None,
         'rounddecimals_3': None,
         'rounddecimals_0': None,
-        '__rmod__': None,
         '__rsub__': None,
         'aminmax': None,
         'angle': None,
-        'argsort': None,
         'bucketize': None,
         'cauchy_': None,
         'cauchy': None,
@@ -402,7 +400,6 @@ def mps_ops_modifier(ops):
 
         'chalf': None,
         # Unsupported dtypes
-        'dot': None,
         'nn.functional.conv1d': None,
         'nn.functional.conv2d': None,
         'nn.functional.conv_transpose1d': None,
@@ -9721,7 +9718,7 @@ class TestConsistency(TestCaseMPS):
         # sys.setprofile(tracefunc)
         self.assertEqual(device, "cpu")
         key = op.name + op.variant_test_name
-        
+
         run_grad_test = True
         def get_samples():
             return op.sample_inputs(device, dtype, requires_grad=(dtype.is_floating_point or dtype.is_complex))
@@ -9792,7 +9789,7 @@ class TestConsistency(TestCaseMPS):
         # sys.setprofile(tracefunc)
         self.assertEqual(device, "cpu")
         key = op.name + op.variant_test_name
-        
+
         run_grad_test = True
         def get_samples():
             return op.sample_inputs(device, dtype, requires_grad=(dtype.is_floating_point or dtype.is_complex))
