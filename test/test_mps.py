@@ -92,6 +92,12 @@ def mps_ops_grad_modifier(ops):
         'signal_windows_blackman':[torch.float16, torch.float32],
         'signal_windows_bartlett':[torch.float16, torch.float32],
         'scalar_tensor':[torch.float16, torch.float32],
+        'cdist': [torch.float32],
+        'eye':[torch.float16, torch.float32], # CPU error
+        'floor_divide': [torch.float16, torch.float32], # CPU RuntimeError: derivative for aten::floor_divide is not implemented
+        'narrow_copy':[torch.float16, torch.float32],
+        'nn.functional.adaptive_avg_pool1d': [torch.float16, torch.float32],
+        'nn.functional.adaptive_avg_pool2d': [torch.float16, torch.float32],
 
         # Correctness issues
         'atanh': [torch.float32],
@@ -332,12 +338,13 @@ def mps_ops_modifier(ops):
         'scatter_reducesum': None,
         'searchsorted': None,
         'segment_reduce': None,
-        '_segment_reduce': None,
+        '_segment.reduce': None,
+        'segment.reduce': None,
         'segment_reduce_offsets': None,
         '_segment_reduce_offsets': None,
-        '__segment_reduce_offsets': None,
         '_segment_reduce_lengths': None,
-        'segment_reduce_lengths': None,
+        '_segment_reducelengths': None,
+        '_segment_reduceoffsets': None,
         'sinc': None,
         'sort': None,
         'sparse_mm': None,
@@ -418,7 +425,6 @@ def mps_ops_modifier(ops):
         'addmmdecomposed': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addbmm': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addmm': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'addr': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addmv': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'baddbmm': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'mm': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -507,6 +513,8 @@ def mps_ops_modifier(ops):
     UNDEFINED_XFAILLIST = {
         # Failures due to random output that they generate using
         # Philox engine causing mismatch with CPU results
+        '__rpow__': [torch.float16],  # RuntimeError: "log_vml_cpu" not implemented for 'Half'  
+        'addr': [torch.float16, torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # "addmv_impl_cpu" not implemented for 'Half' 
         'uniform': [torch.float16, torch.float32],
         'rand_like': [torch.float16, torch.float32],
         'randint_like': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -9798,6 +9806,7 @@ class TestConsistency(TestCaseMPS):
             except Exception as e:
                 if op.name in CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
                     continue
+                raise e
 
             if not (dtype.is_floating_point or dtype.is_complex):
                 # Maybe we should error here instead?
