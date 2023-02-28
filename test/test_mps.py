@@ -175,14 +175,23 @@ def mps_ops_modifier(ops):
         # Failures due to lack of op implementation on MPS backend
         'linalg.eig': None,
         'linalg.eigvals': None,
-        'fft.fft': None,
+        'fft.fft2': None,
+        'fft.fftn': None,
+        'fft.fftshift': None,
+        'fft.hfft': None,
+        'fft.hfft2': None,
+        'fft.hfftn': None,
         'fft.ifft': None,
-        'fft.ihfft2': None,
+        'fft.ifft2': None,
+        'fft.ifftn': None,
+        'fft.ifftshift': None,
         'fft.ihfft': None,
+        'fft.ihfft2': None,
         'fft.ihfftn': None,
-        'fft.rfft2': None,
+        'fft.irfft': None,
+        'fft.irfft2': None,
+        'fft.irfftn': None,
         'fft.rfft': None,
-        'fft.rfftn': None,
         'put': None,
         'stft': None,
         'nn.functional.conv_transpose3d': None,
@@ -407,7 +416,6 @@ def mps_ops_modifier(ops):
         'geometric_': None,
         'log_normal_': None,
         'log_normal': None,
-
     }
 
     XFAILLIST = {
@@ -434,24 +442,6 @@ def mps_ops_modifier(ops):
         'complex': [torch.float16, torch.float32],
         'double': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'einsum': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.fft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.fft2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.fftn': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.fftshift': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.hfft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.hfft2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.hfftn': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.ifft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.ifft2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.ifftn': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.ifftshift': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.ihfft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.ihfft2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.ihfftn': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.irfft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.irfft2': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.irfftn': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'fft.rfft': [torch.bool, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'float_power': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'full': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'full_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -482,32 +472,10 @@ def mps_ops_modifier(ops):
         'signal.windows.hamming': [torch.float16],
         'signal.windows.hann': [torch.float16],
         'signal.windows.kaiser': [torch.float16],
-        'stft': [torch.float32],
         'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-
-        # failures powerWithPrimaryTensor() with integer input may return wrong results
-        'pow': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        '__rpow__': [torch.uint8, torch.int8],
-        'topk': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],  # topk fails with duplicate indices
-        'multinomial': [torch.float32], # Functions with correctness issues
-
-        # cpu result off, showing random values
-        'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'as_strided_partial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        # cpu result off, showing inf values
-        'dist': [torch.float16],
-
-        # failure due to issue: atan2() may generate NAN in output with
-        'atan2': [torch.bool, torch.int16, torch.int32, torch.uint8, torch.int8],
-        # Trace i64 is going to be fixed in #95231
         'trace': [torch.int64],
-        # This is fixed in MacOS 13.3
-
-        'masked.softmax': [torch.float32],
-        'masked.softmin': [torch.float32],
-        'masked.log_softmax': [torch.float32],
     }
 
     UNDEFINED_XFAILLIST = {
@@ -515,6 +483,12 @@ def mps_ops_modifier(ops):
         # Philox engine causing mismatch with CPU results
         '__rpow__': [torch.float16],  # RuntimeError: "log_vml_cpu" not implemented for 'Half'  
         'addr': [torch.float16, torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # "addmv_impl_cpu" not implemented for 'Half' 
+        'atan2': [torch.bool, torch.int16, torch.int32, torch.uint8, torch.int8], # failure due to issue: atan2() may generate NAN in output with
+        'dist': [torch.float16], # cpu result off, showing inf values
+        'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # cpu result off, showing random values
+        'as_strided_partial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # cpu result off, showing random values
+        'multinomial': [torch.float32], # random results
+        'topk': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],  # topk fails with duplicate indices
         'uniform': [torch.float16, torch.float32],
         'rand_like': [torch.float16, torch.float32],
         'randint_like': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -542,7 +516,7 @@ def mps_ops_modifier(ops):
                       # torch.int64, torch.uint8, torch.int8, tor],
         'index_put': None,
         # zero to negative integer powers are undefined
-        '__rpow__': [torch.int16, torch.int32, torch.int64],
+        '__rpow__': [torch.int8, torch.int16, torch.int32, torch.int64],
         'resize_': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'resize_as_': [torch.float16, torch.float32],
     }
