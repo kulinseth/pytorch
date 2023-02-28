@@ -509,8 +509,6 @@ def mps_ops_modifier(ops):
         # as_strided_scatter has non-deterministic behavior when the update indices are not unique
         'as_strided_scatter': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         # duplicate indices are used in the testcase - undefined behaviour
-        # 'index_put': [torch.float16, torch.float32, torch.int16, torch.int32,
-                      # torch.int64, torch.uint8, torch.int8, tor],
         'index_put': None,
         # zero to negative integer powers are undefined
         '__rpow__': [torch.int8, torch.int16, torch.int32, torch.int64],
@@ -9736,8 +9734,6 @@ class TestConsistency(TestCaseMPS):
                 # TODO: This checks only the function variant. We should also check the method and inplace version
                 # when they exist
                 if (op.name == "bfloat16" or op.name == "cdouble" or op.name == "double" or op.name == "cfloat" or op.name == "chalf"):
-                    continue
-                if (op.name == "index_put"):
                     continue
                 cpu_args = [cpu_sample.input] + list(cpu_sample.args)
                 cpu_kwargs = cpu_sample.kwargs
