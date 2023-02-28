@@ -471,8 +471,7 @@ def mps_ops_modifier(ops):
         'signal.windows.kaiser': [torch.float16],
         'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'trace': [torch.int64],
+        'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8]
     }
 
     UNDEFINED_XFAILLIST = {
