@@ -388,6 +388,7 @@ def mps_ops_modifier(ops):
         'svd_lowrank': None,
         'symeig': None,
         'take': None,
+        'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'to': None,
         'to_sparse': None,
         'unique': None,
@@ -442,6 +443,8 @@ def mps_ops_modifier(ops):
         'nn.functional.linear': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'nn.functional.softmin': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'ones_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+
+        # Failures due to error in cpu_grad
         'signal.windows.blackman': [torch.float16],
         'signal.windows.cosine': [torch.float16],
         'signal.windows.exponential': [torch.float16],
@@ -451,7 +454,7 @@ def mps_ops_modifier(ops):
         'signal.windows.hamming': [torch.float16],
         'signal.windows.hann': [torch.float16],
         'signal.windows.kaiser': [torch.float16],
-        'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+
         'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8] # Empty placeholder tensor error
     }
 
