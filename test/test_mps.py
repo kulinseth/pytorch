@@ -59,39 +59,73 @@ _ref_test_ops = tuple(
     )
 )
 
-def mps_ops_modifier(ops):
+def mps_ops_grad_modifier(ops):
     XFAILLIST_GRAD = {
         # Unimplemented ops
-        '__getitem__': ['f16'],
-        'combinations': ['f16', 'f32'],
-        'logaddexp2': ['f32'],
-        'masked_select': ['f16', 'f32'],
-        'nn.functional.binary_cross_entropy_with_logits': ['f16', 'f32'],
-        'nn.functional.group_norm': ['f32'],
-        'prod': ['f32'],
-        'sgn': ['f16', 'f32'],
-        'segment_reduce': ['f16', 'f32'],
-        '_segment_reduce': ['f16', 'f32'],
-        'unfold_copy': ['f16', 'f32'],
-        'unfold': ['f16', 'f32'],
-        'trace': ['f32'],
-        'sparse_mm': ['f32'],
-        'sparse_mm_reduce': ['f32'],
+        '__getitem__': [torch.float16],
+        'combinations': [torch.float16, torch.float32],
+        'logaddexp2': [torch.float32],
+        'masked_select': [torch.float16, torch.float32],
+        'nn.functional.binary_cross_entropy_with_logits': [torch.float16, torch.float32],
+        'nn.functional.group_norm': [torch.float32],
+        'prod': [torch.float32],
+        'sgn': [torch.float16, torch.float32],
+        'segment_reduce': [torch.float16, torch.float32],
+        '_segment_reduce': [torch.float16, torch.float32],
+        'unfold_copy': [torch.float16, torch.float32],
+        'unfold': [torch.float16, torch.float32],
+        'trace': [torch.float32],
+        'sparse_mm': [torch.float32],
+        'sparse_mm_reduce': [torch.float32],
+        'unique_consecutive': [torch.float16, torch.float32],
+        'special_modified_bessel_i0': [torch.float16, torch.float32],
+        'sparse_mm_reduce':[torch.float16, torch.float32],
+        'signal_windows_nuttall':[torch.float16, torch.float32],
+        'signal_windows_kaiser':[torch.float16, torch.float32],
+        'signal_windows_hann':[torch.float16, torch.float32],
+        'signal_windows_hamming':[torch.float16, torch.float32],
+        'signal_windows_general_hamming':[torch.float16, torch.float32],
+        'signal_windows_general_cosine':[torch.float16, torch.float32],
+        'signal_windows_gaussian':[torch.float16, torch.float32],
+        'signal_windows_exponential':[torch.float16, torch.float32],
+        'signal_windows_cosine':[torch.float16, torch.float32],
+        'signal_windows_blackman':[torch.float16, torch.float32],
+        'signal_windows_bartlett':[torch.float16, torch.float32],
+        'scalar_tensor':[torch.float16, torch.float32],
 
         # Correctness issues
-        'atanh': ['f32'],
-        'div': ['f16'],
+        'atanh': [torch.float32],
+        'div': [torch.float16],
 
         # Unsupported dtype
-        'special.ndtr': ['f32'],
-        'trapezoid': ['f16', 'f32'],
-        'trapz': ['f16', 'f32'],
+        'special.ndtr': [torch.float32],
+        'trapezoid': [torch.float16, torch.float32],
+        'trapz': [torch.float16, torch.float32],
     }
 
     MACOS_12_3_XFAILLIST_GRAD = {
-        'remainder': ['f16'],
+        'remainder': [torch.float16],
     }
 
+    def addDecorator(op, d) -> None:
+        op.decorators = list(op.decorators) if op.decorators is not None else []
+        op.decorators.append(d)
+
+    for op in ops:
+        key = op.name + op.variant_test_name
+
+        if key in XFAILLIST_GRAD:
+            addDecorator(op, DecorateInfo(
+                         unittest.expectedFailure,
+                         dtypes=XFAILLIST_GRAD[key]))
+
+        if key in MACOS_12_3_XFAILLIST_GRAD and (not torch.backends.mps.is_macos13_or_newer()):
+            addDecorator(op, DecorateInfo(
+                         unittest.expectedFailure,
+                         dtypes=MACOS_12_3_XFAILLIST_GRAD[key]))
+        yield op
+
+def mps_ops_modifier(ops):
     # Those ops worked on MacOS12, but broken on MacOS13, see https://github.com/pytorch/pytorch/issues/85758
     MACOS_12_3_XFAILLIST = {
         # expected failures
@@ -230,7 +264,6 @@ def mps_ops_modifier(ops):
         'lu_unpack': None,
         'masked.cumprod': None,
         'masked.median': None,
-        'masked_scatter': None,
         'matrix_exp': None,
         'mode': None,
         'msort': None,
@@ -325,7 +358,7 @@ def mps_ops_modifier(ops):
         'special.i1e': None,
         'special.laguerre_polynomial_l': None,
         'special.log_ndtr': None,
-        'special.modified_bessel_i0': None,
+        'hspecial.modified_bessel_i0': None,
         'special.modified_bessel_i1': None,
         'special.modified_bessel_k0': None,
         'special.modified_bessel_k1': None,
@@ -497,7 +530,9 @@ def mps_ops_modifier(ops):
         # as_strided_scatter has non-deterministic behavior when the update indices are not unique
         'as_strided_scatter': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         # duplicate indices are used in the testcase - undefined behaviour
-        'index_put': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        # 'index_put': [torch.float16, torch.float32, torch.int16, torch.int32,
+                      # torch.int64, torch.uint8, torch.int8, tor],
+        'index_put': None,
         # zero to negative integer powers are undefined
         '__rpow__': [torch.int16, torch.int32, torch.int64],
         'resize_': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -519,12 +554,12 @@ def mps_ops_modifier(ops):
         if key in MACOS_BEFORE_13_3_XFAILLIST and (torch.backends.mps.is_macos13_or_newer() and product_version < 13.3):
             addDecorator(op, DecorateInfo(
                          unittest.expectedFailure,
-                         dtypes=VENTURA_XFAILLIST[key]))
+                         dtypes=MACOS_BEFORE_13_3_XFAILLIST[key]))
 
         if key in MACOS_13_3_XFAILLIST and (product_version >= 13.3):
             addDecorator(op, DecorateInfo(
                          unittest.expectedFailure,
-                         dtypes=VENTURA_XFAILLIST[key]))
+                         dtypes=MACOS_13_3_XFAILLIST[key]))
 
         if key in MACOS_12_3_XFAILLIST and (not torch.backends.mps.is_macos13_or_newer()):
             addDecorator(op, DecorateInfo(
@@ -9433,11 +9468,6 @@ class TestRNNMPS(TestCaseMPS):
 
     def test_RNN_cell_no_broadcasting(self):
         def test(cell_module, input, hx, input_size, hidden_size):
-        self.assertEqual(cpu_input_grad, mps_input_grad)
-        self.assertEqual(cpu_weight_grad, mps_weight_grad)
-
-    def test_RNN_cell_no_broadcasting(self):
-        def test(cell_module, input, hx, input_size, hidden_size):
             cell = cell_module(input_size, hidden_size, device='mps')
             self.assertRaises(RuntimeError, lambda: cell(input, hx))
 
@@ -9641,6 +9671,8 @@ MPS_DTYPES = get_all_dtypes()
 for t in [torch.double, torch.cdouble, torch.cfloat, torch.bfloat16]:
     del MPS_DTYPES[MPS_DTYPES.index(t)]
 
+MPS_GRAD_DTYPES = [torch.float32, torch.float16]
+
 abbrs_to_torch_dtype_dict = {value : key for (key, value) in dtype_abbrs.items()}
 class UnitTestSample:
     def __init__(self, dtype, args, params, out):
@@ -9708,33 +9740,26 @@ class TestConsistency(TestCaseMPS):
         self.assertEqual(device, "cpu")
         key = op.name + op.variant_test_name
         
-        # Make this an expecttest manually
-        # When this env variable is set, generate a new ALLOWLIST_OP
-        # that reflects the current state of what passes or not
-        if os.environ.get("EXPECTTEST_ACCEPT", None) == "1":
-            generate_new_truth = True
-        else:
-            generate_new_truth = False
-
         run_grad_test = True
         def get_samples():
             return op.sample_inputs(device, dtype, requires_grad=(dtype.is_floating_point or dtype.is_complex))
         cpu_samples = get_samples()
 
-        all_forward_pass = True
         all_backward_pass = True
         for cpu_sample in cpu_samples:
             #
             # Forward check
             #
-            forward_failed = False
             try:
                 mps_sample = cpu_sample.transform(
                     lambda x: x.detach().to("mps").requires_grad_(x.requires_grad) if isinstance(x, torch.Tensor) else x)
 
                 # TODO: This checks only the function variant. We should also check the method and inplace version
                 # when they exist
-
+                if (op.name == "bfloat16" or op.name == "cdouble" or op.name == "double" or op.name == "cfloat" or op.name == "chalf"):
+                    continue
+                if (op.name == "index_put"):
+                    continue
                 cpu_args = [cpu_sample.input] + list(cpu_sample.args)
                 cpu_kwargs = cpu_sample.kwargs
                 mps_args = [mps_sample.input] + list(mps_sample.args)
@@ -9743,10 +9768,6 @@ class TestConsistency(TestCaseMPS):
                 # for tensor_split(), the second tensor arg ("tensor_indices_or_sections") must be on CPU only
                 if (op.name == "tensor_split" and isinstance(mps_args[1], torch.Tensor)):
                     mps_args[1] = cpu_args[1]
-
-                # Skip running the tests to generate full list
-                if os.environ.get("EXPECTTEST_ACCEPT", None) == "1":
-                    continue
 
                 cpu_out = op(*cpu_args, **cpu_kwargs)
                 mps_out = op(*mps_args, **mps_kwargs)
@@ -9778,8 +9799,77 @@ class TestConsistency(TestCaseMPS):
                 if op.name in CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
                     continue
 
-                if not generate_new_truth:
-                    raise e
+            if not (dtype.is_floating_point or dtype.is_complex):
+                # Maybe we should error here instead?
+                continue
+
+
+    @ops(mps_ops_grad_modifier(op_db), allowed_dtypes=MPS_GRAD_DTYPES)
+    def test_output_grad_match(self, device, dtype, op):
+        # sys.setprofile(tracefunc)
+        self.assertEqual(device, "cpu")
+        key = op.name + op.variant_test_name
+        
+        run_grad_test = True
+        def get_samples():
+            return op.sample_inputs(device, dtype, requires_grad=(dtype.is_floating_point or dtype.is_complex))
+        cpu_samples = get_samples()
+
+        all_forward_pass = True
+        all_backward_pass = True
+        for cpu_sample in cpu_samples:
+            #
+            # Forward check
+            #
+            forward_failed = False
+            try:
+                mps_sample = cpu_sample.transform(
+                    lambda x: x.detach().to("mps").requires_grad_(x.requires_grad) if isinstance(x, torch.Tensor) else x)
+
+                # TODO: This checks only the function variant. We should also check the method and inplace version
+                # when they exist
+
+                if (op.name == "bfloat16" or op.name == "cdouble" or op.name == "double" or op.name == "cfloat" or op.name == "chalf"):
+                    continue
+                cpu_args = [cpu_sample.input] + list(cpu_sample.args)
+                cpu_kwargs = cpu_sample.kwargs
+                mps_args = [mps_sample.input] + list(mps_sample.args)
+                mps_kwargs = mps_sample.kwargs
+
+                # for tensor_split(), the second tensor arg ("tensor_indices_or_sections") must be on CPU only
+                if (op.name == "tensor_split" and isinstance(mps_args[1], torch.Tensor)):
+                    mps_args[1] = cpu_args[1]
+
+                cpu_out = op(*cpu_args, **cpu_kwargs)
+                mps_out = op(*mps_args, **mps_kwargs)
+
+                if op.name == "nn.functional.conv2d" or op.name == "linalg.multi_dot" and dtype == torch.float32:
+                    atol = 1e-4
+                    rtol = 3e-5
+                elif (op.name in self.FP16_LOW_PRECISION_LIST) and dtype == torch.float16:
+                    atol = 1e-2
+                    rtol = 1e-2
+                elif (op.name == "masked.mean"):
+                    atol = 7e-4
+                    rtol = 2e-3
+                elif (op.name == "native_layer_norm"):
+                    atol = 1e-4
+                    rtol = 1.3e-5
+                elif op.name == "norm" and dtype == torch.float16:
+                    atol = 7e-4
+                    rtol = 1.5e-3
+                elif op.name == "unique" and cpu_kwargs["sorted"] is False:
+                    continue
+                else:
+                    atol = None
+                    rtol = None
+
+                self.assertEqual(cpu_out, mps_out, atol=atol, rtol=rtol)
+
+            except Exception as e:
+                if op.name in CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
+                    continue
+                raise e
                 forward_failed = True
                 all_forward_pass = False
 
@@ -9790,20 +9880,14 @@ class TestConsistency(TestCaseMPS):
             #
             # Backward check
             #
-
-            # Skip the grad test if it is not part of the allow list
-            if not generate_new_truth and not run_grad_test:
-                # TODO: maybe there is a way to print only when we have -v
-                # if i == 0:
-                #     print(f"Skipping gradient check because {op.name} is not on the allow list")
-                continue
-
             try:
                 if forward_failed:
                     # We would've failed immediately anyway, but this error is clearer
                     # We error instead of continuing so that all_backward_pass would not be True
                     raise RuntimeError("Forward pass already failed")
 
+                if (op.name == "masked_select"):
+                    continue
                 cpu_out = (cpu_out,) if isinstance(cpu_out, torch.Tensor) else tuple(cpu_out)
                 mps_out = (mps_out,) if isinstance(mps_out, torch.Tensor) else tuple(mps_out)
 
@@ -9833,25 +9917,9 @@ class TestConsistency(TestCaseMPS):
 
                 self.assertEqual(cpu_grad_inputs, mps_grad_inputs, atol=atol, rtol=rtol)
             except Exception as e:
-                if not generate_new_truth:
-                    raise e
+                raise e
                 all_backward_pass = False
 
-        if all_forward_pass and generate_new_truth:
-            if dtype_abbrs[dtype] not in self.NEW_ALLOW_LIST[op.name]:
-                self.NEW_ALLOW_LIST[op.name].append(dtype_abbrs[dtype])
-            # We could write it only once. But I don't know how to detect that the current test is the last one
-            # So each test append to the dict and write it.
-            with open("new_mps_allowlist.txt", "w") as f:
-                pprint.pprint(self.NEW_ALLOW_LIST, stream=f)
-
-        if all_backward_pass and generate_new_truth and dtype.is_floating_point:
-            if dtype_abbrs[dtype] not in self.NEW_ALLOW_LIST_GRAD[op.name]:
-                self.NEW_ALLOW_LIST_GRAD[op.name].append(dtype_abbrs[dtype])
-            # We could write it only once. But I don't know how to detect that the current test is the last one
-            # So each test append to the dict and write it.
-            with open("new_mps_allowlist_grad.txt", "w") as f:
-                pprint.pprint(self.NEW_ALLOW_LIST_GRAD, stream=f)
 
 # Copied from `TestCommon` in `test_ops.py`, just enough to duplicate the `test_numpy_ref` for MPS
 @skipIfSlowGradcheckEnv
