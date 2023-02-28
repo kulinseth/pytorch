@@ -396,6 +396,7 @@ def mps_ops_modifier(ops):
         'vdot': None,
         'view_as_complex': None,
         'xlogy': None,
+        'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
 
         'chalf': None,
         # Unsupported dtypes
@@ -451,8 +452,7 @@ def mps_ops_modifier(ops):
         'signal.windows.hann': [torch.float16],
         'signal.windows.kaiser': [torch.float16],
         'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'zeros_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8]
+        'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8] # Empty placeholder tensor error
     }
 
     UNDEFINED_XFAILLIST = {
