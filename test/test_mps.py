@@ -618,11 +618,6 @@ def mps_ops_modifier(ops):
         'nn.functional.conv2d': [torch.int64],
         'nn.functional.conv_transpose1d': [torch.int64],
         'nn.functional.conv_transpose2d': [torch.int64],
-
-        # Unsupported dtypes
-        'dot': [torch.int64],
-        'index_add': [torch.int64],
-        'log1p': [torch.int64],
         'sigmoid': [torch.int64],
         'atan2': [torch.int64],
 
