@@ -97,7 +97,6 @@ def mps_ops_grad_modifier(ops):
 
         # Correctness issues
         'atanh': [torch.float32],
-        'argsort': [torch.float16],
         'fmod': [torch.float16],
         'msort': [torch.float16],
 
@@ -492,9 +491,6 @@ def mps_ops_modifier(ops):
         'signal.windows.hamming': [torch.float16],
         'signal.windows.hann': [torch.float16],
         'signal.windows.kaiser': [torch.float16],
-        # Correctness issues
-        'argsort': [torch.int8, torch.uint8, torch.bool],
-        'sort': [torch.int8, torch.uint8, torch.bool, torch.float16],
     }
 
     UNDEFINED_XFAILLIST = {
@@ -534,6 +530,17 @@ def mps_ops_modifier(ops):
         '__rpow__': [torch.int8, torch.int16, torch.int32, torch.int64],
         'resize_': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'resize_as_': [torch.float16, torch.float32],
+
+        # Argsort case using duplicate indices (undefined behaviour):
+        #  - CPU output: tensor([2546, 6917, 3181,  ..., 7128, 5133,   30], devuce='cpu')
+        #  - MPS output: tensor([2546, 6917, 3181,  ..., 7128,   30, 5133], device='mps:0')
+        # Elements from index 30 and 5133 are both equal.
+        # Since CPU is not using argsort with stable=True, these cases result in undefined behaviour.
+        'argsort': [torch.float16, torch.int8, torch.uint8, torch.bool],
+
+        # Same issue as argsort with duplicate indices. This test checks both the sorted values and the indices.
+        # The values of the sorted tensor match the CPU, but in case of the returned indices this results in undefined behaviour.
+        'sort': [torch.int8, torch.uint8, torch.bool, torch.float16],
     }
 
     def addDecorator(op, d) -> None:
