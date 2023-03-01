@@ -543,7 +543,7 @@ MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mp
   }
 
   int64_t sliceOffset = src.storage_offset() / view_numel;
-  [srcTensorNDArrayDesc sliceDimension:src_ndim_base - 1 - firstDimToSlice 
+  [srcTensorNDArrayDesc sliceDimension:src_ndim_base - 1 - firstDimToSlice
                           withSubrange:{static_cast<NSUInteger>(sliceOffset), static_cast<NSUInteger>(src.sizes()[firstDimToSlice])}];
 
   // Slice any remaining dimensions
