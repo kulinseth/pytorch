@@ -171,11 +171,11 @@ def mps_ops_modifier(ops):
         'linalg.inv_ex': [torch.float32],
 
         # Failures due to precision issues. These has been fixed in MacOS 13.3+
-        'tan': [torch.float32],
         'masked.softmin': [torch.float32],
         'masked.softmax': [torch.float32],
         'masked.log_softmax': [torch.float32],
         'cdist': [torch.float32],
+        'tan': [torch.uint8, torch.float32],
 
         # Support starts from macOS 13
         'nn.functional.avg_pool1d': [torch.int64],
@@ -258,7 +258,6 @@ def mps_ops_modifier(ops):
         'special.ndtr': [torch.uint8],
         'sqrt': [torch.uint8],
         'sub': [torch.uint8],
-        'tan': [torch.uint8],
         'tanh': [torch.uint8],
         'trapezoid': [torch.uint8],
         'trapz': [torch.uint8],
@@ -658,7 +657,7 @@ def mps_ops_modifier(ops):
         # Mismatched elements: 56 / 96 (58.3%)
         # Greatest absolute difference: 17.892311096191406 at index (1, 0, 2) (up to 1e-05 allowed)
         # Greatest relative difference: inf at index (1, 0, 0) (up to 1.3e-06 allowed)
-        'nn.functional._scaled_dot_product_attention': [torch.float32],
+        'nn.functional.scaled_dot_product_attention': [torch.float32],
     }
 
     def addDecorator(op, d) -> None:
