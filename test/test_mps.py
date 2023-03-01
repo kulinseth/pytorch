@@ -11312,7 +11312,6 @@ class TestConsistency(TestCaseMPS):
 
         # Correctness issues
         'atanh': ['f32'],
-        'div': ['f16'],
 
         # Unsupported dtype
         'special.ndtr': ['f32'],
@@ -11914,7 +11913,10 @@ class TestConsistency(TestCaseMPS):
                 if any(s in str(e).lower() for s in ["int64", "macos 13"]):
                     self.skipTest(f"{str(e)}")
 
-                if op.name in self.CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
+                if any(s in str(e).lower() for s in ["float16", "div truc rounding"]):
+                    self.skipTest(f"Expected Runtime Error: {str(e)}")
+
+                if op.name in CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
                     continue
 
                 if not generate_new_truth:

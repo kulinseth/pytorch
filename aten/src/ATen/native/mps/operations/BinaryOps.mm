@@ -196,6 +196,10 @@ void div_mode_template(const Tensor& self,
   if (rounding_mode.has_value() && *rounding_mode == "trunc") {
     TORCH_CHECK(self.scalar_type() != ScalarType::Half, "MPS: does not support trunc_divide op with float16 input");
   }
+  if(rounding_mode.has_value() && *rounding_mode == "trunc"){
+    TORCH_CHECK(self.scalar_type() != ScalarType::Half,
+                "MPS: does not support trunc_divide op with float16 input");
+  }
   BinaryOpBlock div_mode_op_block = ^BinaryOpFn(cachedGraph, primaryCastTensor, secondaryCastTensor) {
     MPSGraph* mpsGraph = cachedGraph->graph();
     bool isFloatInput = ([primaryCastTensor dataType] & MPSDataTypeFloatBit) != 0;
