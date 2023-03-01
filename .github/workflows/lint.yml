@@ -1,7 +1,6 @@
 name: Lint
 
 on:
-  # comment:
   pull_request:
   push:
     branches:
