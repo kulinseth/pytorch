@@ -257,6 +257,7 @@ def mps_ops_modifier(ops):
         'divtrunc_rounding': [torch.uint8],
         'divfloor_rounding': [torch.uint8],
         'divno_rounding_mode': [torch.uint8],
+        'floor_divide': [torch.uint8],
 
         # cpu not giving nan for x/0.0
         'atan2': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
