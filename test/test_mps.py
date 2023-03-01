@@ -190,7 +190,8 @@ def mps_ops_modifier(ops):
     }
 
     MACOS_13_3_XFAILLIST = {
-
+        # correctness issues
+        'nn.functional.scaled_dot_product_attention': None,
     }
 
     # Those ops are not expected to work
@@ -309,7 +310,6 @@ def mps_ops_modifier(ops):
         'native_dropout_backward': None,
         'nextafter': None,
         'normnuc': None,
-        'nn.functional._scaled_dot_product_attention': None,
         'nn.functional.fractional_max_pool2d': None,
         'nn.functional.fractional_max_pool3d': None,
         'nn.functional.adaptive_avg_pool3d': None,
@@ -438,7 +438,8 @@ def mps_ops_modifier(ops):
         'nn.functional.bilinear': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         # batch_norm  Cannot convert a MPS Tensor to float64 dtype
         'nn.functional.batch_norm': [torch.float32],
-        'nn.functional.linear': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+
+        # Convolution for integral types is not supported on MPS
         'nn.functional.conv1d': [torch.int64],
         'nn.functional.conv2d': [torch.int64],
         'nn.functional.conv_transpose1d': [torch.int64],
@@ -459,6 +460,7 @@ def mps_ops_modifier(ops):
         'nn.functional._scaled_dot_product_attention': [torch.float32],
 
         # GEMM on MPS is not supported for integral types
+        'nn.functional.linear': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
          '__rmatmul__': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addmmdecomposed': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addbmm': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
