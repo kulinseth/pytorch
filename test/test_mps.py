@@ -9772,6 +9772,8 @@ class TestConsistency(TestCaseMPS):
                 # when they exist
                 if (op.name == "bfloat16" or op.name == "cdouble" or op.name == "double" or op.name == "cfloat" or op.name == "chalf"):
                     continue
+                if ( not torch.backends.mps.is_macos13_or_newer() and torch.uint8):
+                    continue
                 cpu_args = [cpu_sample.input] + list(cpu_sample.args)
                 cpu_kwargs = cpu_sample.kwargs
                 mps_args = [mps_sample.input] + list(mps_sample.args)
@@ -9843,6 +9845,8 @@ class TestConsistency(TestCaseMPS):
                 # when they exist
 
                 if (op.name == "bfloat16" or op.name == "cdouble" or op.name == "double" or op.name == "cfloat" or op.name == "chalf"):
+                    continue
+                if ( not torch.backends.mps.is_macos13_or_newer() and dtype == torch.uint8):
                     continue
                 cpu_args = [cpu_sample.input] + list(cpu_sample.args)
                 cpu_kwargs = cpu_sample.kwargs
