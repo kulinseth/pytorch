@@ -97,10 +97,12 @@ def mps_ops_grad_modifier(ops):
 
         # Correctness issues
         'atanh': [torch.float32],
-        'div': [torch.float16],
         'argsort': [torch.float16],
         'fmod': [torch.float16],
         'msort': [torch.float16],
+
+        #random output
+        'exponential': [torch.float16, torch.float32],
 
         #cpu failures
         '__rpow__': [torch.float16],  # RuntimeError: "log_vml_cpu" not implemented for 'Half'
@@ -121,6 +123,9 @@ def mps_ops_grad_modifier(ops):
         'signal.windows.hann': [torch.float32], # grad requires non-empty inputs.
         'signal.windows.kaiser': [torch.float32], # grad requires non-empty inputs.
         'signal.windows.nuttall': [torch.float32], # grad requires non-empty inputs.
+
+        # trunc_tensor not working properly for float16
+        'divtrunc_rounding': [torch.float16],
     }
 
     MACOS_12_3_XFAILLIST_GRAD = {
@@ -499,6 +504,7 @@ def mps_ops_modifier(ops):
         'randint_like': [torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'randn_like': [torch.float16, torch.float32],
         'bernoulli': [torch.float32],
+        'exponential': [torch.float16, torch.float32],
         'nn.functional.feature_alpha_dropoutwith_train': [torch.float32],
         'normal': [torch.float16, torch.float32, torch.float16, torch.float32],
         'normalin_place': [torch.float16, torch.float32],
