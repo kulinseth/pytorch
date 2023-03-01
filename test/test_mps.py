@@ -627,6 +627,7 @@ def mps_ops_modifier(ops):
         # these fill tensors with uninitialized data, causing mismatch with CPU
         'new_empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'empty_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        'empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         # duplicate indices are used in the testcase - undefined behaviour
         'index_put': None,
@@ -9838,6 +9839,8 @@ class TestConsistency(TestCaseMPS):
         'outer',
         'sum_to_size', 'sum',
         'mul',
+        'nansum', 'nanmean',
+        'norm',
     }
 
     FP32_LOW_PRECISION_LIST = {
