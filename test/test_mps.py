@@ -462,7 +462,9 @@ def mps_ops_modifier(ops):
         'mv': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'new_zeros': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'new_ones': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'new_full': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8]
+        'new_full': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        # returned output on CPU is float64
+        'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
     }
 
     XFAILLIST = {
@@ -479,13 +481,11 @@ def mps_ops_modifier(ops):
         'signal.windows.hamming': [torch.float16],
         'signal.windows.hann': [torch.float16],
         'signal.windows.kaiser': [torch.float16],
-
         # Correctness issues
         'argsort': [torch.int8, torch.uint8, torch.bool],
         'sort': [torch.int8, torch.uint8, torch.bool, torch.float16],
 
         # Empty placeholder tensor error
-        'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8]
     }
 
     UNDEFINED_XFAILLIST = {
