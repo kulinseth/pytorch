@@ -346,7 +346,6 @@ def mps_ops_modifier(ops):
         'qr': None,
         'quantile': None,
         'renorm': None,
-        'roll': None,
         'rsub': None,
         'scatter_reduceamax': None,
         'scatter_reduceamin': None,
@@ -364,7 +363,6 @@ def mps_ops_modifier(ops):
         '_segment_reducelengths': None,
         '_segment_reduceoffsets': None,
         'sinc': None,
-        'sort': None,
         'sparse_mm': None,
         'sparse_mm_reduce': None,
         'special.airy_ai': None,
@@ -410,7 +408,6 @@ def mps_ops_modifier(ops):
         'view_as_complex': None,
         'xlogy': None,
         'zeros_like': None,
-        'sigmoid': None,
         'segment_reduce': None,
         'segment_reduce_': None,
         '_segment_reduce_lengths': None,
@@ -452,6 +449,7 @@ def mps_ops_modifier(ops):
         'log1p': [torch.int64],
         'median': [torch.int64],
         'remainder': [torch.int64],
+        'sigmoid': [torch.int64],
         'atan2': [torch.int64],
         'minreduction_with_dim': [torch.int64],
         'maxreduction_with_dim': [torch.int64],
@@ -490,7 +488,12 @@ def mps_ops_modifier(ops):
         'signal.windows.hann': [torch.float16],
         'signal.windows.kaiser': [torch.float16],
 
-        'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8] # Empty placeholder tensor error
+        # Correctness issues
+        'argsort': [torch.int8, torch.uint8, torch.bool],
+        'sort': [torch.int8, torch.uint8, torch.bool, torch.float16],
+
+        # Empty placeholder tensor error
+        'bincount': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8]
     }
 
     UNDEFINED_XFAILLIST = {
@@ -9762,6 +9765,8 @@ class TestConsistency(TestCaseMPS):
                 cpu_out = op(*cpu_args, **cpu_kwargs)
                 mps_out = op(*mps_args, **mps_kwargs)
 
+                # conv2d and conv_transpose2d results have a very small
+                # difference compared to CPU, so we use lower precision on FP32
                 if op.name in ["nn.functional.conv2d",
                                "nn.functional.conv_transpose2d",
                                "linalg.multi_dot"] and dtype == torch.float32:
@@ -9920,7 +9925,6 @@ class TestCommon(TestCase):
 
     UNIMPLEMENTED_OPS = {
         'aminmax': [torch.float32],
-        'roll': [torch.float32],
     }
 
     exact_dtype = True
