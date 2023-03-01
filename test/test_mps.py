@@ -2741,7 +2741,7 @@ class TestMPS(TestCaseMPS):
             helper(torch.int64)
         except Exception as e:
             e_string = str(e)
-            self.assertEqual(e_string, "MPS does not support cumsum op with int64 input")
+            self.assertEqual(e_string, "MPS does not support cumsum op with int64 input. Support has been added in macOS 13.3")
 
     def test_gelu_tanh(self):
         def helper(shape):
