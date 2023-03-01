@@ -267,6 +267,9 @@ def mps_ops_modifier(ops):
         'xlogy': [torch.uint8],
         'minbinary': [torch.uint8],
         'maxbinary': [torch.uint8],
+
+        # cpu not giving nan for x/0.0
+        'atan2': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
     }
 
     MACOS_BEFORE_13_3_XFAILLIST = {
@@ -282,11 +285,12 @@ def mps_ops_modifier(ops):
         'masked.softmax': [torch.float32],
         'masked.log_softmax': [torch.float32],
         'cdist': [torch.float32],
+
+        # cpu not giving nan for x/0.0
+        'atan2': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
     }
 
     MACOS_13_3_XFAILLIST = {
-        # correctness issues
-        'nn.functional.scaled_dot_product_attention': None,
     }
 
     # Those ops are not expected to work
@@ -9843,6 +9847,8 @@ class TestConsistency(TestCaseMPS):
         'nn.functional.conv_transpose2d',
         'matmul', '__rmatmul__',
         'linalg.multi_dot',
+        'addbmm',
+        'nn.functional.scaled_dot_product_attention',
     }
 
     # Used for accept mode only
@@ -9956,7 +9962,10 @@ class TestConsistency(TestCaseMPS):
                 cpu_out = op(*cpu_args, **cpu_kwargs)
                 mps_out = op(*mps_args, **mps_kwargs)
 
-                if op.name == "nn.functional.conv2d" or op.name == "linalg.multi_dot" and dtype == torch.float32:
+                if (op.name in self.FP32_LOW_PRECISION_LIST) and dtype == torch.float32:
+                    atol = 1e-4
+                    rtol = 3e-5
+                elif op.name == "nn.functional.conv2d" or op.name == "linalg.multi_dot" and dtype == torch.float32:
                     atol = 1e-4
                     rtol = 3e-5
                 elif (op.name in self.FP16_LOW_PRECISION_LIST) and dtype == torch.float16:
