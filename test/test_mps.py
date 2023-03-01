@@ -107,6 +107,18 @@ def mps_ops_grad_modifier(ops):
         'special.ndtr': [torch.float32],
         'trapezoid': [torch.float16, torch.float32],
         'trapz': [torch.float16, torch.float32],
+
+        #cpu failures
+        '__rpow__': [torch.float16],  # RuntimeError: "log_vml_cpu" not implemented for 'Half'
+        'pow': [torch.float16], #"log_vml_cpu" not implemented for 'Half'
+        'allclose': [torch.float16, torch.float32], # 'bool' object is not iterable
+        'equal': [torch.float16, torch.float32], # 'bool' object is not iterable
+        'nn.functional.mse_loss': [torch.float16], # "mse_backward_cpu_out" not implemented for 'Half'
+        'nn.functional.smooth_l1_loss': [torch.float16], # "smooth_l1_backward_cpu_out" not implemented for 'Half'
+        'randn': [torch.float16, torch.float32], # grad requires non-empty inputs
+        'signal.windows.bartlett': [torch.float32], # grad requires non-empty inputs.
+        'signal.windows.blackman': [torch.float32],
+
     }
 
     MACOS_12_3_XFAILLIST_GRAD = {
