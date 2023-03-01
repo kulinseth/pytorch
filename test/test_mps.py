@@ -372,7 +372,7 @@ def mps_ops_modifier(ops):
         'special.i1e': None,
         'special.laguerre_polynomial_l': None,
         'special.log_ndtr': None,
-        'hspecial.modified_bessel_i0': None,
+        'special.modified_bessel_i0': None,
         'special.modified_bessel_i1': None,
         'special.modified_bessel_k0': None,
         'special.modified_bessel_k1': None,
@@ -433,6 +433,7 @@ def mps_ops_modifier(ops):
         'nn.functional.conv_transpose1d': [torch.int64],
         'nn.functional.conv_transpose2d':  [torch.int64],
         'cumsum': [torch.int64],
+        'masked.cumsum': [torch.int64],
         'cumulative_trapezoid': [torch.int64],
         'dot': [torch.int64],
         'floor_divide': [torch.int64],
@@ -440,7 +441,11 @@ def mps_ops_modifier(ops):
         'log1p': [torch.int64],
         'median': [torch.int64],
         'remainder': [torch.int64],
-         '__rmatmul__': [torch.int16, torch.int32, torch.uint8, torch.int8],
+        'atan2': [torch.int64],
+        'minreduction_with_dim': [torch.int64],
+        'maxreduction_with_dim': [torch.int64],
+        'nn.functional._scaled_dot_product_attention': [torch.float32],
+         '__rmatmul__': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addmmdecomposed': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addbmm': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addmm': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -483,7 +488,6 @@ def mps_ops_modifier(ops):
         # Philox engine causing mismatch with CPU results
         '__rpow__': [torch.float16],  # RuntimeError: "log_vml_cpu" not implemented for 'Half'
         'addr': [torch.float16, torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # "addmv_impl_cpu" not implemented for 'Half'
-        'atan2': [torch.bool, torch.int16, torch.int32, torch.uint8, torch.int8], # failure due to issue: atan2() may generate NAN in output with
         'dist': [torch.float16], # cpu result off, showing inf values
         'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # cpu result off, showing random values
         'as_strided_partial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # cpu result off, showing random values
@@ -509,8 +513,6 @@ def mps_ops_modifier(ops):
         'empty_permuted': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        # as_strided_scatter has non-deterministic behavior when the update indices are not unique
-        'as_strided_scatter': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         # duplicate indices are used in the testcase - undefined behaviour
         'index_put': None,
         # zero to negative integer powers are undefined
