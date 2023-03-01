@@ -11302,7 +11302,6 @@ class TestConsistency(TestCaseMPS):
         '__getitem__': ['f16'],
         'combinations': ['f16', 'f32'],
         'logaddexp2': ['f32'],
-        'masked_select': ['f16', 'f32'],
         'nn.functional.binary_cross_entropy_with_logits': ['f16', 'f32'],
         'nn.functional.group_norm': ['f32'],
         'prod': ['f32'],
