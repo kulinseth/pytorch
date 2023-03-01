@@ -76,17 +76,6 @@ def mps_ops_grad_modifier(ops):
         'unique_consecutive': [torch.float16, torch.float32],
         'special_modified_bessel_i0': [torch.float16, torch.float32],
         'sparse_mm_reduce':[torch.float16, torch.float32],
-        'signal_windows_nuttall':[torch.float16, torch.float32],
-        'signal_windows_kaiser':[torch.float16, torch.float32],
-        'signal_windows_hann':[torch.float16, torch.float32],
-        'signal_windows_hamming':[torch.float16, torch.float32],
-        'signal_windows_general_hamming':[torch.float16, torch.float32],
-        'signal_windows_general_cosine':[torch.float16, torch.float32],
-        'signal_windows_gaussian':[torch.float16, torch.float32],
-        'signal_windows_exponential':[torch.float16, torch.float32],
-        'signal_windows_cosine':[torch.float16, torch.float32],
-        'signal_windows_blackman':[torch.float16, torch.float32],
-        'signal_windows_bartlett':[torch.float16, torch.float32],
         'scalar_tensor':[torch.float16, torch.float32],
         'cdist': [torch.float32],
         'nn.functional.adaptive_avg_pool1d': [torch.float16, torch.float32],
@@ -588,17 +577,6 @@ def mps_ops_modifier(ops):
     XFAILLIST = {
         # Failures due to unsupported data types on MPS backend
         'byte': [torch.float16, torch.float32],
-
-        # Failures due to error in cpu_grad
-        'signal.windows.blackman': [torch.float16],
-        'signal.windows.cosine': [torch.float16],
-        'signal.windows.exponential': [torch.float16],
-        'signal.windows.gaussian': [torch.float16],
-        'signal.windows.general_cosine': [torch.float16],
-        'signal.windows.general_hamming': [torch.float16],
-        'signal.windows.hamming': [torch.float16],
-        'signal.windows.hann': [torch.float16],
-        'signal.windows.kaiser': [torch.float16],
     }
 
     UNDEFINED_XFAILLIST = {
