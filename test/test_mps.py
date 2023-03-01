@@ -89,9 +89,6 @@ def mps_ops_grad_modifier(ops):
         'signal_windows_bartlett':[torch.float16, torch.float32],
         'scalar_tensor':[torch.float16, torch.float32],
         'cdist': [torch.float32],
-        'eye':[torch.float16, torch.float32], # CPU error
-        'floor_divide': [torch.float16, torch.float32], # CPU RuntimeError: derivative for aten::floor_divide is not implemented
-        'narrow_copy':[torch.float16, torch.float32],
         'nn.functional.adaptive_avg_pool1d': [torch.float16, torch.float32],
         'nn.functional.adaptive_avg_pool2d': [torch.float16, torch.float32],
 
@@ -103,13 +100,21 @@ def mps_ops_grad_modifier(ops):
         # Random output
         'exponential': [torch.float16, torch.float32],
 
-        # CPU failures
-        '__rpow__': [torch.float16],  # RuntimeError: "log_vml_cpu" not implemented for 'Half'
-        'pow': [torch.float16], #"log_vml_cpu" not implemented for 'Half'
-        'allclose': [torch.float16, torch.float32], # 'bool' object is not iterable
-        'equal': [torch.float16, torch.float32], # 'bool' object is not iterable
-        'nn.functional.mse_loss': [torch.float16], # "mse_backward_cpu_out" not implemented for 'Half'
-        'nn.functional.smooth_l1_loss': [torch.float16], # "smooth_l1_backward_cpu_out" not implemented for 'Half'
+        # CPU errors
+        # derivative for aten::floor_divide is not implemented
+        'floor_divide': [torch.float16, torch.float32],
+        # derivative for aten::narrow_copy is not implemented
+        'narrow_copy':[torch.float16, torch.float32],
+        # RuntimeError: "log_vml_cpu" not implemented for 'Half'
+        '__rpow__': [torch.float16],
+        'pow': [torch.float16],
+        # 'bool' object is not iterable
+        'allclose': [torch.float16, torch.float32],
+        'equal': [torch.float16, torch.float32],
+        # "mse_backward_cpu_out" not implemented for 'Half'
+        'nn.functional.mse_loss': [torch.float16],
+        # "smooth_l1_backward_cpu_out" not implemented for 'Half'
+        'nn.functional.smooth_l1_loss': [torch.float16],
 
          # grad requires non-empty inputs
         'randn': [torch.float16, torch.float32],
@@ -126,6 +131,7 @@ def mps_ops_grad_modifier(ops):
         'signal.windows.nuttall': [torch.float32],
         'empty': [torch.float16, torch.float32],
         'empty_permuted': [torch.float16, torch.float32],
+        'eye': [torch.float16, torch.float32],
 
         # trunc_tensor not working properly for float16
         'divtrunc_rounding': [torch.float16],
