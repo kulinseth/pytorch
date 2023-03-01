@@ -285,6 +285,7 @@ def mps_ops_modifier(ops):
         'masked.softmax': [torch.float32],
         'masked.log_softmax': [torch.float32],
         'cdist': [torch.float32],
+        'tan': [torch.float32],
 
         # cpu not giving nan for x/0.0
         'atan2': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -555,7 +556,6 @@ def mps_ops_modifier(ops):
         'atan2': [torch.int64],
         'minreduction_with_dim': [torch.int64],
         'maxreduction_with_dim': [torch.int64],
-        'nn.functional._scaled_dot_product_attention': [torch.float32],
 
         # GEMM on MPS is not supported for integral types
         'nn.functional.linear': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -646,6 +646,17 @@ def mps_ops_modifier(ops):
         # Same issue as argsort with duplicate indices. This test checks both the sorted values and the indices.
         # The values of the sorted tensor match the CPU, but in case of the returned indices this results in undefined behaviour.
         'sort': [torch.int8, torch.uint8, torch.bool, torch.float16],
+
+        # random results
+        # mps vs cpu:
+        # Mismatched elements: 40 / 96 (41.7%)
+        # Greatest absolute difference: 17.892311096191406 at index (1, 0, 2) (up to 1e-05 allowed)
+        # Greatest relative difference: inf at index (1, 0, 0) (up to 1.3e-06 allowed)
+        # cuda(2.0.0.dev20230301+cu117) vs cpu:
+        # Mismatched elements: 56 / 96 (58.3%)
+        # Greatest absolute difference: 17.892311096191406 at index (1, 0, 2) (up to 1e-05 allowed)
+        # Greatest relative difference: inf at index (1, 0, 0) (up to 1.3e-06 allowed)
+        'nn.functional._scaled_dot_product_attention': [torch.float32],
     }
 
     def addDecorator(op, d) -> None:
@@ -9851,7 +9862,6 @@ class TestConsistency(TestCaseMPS):
         'matmul', '__rmatmul__',
         'linalg.multi_dot',
         'addbmm',
-        'nn.functional.scaled_dot_product_attention',
     }
 
     # Used for accept mode only
