@@ -166,6 +166,12 @@ def mps_ops_modifier(ops):
         'masked.softmax': [torch.float32],
         'masked.log_softmax': [torch.float32],
         'cdist': [torch.float32],
+
+        # Support starts from macOS 13
+        'nn.functional.avg_pool1d': [torch.int64],
+        'nn.functional.avg_pool2d': [torch.int64],
+        'nn.functional.local_response_norm': [torch.int64],
+        'square': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
     }
 
     MACOS_BEFORE_13_3_XFAILLIST = {
@@ -9772,8 +9778,6 @@ class TestConsistency(TestCaseMPS):
                 # when they exist
                 if (op.name == "bfloat16" or op.name == "cdouble" or op.name == "double" or op.name == "cfloat" or op.name == "chalf"):
                     continue
-                if ( not torch.backends.mps.is_macos13_or_newer() and torch.uint8):
-                    continue
                 cpu_args = [cpu_sample.input] + list(cpu_sample.args)
                 cpu_kwargs = cpu_sample.kwargs
                 mps_args = [mps_sample.input] + list(mps_sample.args)
@@ -9845,8 +9849,6 @@ class TestConsistency(TestCaseMPS):
                 # when they exist
 
                 if (op.name == "bfloat16" or op.name == "cdouble" or op.name == "double" or op.name == "cfloat" or op.name == "chalf"):
-                    continue
-                if ( not torch.backends.mps.is_macos13_or_newer() and dtype == torch.uint8):
                     continue
                 cpu_args = [cpu_sample.input] + list(cpu_sample.args)
                 cpu_kwargs = cpu_sample.kwargs
