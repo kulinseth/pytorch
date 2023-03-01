@@ -117,8 +117,16 @@ def mps_ops_grad_modifier(ops):
         'nn.functional.smooth_l1_loss': [torch.float16], # "smooth_l1_backward_cpu_out" not implemented for 'Half'
         'randn': [torch.float16, torch.float32], # grad requires non-empty inputs
         'signal.windows.bartlett': [torch.float32], # grad requires non-empty inputs.
-        'signal.windows.blackman': [torch.float32],
-
+        'signal.windows.blackman': [torch.float32], # grad requires non-empty inputs.
+        'signal.windows.cosine': [torch.float32], # grad requires non-empty inputs.
+        'signal.windows.exponential': [torch.float32], # grad requires non-empty inputs.
+        'signal.windows.gaussian': [torch.float32], # grad requires non-empty inputs.
+        'signal.windows.general_cosine': [torch.float32], # grad requires non-empty inputs.
+        'signal.windows.general_hamming': [torch.float32], # grad requires non-empty inputs.
+        'signal.windows.hamming':  [torch.float32], # grad requires non-empty inputs.
+        'signal.windows.hann': [torch.float32], # grad requires non-empty inputs.
+        'signal.windows.kaiser': [torch.float32], # grad requires non-empty inputs.
+        'signal.windows.nuttall': [torch.float32], # grad requires non-empty inputs.
     }
 
     MACOS_12_3_XFAILLIST_GRAD = {
