@@ -427,6 +427,7 @@ def mps_ops_modifier(ops):
         # Unsupported dtypes
         'nn.functional.softmin': [torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'nn.functional.bilinear': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        'nn.functional.batch_norm': [torch.float32],
         'nn.functional.linear': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'nn.functional.conv1d': [torch.int64],
         'nn.functional.conv2d': [torch.int64],
@@ -459,15 +460,14 @@ def mps_ops_modifier(ops):
         'matmul': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'mat': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'mv': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        'new_zeros': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        'new_ones': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        'new_full': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8]
     }
 
     XFAILLIST = {
         # Failures due to unsupported data types on MPS backend
         'byte': [torch.float16, torch.float32],
-        'new_full': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'new_ones': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'new_zeros': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'nn.functional.batch_norm': [torch.float32],
 
         # Failures due to error in cpu_grad
         'signal.windows.blackman': [torch.float16],
