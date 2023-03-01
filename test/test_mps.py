@@ -628,7 +628,7 @@ def mps_ops_modifier(ops):
         'index_put': None,
         # zero to negative integer powers are undefined
         '__rpow__': [torch.int8, torch.int16, torch.int32, torch.int64],
-        'resize_': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        'resize_': [torch.float16, torch.float32],
         'resize_as_': [torch.float16, torch.float32],
 
         # Argsort case using duplicate indices (undefined behaviour):
