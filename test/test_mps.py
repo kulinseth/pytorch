@@ -65,8 +65,6 @@ def mps_ops_grad_modifier(ops):
         '__getitem__': [torch.float16],
         'logaddexp2': [torch.float32],
         'masked_select': [torch.float16, torch.float32],
-        'nn.functional.binary_cross_entropy_with_logits': [torch.float16, torch.float32],
-        'nn.functional.group_norm': [torch.float32],
         'prod': [torch.float32],
         'sgn': [torch.float16, torch.float32],
         'segment_reduce': [torch.float16, torch.float32],
@@ -103,6 +101,7 @@ def mps_ops_grad_modifier(ops):
         'div': [torch.float16],
         'argsort': [torch.float16],
         'fmod': [torch.float16],
+        'msort': [torch.float16],
 
         # Unsupported dtype
         'special.ndtr': [torch.float32],
@@ -270,7 +269,6 @@ def mps_ops_modifier(ops):
         'linalg.vecdot': None,
         'logcumsumexp': None,
         'logdet': None,
-        'logit': None,
         'lu': None,
         'lu_solve': None,
         'lu_unpack': None,
@@ -278,15 +276,12 @@ def mps_ops_modifier(ops):
         'masked.median': None,
         'matrix_exp': None,
         'mode': None,
-        'msort': None,
         'mvlgamma': None,
         'mvlgammamvlgamma_p_1': None,
         'mvlgammamvlgamma_p_3': None,
         'mvlgammamvlgamma_p_5': None,
         'nanquantile': None,
-        'nanmean': None,
         'nanmedian': None,
-        'nansum': None,
         'native_dropout_backward': None,
         'nextafter': None,
         'normnuc': None,
@@ -306,8 +301,6 @@ def mps_ops_modifier(ops):
         'nn.functional.ctc_loss': None,
         'nn.functional.embedding_bag': None,
         'nn.functional.hardshrink': None,
-        'nn.functional.hardsigmoid': None,
-        'nn.functional.logsigmoid': None,
         'nn.functional.max_pool3d': None,
         'nn.functional.max_unpool1d': None,
         'nn.functional.max_unpool2d': None,
@@ -315,11 +308,9 @@ def mps_ops_modifier(ops):
         'nn.functional.mish': None,
         'nn.functional.multi_margin_loss': None,
         'nn.functional.multilabel_margin_loss': None,
-        'nn.functional.multilabel_soft_margin_loss': None,
         'nn.functional.pdist': None,
         'nn.functional.rrelu': None,
         'nn.functional.softshrink': None,
-        'nn.functional.unfold': None,
         'nn.functional.norm': None,
         'ones_like': None,
         'ormqr': None,
@@ -423,7 +414,6 @@ def mps_ops_modifier(ops):
         'linalg.matrix_rankhermitian': None,
         'linalg.pinv': None,
         'linalg.pinvhermitian': None,
-        'log_softmax': None,
         # Unsupported dtypes
         'nn.functional.softmin': [torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'nn.functional.bilinear': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -9752,7 +9742,9 @@ class TestConsistency(TestCaseMPS):
                 cpu_out = op(*cpu_args, **cpu_kwargs)
                 mps_out = op(*mps_args, **mps_kwargs)
 
-                if op.name == "nn.functional.conv2d" or op.name == "linalg.multi_dot" and dtype == torch.float32:
+                if op.name in ["nn.functional.conv2d",
+                               "nn.functional.conv_transpose2d",
+                               "linalg.multi_dot"] and dtype == torch.float32:
                     atol = 1e-4
                     rtol = 3e-5
                 elif (op.name in self.FP16_LOW_PRECISION_LIST) and dtype == torch.float16:
