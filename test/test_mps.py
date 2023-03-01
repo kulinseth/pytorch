@@ -263,6 +263,8 @@ def mps_ops_modifier(ops):
         'atan2': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         # fill tensors with uninitialized data, causing mismatch with CPU
         'empty_permuted': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        #fast math precision issue for fp16
+        'nn.functional.pairwise_distance': [torch.float16],
     }
 
     MACOS_BEFORE_13_3_XFAILLIST = {
