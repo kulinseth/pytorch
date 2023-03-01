@@ -9419,7 +9419,7 @@ class TestConsistency(TestCaseMPS):
         'cummax': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'cummin': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'cumprod': ['f32', 'i16', 'i32', 'i64', 'u8'],
-        'cumsum': ['f32', 'i16', 'i32', 'i64', 'u8'],
+        'cumsum': ['i8', 'b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'deg2rad': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'diag': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'diag_embed': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
