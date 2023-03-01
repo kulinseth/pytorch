@@ -484,8 +484,6 @@ def mps_ops_modifier(ops):
         # Correctness issues
         'argsort': [torch.int8, torch.uint8, torch.bool],
         'sort': [torch.int8, torch.uint8, torch.bool, torch.float16],
-
-        # Empty placeholder tensor error
     }
 
     UNDEFINED_XFAILLIST = {
