@@ -191,7 +191,6 @@ def mps_ops_modifier(ops):
         'cumulative_trapezoid': [torch.uint8],
         'deg2rad': [torch.uint8],
         'diff': [torch.uint8],
-        'floor_divide': [torch.uint8],
         'eq': [torch.uint8],
         'equal': [torch.uint8],
         'erf': [torch.uint8],
@@ -256,6 +255,8 @@ def mps_ops_modifier(ops):
         'minbinary': [torch.uint8],
         'maxbinary': [torch.uint8],
         'divtrunc_rounding': [torch.uint8],
+        'divfloor_rounding': [torch.uint8],
+        'divno_rounding_mode': [torch.uint8],
 
         # cpu not giving nan for x/0.0
         'atan2': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
