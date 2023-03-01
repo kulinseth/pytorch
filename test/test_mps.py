@@ -103,11 +103,6 @@ def mps_ops_grad_modifier(ops):
         'fmod': [torch.float16],
         'msort': [torch.float16],
 
-        # Unsupported dtype
-        'special.ndtr': [torch.float32],
-        'trapezoid': [torch.float16, torch.float32],
-        'trapz': [torch.float16, torch.float32],
-
         #cpu failures
         '__rpow__': [torch.float16],  # RuntimeError: "log_vml_cpu" not implemented for 'Half'
         'pow': [torch.float16], #"log_vml_cpu" not implemented for 'Half'
@@ -402,11 +397,8 @@ def mps_ops_modifier(ops):
         'to': None,
         'to_sparse': None,
         'unique': None,
-        'var_mean': None,
-        'var_meanunbiased': None,
         'vdot': None,
         'view_as_complex': None,
-        'xlogy': None,
         'zeros_like': None,
         'segment_reduce': None,
         'segment_reduce_': None,
@@ -9716,7 +9708,8 @@ class TestConsistency(TestCaseMPS):
         'true_divide', 'kron',
         'gradient', 'var', 'std',
         'linalg.vector_norm',
-        'addr',
+        'addr', 'var_mean',
+        'var_mean_unbiased',
 
         # for macOS 12
         'masked.normalize', 'masked.sum', 'masked.var',
