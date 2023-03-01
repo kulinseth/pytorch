@@ -9710,12 +9710,22 @@ class TestConsistency(TestCaseMPS):
         'linalg.vector_norm',
         'addr', 'var_mean',
         'var_mean_unbiased',
+        'nn.functional.pairwise_distance',
 
         # for macOS 12
         'masked.normalize', 'masked.sum', 'masked.var',
         'outer',
         'sum_to_size', 'sum',
         'mul',
+    }
+
+    FP32_LOW_PRECISION_LIST = {
+        # conv2d and conv_transpose2d results have a very small
+        # difference compared to CPU, so we use lower precision on FP32
+        'nn.functional.conv2d',
+        'nn.functional.conv_transpose2d',
+        'matmul', '__rmatmul__',
+        'linalg.multi_dot',
     }
 
     # Used for accept mode only
@@ -9758,11 +9768,7 @@ class TestConsistency(TestCaseMPS):
                 cpu_out = op(*cpu_args, **cpu_kwargs)
                 mps_out = op(*mps_args, **mps_kwargs)
 
-                # conv2d and conv_transpose2d results have a very small
-                # difference compared to CPU, so we use lower precision on FP32
-                if op.name in ["nn.functional.conv2d",
-                               "nn.functional.conv_transpose2d",
-                               "linalg.multi_dot"] and dtype == torch.float32:
+                if (op.name in self.FP32_LOW_PRECISION_LIST) and dtype == torch.float32:
                     atol = 1e-4
                     rtol = 3e-5
                 elif (op.name in self.FP16_LOW_PRECISION_LIST) and dtype == torch.float16:
