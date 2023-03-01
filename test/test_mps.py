@@ -4612,7 +4612,8 @@ class TestNLLLoss(TestCaseMPS):
     def test_divmode(self):
         def helper(shape, rounding_mode):
             for dtype in [torch.float32, torch.float16, torch.int32, torch.int64]:
-                if (rounding_mode is not None and "floor" in rounding_mode and dtype == torch.int64) is False:
+                if ((rounding_mode is not None and "floor" in rounding_mode and dtype == torch.int64) or
+                        (rounding_mode is not None and "trunc" in rounding_mode and dtype == torch.float16)) is False:
                     cpu_x = None
                     cpu_y = None
                     if (dtype in [torch.float32, torch.float16]):
@@ -10583,7 +10584,6 @@ class TestConsistency(TestCaseMPS):
 
         # Correctness issues
         'atanh': ['f32'],
-        'div': ['f16'],
 
         # Unsupported dtype
         'special.ndtr': ['f32'],
@@ -11150,6 +11150,9 @@ class TestConsistency(TestCaseMPS):
 
             except Exception as e:
                 if any(s in str(e).lower() for s in ["int64", "macos 13", "adaptive pool mps"]):
+                    self.skipTest(f"Expected Runtime Error: {str(e)}")
+
+                if any(s in str(e).lower() for s in ["float16", "div truc rounding"]):
                     self.skipTest(f"Expected Runtime Error: {str(e)}")
 
                 if op.name in CUDA_RESULT and self.compare_with_CUDA(op, mps_out, atol=atol, rtol=rtol):
