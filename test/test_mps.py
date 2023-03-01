@@ -100,28 +100,32 @@ def mps_ops_grad_modifier(ops):
         'fmod': [torch.float16],
         'msort': [torch.float16],
 
-        #random output
+        # Random output
         'exponential': [torch.float16, torch.float32],
 
-        #cpu failures
+        # CPU failures
         '__rpow__': [torch.float16],  # RuntimeError: "log_vml_cpu" not implemented for 'Half'
         'pow': [torch.float16], #"log_vml_cpu" not implemented for 'Half'
         'allclose': [torch.float16, torch.float32], # 'bool' object is not iterable
         'equal': [torch.float16, torch.float32], # 'bool' object is not iterable
         'nn.functional.mse_loss': [torch.float16], # "mse_backward_cpu_out" not implemented for 'Half'
         'nn.functional.smooth_l1_loss': [torch.float16], # "smooth_l1_backward_cpu_out" not implemented for 'Half'
-        'randn': [torch.float16, torch.float32], # grad requires non-empty inputs
-        'signal.windows.bartlett': [torch.float32], # grad requires non-empty inputs.
-        'signal.windows.blackman': [torch.float32], # grad requires non-empty inputs.
-        'signal.windows.cosine': [torch.float32], # grad requires non-empty inputs.
-        'signal.windows.exponential': [torch.float32], # grad requires non-empty inputs.
-        'signal.windows.gaussian': [torch.float32], # grad requires non-empty inputs.
-        'signal.windows.general_cosine': [torch.float32], # grad requires non-empty inputs.
-        'signal.windows.general_hamming': [torch.float32], # grad requires non-empty inputs.
-        'signal.windows.hamming':  [torch.float32], # grad requires non-empty inputs.
-        'signal.windows.hann': [torch.float32], # grad requires non-empty inputs.
-        'signal.windows.kaiser': [torch.float32], # grad requires non-empty inputs.
-        'signal.windows.nuttall': [torch.float32], # grad requires non-empty inputs.
+
+         # grad requires non-empty inputs
+        'randn': [torch.float16, torch.float32],
+        'signal.windows.bartlett': [torch.float32],
+        'signal.windows.blackman': [torch.float32],
+        'signal.windows.cosine': [torch.float32],
+        'signal.windows.exponential': [torch.float32],
+        'signal.windows.gaussian': [torch.float32],
+        'signal.windows.general_cosine': [torch.float32],
+        'signal.windows.general_hamming': [torch.float32],
+        'signal.windows.hamming':  [torch.float32],
+        'signal.windows.hann': [torch.float32],
+        'signal.windows.kaiser': [torch.float32],
+        'signal.windows.nuttall': [torch.float32],
+        'empty': [torch.float16, torch.float32],
+        'empty_permuted': [torch.float16, torch.float32],
 
         # trunc_tensor not working properly for float16
         'divtrunc_rounding': [torch.float16],
@@ -487,7 +491,6 @@ def mps_ops_modifier(ops):
         'svd_lowrank': None,
         'symeig': None,
         'take': None,
-        'tensordot': None,
         'to': None,
         'to_sparse': None,
         'unique': None,
@@ -560,6 +563,7 @@ def mps_ops_modifier(ops):
         'matmul': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'mat': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'mv': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        'tensordot': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
 
         # new_zeros/new_ones: Cannot convert a MPS Tensor to float64 dtype as
         # the MPS framework doesn't support float64
@@ -612,10 +616,7 @@ def mps_ops_modifier(ops):
         'nn.functional.dropout3d': [torch.float32],
         # these fill tensors with uninitialized data, causing mismatch with CPU
         'new_empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'empty': [torch.int8],
         'empty_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'empty_permuted': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         # duplicate indices are used in the testcase - undefined behaviour
         'index_put': None,
