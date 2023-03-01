@@ -362,6 +362,7 @@ def mps_ops_modifier(ops):
         '_segment_reducelengths': None,
         '_segment_reduceoffsets': None,
         'sinc': None,
+        'sparse.mm': None,
         'sparse.mmreduce': None,
         'special.airy_ai': None,
         'special.bessel_j0': None,
@@ -426,9 +427,11 @@ def mps_ops_modifier(ops):
         'linalg.matrix_rankhermitian': None,
         'linalg.pinv': None,
         'linalg.pinvhermitian': None,
+
         # Unsupported dtypes
-        'nn.functional.softmin': [torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        # bmm is not supported for integral types
         'nn.functional.bilinear': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        # batch_norm  Cannot convert a MPS Tensor to float64 dtype
         'nn.functional.batch_norm': [torch.float32],
         'nn.functional.linear': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'nn.functional.conv1d': [torch.int64],
@@ -449,6 +452,8 @@ def mps_ops_modifier(ops):
         'minreduction_with_dim': [torch.int64],
         'maxreduction_with_dim': [torch.int64],
         'nn.functional._scaled_dot_product_attention': [torch.float32],
+
+        # GEMM on MPS is not supported for integral types
          '__rmatmul__': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addmmdecomposed': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addbmm': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -463,6 +468,9 @@ def mps_ops_modifier(ops):
         'matmul': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'mat': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'mv': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+
+        # new_zeros/new_ones: Cannot convert a MPS Tensor to float64 dtype as
+        # the MPS framework doesn't support float64
         'new_zeros': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'new_ones': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'new_full': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -9739,7 +9747,6 @@ class TestConsistency(TestCaseMPS):
         # sys.setprofile(tracefunc)
         self.assertEqual(device, "cpu")
         key = op.name + op.variant_test_name
-
         run_grad_test = True
         def get_samples():
             return op.sample_inputs(device, dtype, requires_grad=(dtype.is_floating_point or dtype.is_complex))
