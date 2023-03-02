@@ -63,8 +63,8 @@ on:
 
 jobs:
   build:
-    # Don't run on forked repos.
-    if: github.repository_owner == 'pytorch'
+    # # Don't run on forked repos.
+    # if: github.repository_owner == 'pytorch'
     runs-on: ${{ inputs.runner-type }}
     env:
       # For sccache access (only on non-forked PRs)
@@ -106,6 +106,7 @@ jobs:
           environment-file: ${{ inputs.environment-file }}
 
       - name: Install macOS homebrew dependencies
+        if: ${{ runner.arch == 'X64' }}
         run: |
           # Install dependencies
           brew install libomp

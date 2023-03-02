@@ -128,6 +128,7 @@ jobs:
           echo "monitor-script-pid=${!}" >> "${GITHUB_OUTPUT}"
 
       - name: Install macOS homebrew dependencies
+        if: ${{ runner.arch == 'X64' }}
         run: |
           # Install dependencies
           brew install libomp
@@ -175,6 +176,12 @@ jobs:
 
           ${CONDA_RUN} python3 -mpip install --no-index --no-deps $(echo dist/*.whl)
           ${CONDA_RUN} .ci/pytorch/macos-test.sh
+
+      - name: Print remaining test logs
+        shell: bash
+        if: always()
+        run: |
+          cat test/**/*.log || true
 
       - name: Print remaining test logs
         shell: bash

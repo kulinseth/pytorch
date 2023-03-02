@@ -73,6 +73,7 @@ jobs:
       - name: Checkout PyTorch
         uses: malfet/checkout@silent-checkout
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           submodules: recursive
           path: pytorch
           quiet-checkout: true
@@ -84,7 +85,7 @@ jobs:
       - name: Checkout pytorch/builder
         uses: malfet/checkout@silent-checkout
         with:
-          ref: release/2.0
+          ref: main
           submodules: recursive
           repository: pytorch/builder
           path: builder
@@ -184,6 +185,7 @@ jobs:
       - name: Checkout PyTorch
         uses: malfet/checkout@silent-checkout
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           submodules: recursive
           path: pytorch
           quiet-checkout: true
@@ -195,7 +197,7 @@ jobs:
       - name: Checkout pytorch/builder
         uses: malfet/checkout@silent-checkout
         with:
-          ref: release/2.0
+          ref: main
           submodules: recursive
           repository: pytorch/builder
           path: builder
@@ -295,6 +297,7 @@ jobs:
       - name: Checkout PyTorch
         uses: malfet/checkout@silent-checkout
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           submodules: recursive
           path: pytorch
           quiet-checkout: true
@@ -306,7 +309,7 @@ jobs:
       - name: Checkout pytorch/builder
         uses: malfet/checkout@silent-checkout
         with:
-          ref: release/2.0
+          ref: main
           submodules: recursive
           repository: pytorch/builder
           path: builder
@@ -406,6 +409,7 @@ jobs:
       - name: Checkout PyTorch
         uses: malfet/checkout@silent-checkout
         with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           submodules: recursive
           path: pytorch
           quiet-checkout: true
@@ -417,7 +421,7 @@ jobs:
       - name: Checkout pytorch/builder
         uses: malfet/checkout@silent-checkout
         with:
-          ref: release/2.0
+          ref: main
           submodules: recursive
           repository: pytorch/builder
           path: builder
