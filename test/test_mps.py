@@ -98,8 +98,8 @@ def mps_ops_grad_modifier(ops):
         '__rpow__': [torch.float16],
         'pow': [torch.float16],
         # 'bool' object is not iterable
-        'allclose': [torch.float16, torch.float32],
-        'equal': [torch.float16, torch.float32],
+        'allclose': [torch.float16],
+        'equal': [torch.float16],
         # "mse_backward_cpu_out" not implemented for 'Half'
         'nn.functional.mse_loss': [torch.float16],
         # "smooth_l1_backward_cpu_out" not implemented for 'Half'
@@ -511,7 +511,6 @@ def mps_ops_modifier(ops):
         'geometric_': None,
         'log_normal_': None,
         'log_normal': None,
-        'bfloat16': None,
         'cdouble': None,
         'cfloat': None,
         'complex': None,
