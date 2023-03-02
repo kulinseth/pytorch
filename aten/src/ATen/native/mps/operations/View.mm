@@ -503,7 +503,7 @@ MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape* mp
   MPSNDArrayDescriptor* srcTensorNDArrayDesc = nil;
   MPSNDArray* srcTensorNDArray = nil;
   id<MTLCommandBuffer> commandBuffer = getCurrentMPSStream()->commandBuffer();
-  size_t base_idx = 0;
+  int64_t base_idx = 0;
 
   std::vector<int64_t> src_base_shape_vec;
 
@@ -536,21 +536,19 @@ MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape* mp
   }
 
   int64_t sliceOffset = src.storage_offset() / view_numel;
-  [srcTensorNDArrayDesc
-      sliceDimension:src_ndim_base - 1 - firstDimToSlice
-        withSubrange:{static_cast<NSUInteger>(sliceOffset), static_cast<NSUInteger>(src.sizes()[firstDimToSlice])}];
+  [srcTensorNDArrayDesc sliceDimension:src_ndim_base - 1 - firstDimToSlice
+                          withSubrange:{static_cast<NSUInteger>(sliceOffset), static_cast<NSUInteger>(src.sizes()[firstDimToSlice])}];
 
   // Slice any remaining dimensions
-  for (const auto crtSliceOffset : c10::irange(firstDimToSlice + 1, src_base_shape.size())) {
+  for (const auto crtSliceOffset: c10::irange(firstDimToSlice + 1, src_base_shape.size())) {
     if (src_view_shape[crtSliceOffset] != src_base_shape[crtSliceOffset]) {
       if (crtSliceOffset == src_base_shape.size() - 1) {
         sliceOffset = src.storage_offset() % src_base_shape[src_base_shape.size() - 1];
       } else {
         sliceOffset = (src.storage_offset() % view_numel) / (view_numel / src_base_shape[crtSliceOffset]);
       }
-      [srcTensorNDArrayDesc
-          sliceDimension:src_ndim_base - 1 - crtSliceOffset
-            withSubrange:{static_cast<NSUInteger>(sliceOffset), static_cast<NSUInteger>(src.sizes()[crtSliceOffset])}];
+      [srcTensorNDArrayDesc sliceDimension:src_ndim_base - 1 - crtSliceOffset
+                              withSubrange:{static_cast<NSUInteger>(sliceOffset), static_cast<NSUInteger>(src.sizes()[crtSliceOffset])}];
     }
   }
   srcTensorNDArrayView = [srcTensorNDArray arrayViewWithCommandBuffer:commandBuffer
