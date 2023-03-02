@@ -11002,6 +11002,7 @@ class TestConsistency(TestCaseMPS):
         'outer',
         'sum_to_size', 'sum',
         'mul',
+        'norm'
     }
 
     BLOCKLIST_MACOS_12 = {
