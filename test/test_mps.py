@@ -10,7 +10,6 @@ import warnings
 import subprocess
 import tempfile
 import os
-import pprint
 import copy
 import gc
 import torch
@@ -76,10 +75,10 @@ def mps_ops_grad_modifier(ops):
         'trace': [torch.float32],
         # csr not supported
         'sparse.mmreduce': [torch.float32],
-        'sparse_mm_reduce':[torch.float16, torch.float32],
+        'sparse_mm_reduce': [torch.float16, torch.float32],
         'unique_consecutive': [torch.float16, torch.float32],
-        'special_modified_bessel_i0': [torch.float16, torch.float32],   
-        'scalar_tensor':[torch.float16, torch.float32],
+        'special_modified_bessel_i0': [torch.float16, torch.float32],
+        'scalar_tensor': [torch.float16, torch.float32],
         'cdist': [torch.float32],
         'nn.functional.adaptive_avg_pool1d': [torch.float16, torch.float32],
         'nn.functional.adaptive_avg_pool2d': [torch.float16, torch.float32],
@@ -94,7 +93,7 @@ def mps_ops_grad_modifier(ops):
         # derivative for aten::floor_divide is not implemented
         'floor_divide': [torch.float16, torch.float32],
         # derivative for aten::narrow_copy is not implemented
-        'narrow_copy':[torch.float16, torch.float32],
+        'narrow_copy': [torch.float16, torch.float32],
         # RuntimeError: "log_vml_cpu" not implemented for 'Half'
         '__rpow__': [torch.float16],
         'pow': [torch.float16],
@@ -105,7 +104,7 @@ def mps_ops_grad_modifier(ops):
         'nn.functional.mse_loss': [torch.float16],
         # "smooth_l1_backward_cpu_out" not implemented for 'Half'
         'nn.functional.smooth_l1_loss': [torch.float16],
-         # grad requires non-empty inputs
+        # grad requires non-empty inputs
         'randn': [torch.float16, torch.float32],
         'signal.windows.bartlett': [torch.float32],
         'signal.windows.blackman': [torch.float32],
@@ -114,7 +113,7 @@ def mps_ops_grad_modifier(ops):
         'signal.windows.gaussian': [torch.float32],
         'signal.windows.general_cosine': [torch.float32],
         'signal.windows.general_hamming': [torch.float32],
-        'signal.windows.hamming':  [torch.float32],
+        'signal.windows.hamming': [torch.float32],
         'signal.windows.hann': [torch.float32],
         'signal.windows.kaiser': [torch.float32],
         'signal.windows.nuttall': [torch.float32],
@@ -185,7 +184,6 @@ def mps_ops_modifier(ops):
         'add': [torch.uint8],
         'asin': [torch.uint8],
         'asinh': [torch.uint8],
-        'atan2': [torch.uint8],
         'atan': [torch.uint8],
         'atanh': [torch.uint8],
         'ceil': [torch.uint8],
@@ -268,9 +266,10 @@ def mps_ops_modifier(ops):
         # cpu not giving nan for x/0.0
         'atan2': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         # fill tensors with uninitialized data, causing mismatch with CPU
-        'empty_permuted': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        #fast math precision issue for fp16
-        'nn.functional.pairwise_distance': [torch.uint8,torch.float16],
+        'empty_permuted': [torch.bool, torch.float16, torch.float32, torch.int16,
+                           torch.int32, torch.int64, torch.uint8, torch.int8],
+        # fast math precision issue for fp16
+        'nn.functional.pairwise_distance': [torch.uint8, torch.float16],
     }
 
     MACOS_BEFORE_13_3_XFAILLIST = {
@@ -541,7 +540,7 @@ def mps_ops_modifier(ops):
         'nn.functional.conv1d': [torch.int64],
         'nn.functional.conv2d': [torch.int64],
         'nn.functional.conv_transpose1d': [torch.int64],
-        'nn.functional.conv_transpose2d':  [torch.int64],
+        'nn.functional.conv_transpose2d': [torch.int64],
         'cumsum': [torch.int64],
         'masked.cumsum': [torch.int64],
         'cumulative_trapezoid': [torch.int64],
@@ -558,7 +557,7 @@ def mps_ops_modifier(ops):
 
         # GEMM on MPS is not supported for integral types
         'nn.functional.linear': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-         '__rmatmul__': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        '__rmatmul__': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addmmdecomposed': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addbmm': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'addmm': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -589,12 +588,14 @@ def mps_ops_modifier(ops):
     UNDEFINED_XFAILLIST = {
         # Failures due to random output that they generate using
         # Philox engine causing mismatch with CPU results
-        '__rpow__': [torch.float16],  # RuntimeError: "log_vml_cpu" not implemented for 'Half'
-        'addr': [torch.float16, torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # "addmv_impl_cpu" not implemented for 'Half'
-        'dist': [torch.float16], # cpu result off, showing inf values
-        'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # cpu result off, showing random values
-        'as_strided_partial_views': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8], # cpu result off, showing random values
-        'multinomial': [torch.float32], # random results
+        'addr': [torch.float16, torch.bool, torch.int16, torch.int32,
+                 torch.int64, torch.uint8, torch.int8],  # "addmv_impl_cpu" not implemented for 'Half'
+        'dist': [torch.float16],  # cpu result off, showing inf values
+        'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16,
+                                    torch.int32, torch.int64, torch.uint8, torch.int8],  # cpu result off, showing random values
+        'as_strided_partial_views': [torch.bool, torch.float16, torch.float32, torch.int16,
+                                     torch.int32, torch.int64, torch.uint8, torch.int8],  # cpu result off, showing random values
+        'multinomial': [torch.float32],  # random results
         'topk': [torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],  # topk fails with duplicate indices
         'uniform': [torch.float16, torch.float32],
         'rand_like': [torch.float16, torch.float32],
@@ -614,11 +615,12 @@ def mps_ops_modifier(ops):
         'new_empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'empty_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16,
+                              torch.int32, torch.int64, torch.uint8, torch.int8],
         # duplicate indices are used in the testcase - undefined behaviour
         'index_put': None,
         # zero to negative integer powers are undefined
-        '__rpow__': [torch.int8, torch.int16, torch.int32, torch.int64],
+        '__rpow__': [torch.float16, torch.int8, torch.int16, torch.int32, torch.int64],
         'resize_': [torch.float16, torch.float32],
         'resize_as_': [torch.float16, torch.float32],
 
@@ -9863,6 +9865,7 @@ class TestConsistency(TestCaseMPS):
         self.assertEqual(device, "cpu")
         key = op.name + op.variant_test_name
         run_grad_test = True
+
         def get_samples():
             return op.sample_inputs(device, dtype, requires_grad=(dtype.is_floating_point or dtype.is_complex))
         cpu_samples = get_samples()
@@ -9878,7 +9881,8 @@ class TestConsistency(TestCaseMPS):
 
                 # TODO: This checks only the function variant. We should also check the method and inplace version
                 # when they exist
-                if (op.name == "bfloat16" or op.name == "cdouble" or op.name == "double" or op.name == "cfloat" or op.name == "chalf"):
+                if (op.name == "bfloat16" or op.name == "cdouble" or op.name == "double" or
+                   op.name == "cfloat" or op.name == "chalf"):
                     continue
                 cpu_args = [cpu_sample.input] + list(cpu_sample.args)
                 cpu_kwargs = cpu_sample.kwargs
@@ -9932,6 +9936,7 @@ class TestConsistency(TestCaseMPS):
         key = op.name + op.variant_test_name
 
         run_grad_test = True
+
         def get_samples():
             return op.sample_inputs(device, dtype, requires_grad=(dtype.is_floating_point or dtype.is_complex))
         cpu_samples = get_samples()
@@ -9950,7 +9955,8 @@ class TestConsistency(TestCaseMPS):
                 # TODO: This checks only the function variant. We should also check the method and inplace version
                 # when they exist
 
-                if (op.name == "bfloat16" or op.name == "cdouble" or op.name == "double" or op.name == "cfloat" or op.name == "chalf"):
+                if (op.name == "bfloat16" or op.name == "cdouble" or op.name == "double" or
+                   op.name == "cfloat" or op.name == "chalf"):
                     continue
                 cpu_args = [cpu_sample.input] + list(cpu_sample.args)
                 cpu_kwargs = cpu_sample.kwargs
