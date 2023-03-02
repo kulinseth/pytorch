@@ -352,7 +352,11 @@ TORCH_IMPL_FUNC(logit_backward_out_mps)
 }
 
 TORCH_IMPL_FUNC(cumsum_out_mps)
-(const Tensor& self, int64_t dim, c10::optional<ScalarType> dtype, const Tensor& result) {
+(const Tensor& self,
+ int64_t dim,
+ c10::optional<ScalarType> dtype,
+ const Tensor& result) {
+
   bool macOS13_3_plus = is_macos_13_or_newer(MacOSVersion::MACOS_VER_13_3_PLUS);
   auto nDims = self.dim();
   auto wrapped_dim = maybe_wrap_dim(dim, nDims);
@@ -372,27 +376,29 @@ TORCH_IMPL_FUNC(cumsum_out_mps)
   }
   auto input = dtype.has_value() ? self.to(dtype.value()) : self;
 
-  // issue #103810551: cumsum is horribly broken for int8, int16 and as chances for overflow is pretty high, cast to
-  // int32 fixed in macOS 13.3
-  bool castInputData = (isIntegralType(input.scalar_type(), false) && input.scalar_type() != ScalarType::Int &&
+  // issue #103810551: cumsum is horribly broken for int8, int16 and as chances for overflow is pretty high, cast to int32
+  // fixed in macOS 13.3
+  bool castInputData = (isIntegralType(input.scalar_type()) &&
+                        input.scalar_type() != ScalarType::Int &&
                         input.scalar_type() != ScalarType::Long);
 
   TORCH_CHECK(macOS13_3_plus || input.scalar_type() != ScalarType::Long,
               "MPS does not support cumsum op with int64 input. Support has been added in macOS 13.3");
 
-  mps::unary_op(input,
-                result,
-                "cumsum_out_mp" + std::to_string(dim),
-                ^MPSGraphTensor*(MPSGraph* mpsGraph, MPSGraphTensor* inputTensor) {
-                  if (castInputData) {
-                    inputTensor = mps::castMPSTensor(mpsGraph, inputTensor, ScalarType::Int);
-                  }
-                  auto rc = [mpsGraph cumulativeSumWithTensor:inputTensor axis:dim name:nil];
-                  if ((mps::getMPSDataType(result) != [rc dataType]) || castInputData) {
-                    return mps::castMPSTensor(mpsGraph, rc, result.scalar_type());
-                  }
-                  return rc;
-                });
+  mps::unary_op(input, result, "cumsum_out_mp" + std::to_string(dim),
+                ^ MPSGraphTensor* (MPSGraph* mpsGraph, MPSGraphTensor* inputTensor) {
+
+       if (castInputData) {
+           inputTensor = mps::castMPSTensor(mpsGraph, inputTensor, ScalarType::Int);
+       }
+       auto rc = [mpsGraph cumulativeSumWithTensor: inputTensor
+                                              axis: dim
+                                              name: nil];
+       if ((mps::getMPSDataType(result.scalar_type()) != [rc dataType]) || castInputData) {
+         return mps::castMPSTensor(mpsGraph, rc, result.scalar_type());
+       }
+       return rc;
+    });
 }
 
 } // namespace at::native
