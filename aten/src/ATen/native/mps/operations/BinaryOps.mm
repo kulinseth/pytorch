@@ -97,6 +97,8 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
           ScalarType common_dtype = c10::promoteTypes(inputDataType, otherDataType);
           if (isIntegralType(common_dtype, true)) {
             // integer inputs must be cast to float, if output is float
+            TORCH_WARN_ONCE("Integer intput is being casted to float for binary op.\n",
+                            "This may result in minor precision issues.\n");
             if (isFloatingType(outputDataType)) {
               common_dtype = outputDataType;
             // in boolean comparison ops with signed vs. unsigned integers, we always cast to the unsigned type
