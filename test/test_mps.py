@@ -160,11 +160,10 @@ def mps_ops_modifier(ops):
         # expected failures
         'nn.functional.interpolatenearest': [torch.float32],
         'nn.functional.upsample_nearest': [torch.float32],
-        'nn.functional.conv_transpose2d': [torch.float32],
+        # The result of pow(9 , 8) is showing 43046716, whereas it should've been 43046721.
+        # fixed in macOS 13.3
         'pow': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         '__rpow__': [torch.float32, torch.uint8, torch.int8],
-        'linalg.inv': [torch.float32],
-        'linalg.inv_ex': [torch.float32],
 
         # Failures due to precision issues. These has been fixed in MacOS 13.3+
         'masked.softmin': [torch.float32],
@@ -173,11 +172,10 @@ def mps_ops_modifier(ops):
         'cdist': [torch.float32],
         'tan': [torch.uint8, torch.float32],
 
-        # Support starts from macOS 13
+        # Data type support starts from macOS 13
         'nn.functional.avg_pool1d': [torch.int64],
         'nn.functional.avg_pool2d': [torch.int64],
         'nn.functional.local_response_norm': [torch.int64],
-        'square': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         '__radd__': [torch.uint8],
         '__rdiv__': [torch.uint8],
         '__rmul__': [torch.uint8],
@@ -264,6 +262,8 @@ def mps_ops_modifier(ops):
         'divfloor_rounding': [torch.uint8],
         'divno_rounding_mode': [torch.uint8],
         'floor_divide': [torch.uint8],
+        # square internally calls into power, and will type cast to int64, which supports starting from macOS 12
+        'square': [torch.bool, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
 
         # cpu not giving nan for x/0.0
         'atan2': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -274,11 +274,10 @@ def mps_ops_modifier(ops):
     }
 
     MACOS_BEFORE_13_3_XFAILLIST = {
-        'nn.functional.conv_transpose2d': [torch.float32],
+        # The result of pow(9 , 8) is showing 43046716, whereas it should've been 43046721.
+        # fixed in macOS 13.3
         'pow': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         '__rpow__': [torch.float32, torch.uint8, torch.int8],
-        'linalg.inv': [torch.float32],
-        'linalg.inv_ex': [torch.float32],
 
         # Failures due to precision issues. These has been fixed in MacOS 13.3+
         'tan': [torch.float32],
@@ -286,7 +285,6 @@ def mps_ops_modifier(ops):
         'masked.softmax': [torch.float32],
         'masked.log_softmax': [torch.float32],
         'cdist': [torch.float32],
-        'tan': [torch.float32],
 
         # cpu not giving nan for x/0.0
         'atan2': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
@@ -9847,7 +9845,7 @@ class TestConsistency(TestCaseMPS):
 
     FP32_LOW_PRECISION_LIST = {
         # conv2d and conv_transpose2d results have a very small
-        # difference compared to CPU, so we use lower precision on FP32
+        # difference compared to CPU/CUDA, so we use lower precision on FP32
         'nn.functional.conv2d',
         'nn.functional.conv_transpose2d',
         'matmul', '__rmatmul__',
