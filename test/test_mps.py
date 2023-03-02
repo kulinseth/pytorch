@@ -69,13 +69,16 @@ def mps_ops_grad_modifier(ops):
         'sgn': [torch.float16, torch.float32],
         'segment_reduce': [torch.float16, torch.float32],
         '_segment_reduce': [torch.float16, torch.float32],
+        # unfold_backward is not implemented
         'unfold_copy': [torch.float16, torch.float32],
         'unfold': [torch.float16, torch.float32],
+        # missing in place aten::index_fill_.int_Tensor
         'trace': [torch.float32],
+        # csr not supported
         'sparse.mmreduce': [torch.float32],
-        'unique_consecutive': [torch.float16, torch.float32],
-        'special_modified_bessel_i0': [torch.float16, torch.float32],
         'sparse_mm_reduce':[torch.float16, torch.float32],
+        'unique_consecutive': [torch.float16, torch.float32],
+        'special_modified_bessel_i0': [torch.float16, torch.float32],   
         'scalar_tensor':[torch.float16, torch.float32],
         'cdist': [torch.float32],
         'nn.functional.adaptive_avg_pool1d': [torch.float16, torch.float32],
@@ -102,7 +105,6 @@ def mps_ops_grad_modifier(ops):
         'nn.functional.mse_loss': [torch.float16],
         # "smooth_l1_backward_cpu_out" not implemented for 'Half'
         'nn.functional.smooth_l1_loss': [torch.float16],
-
          # grad requires non-empty inputs
         'randn': [torch.float16, torch.float32],
         'signal.windows.bartlett': [torch.float32],
