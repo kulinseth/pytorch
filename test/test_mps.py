@@ -2764,7 +2764,7 @@ class TestMPS(TestCaseMPS):
             helper(torch.int64)
         except Exception as e:
             e_string = str(e)
-            self.assertEqual(e_string, "MPS does not support cumsum op with int64 input")
+            self.assertEqual(e_string, "MPS does not support cumsum op with int64 input. Support has been added in macOS 13.3")
 
     def test_cumsum_minus_one_axis(self):
         def helper(dtype):
@@ -3775,6 +3775,15 @@ class TestNLLLoss(TestCaseMPS):
         helper(2, 8, 4, 4, "min", torch.int32)
         helper(2, 8, 4, 4, "min", torch.float16)
         helper(2, 8, 4, 4, "min", torch.int64)
+
+    @unittest.skipIf(product_version < 13.3, "Long data type supported from macOS 13.3 and above")
+    def test_reduction_sum_max_long_val(self):
+        x_mps = torch.tensor([sys.maxsize, sys.maxsize - 10, sys.maxsize - 5, sys.maxsize - 18], device="mps")
+        x_cpu = x_mps.detach().clone().cpu()
+
+        res_mps = torch.sum(x_mps)
+        res_cpu = torch.sum(x_cpu)
+        self.assertEqual(res_mps, res_cpu)
 
     # Test forward max
     # Note - don't test grad now
@@ -9467,11 +9476,15 @@ class TestConsistency(TestCaseMPS):
         'conj_physical': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'constant_pad_nd': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'contiguous': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'corrcoef': ['f32'],
-        'cos': ['b8', 'f32', 'i16', 'i32', 'u8', 'i64'],
-        'cosh': ['b8', 'f32', 'i16', 'i32', 'u8', 'i64'],
-        'cov': ['f32'],
-        'cumsum': ['f16', 'f32', 'int16', 'int32'],
+        'copysign': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'corrcoef': ['f32', 'i16', 'i32', 'i64', 'u8'],
+        'cos': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'cosh': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'cov': ['f32', 'i16', 'i32', 'i64', 'u8'],
+        'cummax': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'cummin': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
+        'cumprod': ['f32', 'i16', 'i32', 'i64', 'u8'],
+        'cumsum': ['i8', 'b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'deg2rad': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'diag': ['f32', 'i32'],
         'diag_embed': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64'],
@@ -10008,8 +10021,19 @@ class TestConsistency(TestCaseMPS):
         'true_divide', 'kron',
         'gradient', 'var', 'std',
         'linalg.vector_norm',
+<<<<<<< HEAD
         'masked.sum', 'masked.std',
         'masked.var',
+=======
+        'addr',
+
+        # for macOS 12
+        'masked.normalize', 'masked.sum', 'masked.var',
+        'outer',
+        'sum_to_size', 'sum',
+        'mul',
+        'norm'
+>>>>>>> 226e32395f (Remove casts from reduction/cumsum/sort ops starting with macOS 13.3 (#354))
     }
 
     # Used for accept mode only
