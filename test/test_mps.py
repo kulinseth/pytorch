@@ -83,7 +83,6 @@ def mps_ops_grad_modifier(ops):
 
         # Correctness issues
         'atanh': [torch.float32],
-        'fmod': [torch.float16],
         'msort': [torch.float16],
 
         # Random output
@@ -124,6 +123,7 @@ def mps_ops_grad_modifier(ops):
 
         # trunc_tensor not working properly for float16
         'divtrunc_rounding': [torch.float16],
+        'fmod': [torch.float16],
     }
 
     MACOS_12_3_XFAILLIST_GRAD = {
@@ -226,7 +226,6 @@ def mps_ops_modifier(ops):
         'neg': [torch.uint8],
         'nn.functional.cosine_embedding_loss': [torch.uint8],
         'nn.functional.margin_ranking_loss': [torch.uint8],
-        'nn.functional.pairwise_distance': [torch.uint8],
         'nn.functional.poisson_nll_loss': [torch.uint8],
         'nn.functional.softsign': [torch.uint8],
         'nn.functional.tanhshrink': [torch.uint8],
@@ -264,7 +263,7 @@ def mps_ops_modifier(ops):
         # fill tensors with uninitialized data, causing mismatch with CPU
         'empty_permuted': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         #fast math precision issue for fp16
-        'nn.functional.pairwise_distance': [torch.float16],
+        'nn.functional.pairwise_distance': [torch.uint8,torch.float16],
     }
 
     MACOS_BEFORE_13_3_XFAILLIST = {
