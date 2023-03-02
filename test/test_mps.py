@@ -586,8 +586,6 @@ def mps_ops_modifier(ops):
     }
 
     XFAILLIST = {
-        # Failures due to unsupported data types on MPS backend
-        'byte': [torch.float16, torch.float32],
     }
 
     UNDEFINED_XFAILLIST = {
@@ -647,6 +645,9 @@ def mps_ops_modifier(ops):
         # Greatest absolute difference: 17.892311096191406 at index (1, 0, 2) (up to 1e-05 allowed)
         # Greatest relative difference: inf at index (1, 0, 0) (up to 1.3e-06 allowed)
         'nn.functional.scaled_dot_product_attention': [torch.float32],
+
+        # Failures due to casting negative float to uint8 is undefined
+        'byte': [torch.float16, torch.float32],
     }
 
     def addDecorator(op, d) -> None:
