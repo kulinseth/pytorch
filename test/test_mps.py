@@ -83,7 +83,6 @@ def mps_ops_grad_modifier(ops):
 
         # Correctness issues
         'atanh': [torch.float32],
-        'msort': [torch.float16],
 
         # Random output
         'exponential': [torch.float16, torch.float32],
@@ -124,6 +123,12 @@ def mps_ops_grad_modifier(ops):
         # trunc_tensor not working properly for float16
         'divtrunc_rounding': [torch.float16],
         'fmod': [torch.float16],
+
+        # Same issue as `argsort` and `sort` with duplicate elements (undefined behaviour).
+        # Forward pass is passing since `msort` doesn't return the indices, just the values, which match the CPU.
+        # On the backward pass for `sort` both are used (values and indices), thus resulting in a issmatch between CPU and MPS.
+        # Running `msort` with stable `sort` passes.
+        'msort': [torch.float16],
     }
 
     MACOS_12_3_XFAILLIST_GRAD = {
@@ -626,7 +631,7 @@ def mps_ops_modifier(ops):
         # Since CPU is not using argsort with stable=True, these cases result in undefined behaviour.
         'argsort': [torch.float16, torch.int8, torch.uint8, torch.bool],
 
-        # Same issue as argsort with duplicate indices. This test checks both the sorted values and the indices.
+        # Same issue as `argsort` with duplicate indices. This test checks both the sorted values and the indices.
         # The values of the sorted tensor match the CPU, but in case of the returned indices this results in undefined behaviour.
         'sort': [torch.int8, torch.uint8, torch.bool, torch.float16],
 
