@@ -61,6 +61,9 @@ typedef NS_ENUM(NSUInteger, MPSGraphResizeNearestRoundingMode)
 - (MPSGraphTensor * _Nonnull)inverseOfTensor:(MPSGraphTensor * _Nonnull) inputTensor
                                         name:(NSString * _Nullable)name;
 
+- (MPSGraphTensor * _Nonnull) truncateWithTensor:(MPSGraphTensor * _Nonnull) tensor
+                                            name:(NSString * _Nullable) name;
+
 - (MPSGraphTensor * _Nonnull) resizeNearestWithTensor:(MPSGraphTensor * _Nonnull) imagesTensor
                                            sizeTensor:(MPSGraphTensor * _Nonnull) size
                                   nearestRoundingMode:(MPSGraphResizeNearestRoundingMode) nearestRoundingMode
