@@ -1,4 +1,4 @@
-name: TorchBench CI (pytorch-linux-py3.8-cu116)
+name: TorchBench CI
 on:
   pull_request:
 
@@ -55,7 +55,6 @@ jobs:
           path: benchmark
           lfs: false
           ref: ${{ env.TORCHBENCH_BRANCH }}
-      - name: GPU Info
       - name: Run TorchBench
         run: |
           set -x
