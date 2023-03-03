@@ -39,10 +39,10 @@ jobs:
           ${CONDA_RUN} conda create -y -n pr-ci python="${PYTHON_VERSION}"
           # shellcheck source=/dev/null
           ${CONDA_RUN} conda activate pr-ci
-          ${CONDA_RUN} conda install -y numpy="${NUMPY_VERSION}" requests ninja pyyaml mkl mkl-include \
+          ${CONDA_RUN} conda install -y numpy="${NUMPY_VERSION}" requests ninja pyyaml \
                            setuptools cmake=3.22.* typing-extensions boto3 \
                            pillow pytest tabulate gitpython git-lfs tqdm psutil
-          ${CONDA_RUN} pip install --pre torch torchvision torchtext -f https://download.pytorch.org/whl/nightly/cu116/torch_nightly.html
+          ${CONDA_RUN} pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
 
       - name: Setup TorchBench branch
         env:
@@ -50,7 +50,8 @@ jobs:
           PY_VERS: 3.9
         shell: arch -arch arm64 bash {0}
         run: |
-          # shellcheck source=/dev/null
+          # shellcheck disable=SC1090
+          set -ex
           ${CONDA_RUN} conda activate pr-ci
           PR_BODY_FILE=/tmp/pr-body.txt
           echo "$PR_BODY" > ${PR_BODY_FILE}
