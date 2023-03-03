@@ -6,7 +6,6 @@ env:
   PYTHON_VERSION: "3.8"
   # must be consistent with https://github.com/pytorch/benchmark/blob/main/requirements.txt#L19
   NUMPY_VERSION: "1.21.2"
-  SETUP_SCRIPT: "/data/nvme/bin/setup_instance.sh"
   PR_NUM: ${{ github.event.number }}
   PR_BODY: ${{ github.event.pull_request.body }}
   PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -39,7 +38,6 @@ jobs:
         run: |
           ${CONDA_RUN} conda create -y -n pr-ci python="${PYTHON_VERSION}"
           # shellcheck source=/dev/null
-          . "${SETUP_SCRIPT}"
           ${CONDA_RUN} conda activate pr-ci
           ${CONDA_RUN} conda install -y numpy="${NUMPY_VERSION}" requests ninja pyyaml mkl mkl-include \
                            setuptools cmake=3.22.* typing-extensions boto3 \
@@ -53,7 +51,6 @@ jobs:
         shell: arch -arch arm64 bash {0}
         run: |
           # shellcheck source=/dev/null
-          . "${SETUP_SCRIPT}"
           ${CONDA_RUN} conda activate pr-ci
           PR_BODY_FILE=/tmp/pr-body.txt
           echo "$PR_BODY" > ${PR_BODY_FILE}
@@ -76,7 +73,6 @@ jobs:
           PR_BODY_FILE=/tmp/pr-body.txt
           echo "$PR_BODY" > ${PR_BODY_FILE}
           # shellcheck source=/dev/null
-          . "${SETUP_SCRIPT}"
           conda activate pr-ci
           python3 pytorch/.github/scripts/run_torchbench.py \
                   --pr-body "$PR_BODY_FILE" \
@@ -90,7 +86,6 @@ jobs:
       - name: Upload result to S3
         run: |
           # shellcheck source=/dev/null
-          . "${SETUP_SCRIPT}"
           conda activate pr-ci
           python3 pytorch/.github/scripts/run_torchbench.py \
                   upload-s3 \
