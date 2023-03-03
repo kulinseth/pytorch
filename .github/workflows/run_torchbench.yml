@@ -60,16 +60,13 @@ jobs:
           ${CONDA_RUN} python pytorch/.github/scripts/run_torchbench.py --pr-body "${PR_BODY_FILE}" set-torchbench-branch
 
       - name: Checkout TorchBench
-        env:
-          ENV_NAME: conda-test-env-${{ github.run_id }}
-          PY_VERS: 3.9
-        shell: arch -arch arm64 bash {0}
         uses: malfet/checkout@silent-checkout
         with:
           repository: pytorch/benchmark
           path: benchmark
           lfs: false
           ref: ${{ env.TORCHBENCH_BRANCH }}
+
       - name: Run TorchBench
         run: |
           set -x
