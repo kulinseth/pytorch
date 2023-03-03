@@ -293,6 +293,17 @@ def mps_ops_modifier(ops):
     # Those ops are not expected to work
     UNIMPLEMENTED_XFAILLIST = {
         # Failures due to lack of op implementation on MPS backend
+        'masked_scatter_': None,
+        'fmax': None,
+        'fmin': None,
+        'hypot': None,
+        'login': None,
+        'log_sigmoid': None,
+        'log_sigmoid_forward': None,
+        'nn.functional.hardsigmoid': None,
+        'roll': None,
+        'xlogy': None,
+        'logit': None,
         'linalg.eig': None,
         'linalg.eigvals': None,
         'fft.fft': None,
@@ -10048,7 +10059,6 @@ class TestConsistency(TestCaseMPS):
 
         key = op.name + op.variant_test_name
         run_grad_test = True
-
         def get_samples():
             return op.sample_inputs(device, dtype, requires_grad=(dtype.is_floating_point or dtype.is_complex))
         cpu_samples = get_samples()
