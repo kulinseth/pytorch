@@ -5,7 +5,7 @@ on:
 env:
   PYTHON_VERSION: "3.9"
   # must be consistent with https://github.com/pytorch/benchmark/blob/main/requirements.txt#L19
-  NUMPY_VERSION: "1.21.2"
+  NUMPY_VERSION: "1.23.1"
   PR_NUM: ${{ github.event.number }}
   PR_BODY: ${{ github.event.pull_request.body }}
   PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -39,7 +39,7 @@ jobs:
           # shellcheck disable=SC1090
           set -ex
           ${CONDA_RUN} conda install -y numpy="${NUMPY_VERSION}" requests ninja pyyaml \
-                           setuptools cmake=3.22.* typing-extensions boto3 \
+                           setuptools cmake= typing-extensions boto3 \
                            pillow pytest tabulate gitpython git-lfs tqdm psutil
           ${CONDA_RUN} pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
 
