@@ -3,7 +3,7 @@ on:
   pull_request:
 
 env:
-  PYTHON_VERSION: "3.8"
+  PYTHON_VERSION: "3.9"
   # must be consistent with https://github.com/pytorch/benchmark/blob/main/requirements.txt#L19
   NUMPY_VERSION: "1.21.2"
   PR_NUM: ${{ github.event.number }}
@@ -36,9 +36,8 @@ jobs:
           PY_VERS: 3.9
         shell: arch -arch arm64 bash {0}
         run: |
-          ${CONDA_RUN} conda create -y -n pr-ci python="${PYTHON_VERSION}"
-          # shellcheck source=/dev/null
-          ${CONDA_RUN} conda activate pr-ci
+          # shellcheck disable=SC1090
+          set -ex
           ${CONDA_RUN} conda install -y numpy="${NUMPY_VERSION}" requests ninja pyyaml \
                            setuptools cmake=3.22.* typing-extensions boto3 \
                            pillow pytest tabulate gitpython git-lfs tqdm psutil
@@ -52,7 +51,6 @@ jobs:
         run: |
           # shellcheck disable=SC1090
           set -ex
-          ${CONDA_RUN} conda activate pr-ci
           PR_BODY_FILE=/tmp/pr-body.txt
           echo "$PR_BODY" > ${PR_BODY_FILE}
           ${CONDA_RUN} python pytorch/.github/scripts/run_torchbench.py --pr-body "${PR_BODY_FILE}" set-torchbench-branch
@@ -74,7 +72,6 @@ jobs:
           PR_BODY_FILE=/tmp/pr-body.txt
           echo "$PR_BODY" > ${PR_BODY_FILE}
           # shellcheck source=/dev/null
-          conda activate pr-ci
           python3 pytorch/.github/scripts/run_torchbench.py \
                   --pr-body "$PR_BODY_FILE" \
                   run \
@@ -87,14 +84,12 @@ jobs:
       - name: Upload result to S3
         run: |
           # shellcheck source=/dev/null
-          conda activate pr-ci
           python3 pytorch/.github/scripts/run_torchbench.py \
                   upload-s3 \
                   --result-dir "${HOME}/.torchbench/bisection/pr${{ github.event.number }}"
 
       - name: Remove conda environment and cleanup
         run: |
-          conda env remove --name pr-ci
           rm /tmp/pr-body.txt
       - name: Upload artifact
         uses: actions/upload-artifact@v3
