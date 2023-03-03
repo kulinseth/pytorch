@@ -24,12 +24,18 @@ jobs:
         uses: malfet/checkout@silent-checkout
         with:
           path: pytorch
+
       - name: Setup miniconda
         uses: pytorch/test-infra/.github/actions/setup-miniconda@main
         with:
           python-version: 3.9
           environment-file: .github/requirements/conda-env-${{ runner.os }}-${{ runner.arch }}
+
       - name: Create conda environment and install deps
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
         run: |
           ${CONDA_RUN} conda create -y -n pr-ci python="${PYTHON_VERSION}"
           # shellcheck source=/dev/null
@@ -39,7 +45,12 @@ jobs:
                            setuptools cmake=3.22.* typing-extensions boto3 \
                            pillow pytest tabulate gitpython git-lfs tqdm psutil
           ${CONDA_RUN} pip install --pre torch torchvision torchtext -f https://download.pytorch.org/whl/nightly/cu116/torch_nightly.html
+
       - name: Setup TorchBench branch
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
         run: |
           # shellcheck source=/dev/null
           . "${SETUP_SCRIPT}"
@@ -47,7 +58,12 @@ jobs:
           PR_BODY_FILE=/tmp/pr-body.txt
           echo "$PR_BODY" > ${PR_BODY_FILE}
           ${CONDA_RUN} python pytorch/.github/scripts/run_torchbench.py --pr-body "${PR_BODY_FILE}" set-torchbench-branch
+
       - name: Checkout TorchBench
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
         uses: malfet/checkout@silent-checkout
         with:
           repository: pytorch/benchmark
@@ -73,6 +89,7 @@ jobs:
                   --pr-num "$PR_NUM" \
                   --pr-base-sha "$PR_MERGE_BASE" \
                   --pr-head-sha "$PR_HEAD_SHA"
+
       - name: Upload result to S3
         run: |
           # shellcheck source=/dev/null
@@ -81,6 +98,7 @@ jobs:
           python3 pytorch/.github/scripts/run_torchbench.py \
                   upload-s3 \
                   --result-dir "${HOME}/.torchbench/bisection/pr${{ github.event.number }}"
+
       - name: Remove conda environment and cleanup
         run: |
           conda env remove --name pr-ci
