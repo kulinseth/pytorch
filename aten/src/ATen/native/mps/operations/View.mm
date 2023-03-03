@@ -485,11 +485,11 @@ bool canSliceViewTensor(const Tensor& src, MPSShape* mpsShape) {
     return false;
   }
 
-  for (const auto i : c10::irange(src_ndim_base)) {
-    if (src_view_shape[i] > src_base_shape[i]) {
-      return false;
-    }
-  }
+  for (const auto i: c10::irange(src_ndim_base)) {
+     if (src_view_shape[i] > src_base_shape[i]) {
+       return false;
+     }
+   }
   return true;
 }
 
