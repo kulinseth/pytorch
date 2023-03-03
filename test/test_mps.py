@@ -76,8 +76,6 @@ def mps_ops_grad_modifier(ops):
         'special_modified_bessel_i0': [torch.float16, torch.float32],
         'scalar_tensor': [torch.float16, torch.float32],
         'cdist': [torch.float32],
-        'nn.functional.adaptive_avg_pool1d': [torch.float16, torch.float32],
-        'nn.functional.adaptive_avg_pool2d': [torch.float16, torch.float32],
         'combinations': [torch.float16, torch.float32],
         'masked.scatter': [torch.float16, torch.float32],
         'nn.functional.binary_cross_entropy_with_logits': [torch.float32],
@@ -543,6 +541,10 @@ def mps_ops_modifier(ops):
         'linalg.matrix_rankhermitian': None,
         'linalg.pinv': None,
         'linalg.pinvhermitian': None,
+
+        # MPS: input sizes must be divisible by output sizes
+        'nn.functional.adaptive_avg_pool1d': None,
+        'nn.functional.adaptive_avg_pool2d': None,
 
         # Unsupported dtypes
         # bmm is not supported for integral types
@@ -10118,7 +10120,7 @@ class TestConsistency(TestCaseMPS):
                 continue
 
 
-    @ops(mps_ops_grad_modifier(op_db), allowed_dtypes=MPS_GRAD_DTYPES)
+    @ops(mps_ops_grad_modifier(copy.deepcopy(op_db)), allowed_dtypes=MPS_GRAD_DTYPES)
     def test_output_grad_match(self, device, dtype, op):
         # sys.setprofile(tracefunc)
         self.assertEqual(device, "cpu")
