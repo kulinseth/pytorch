@@ -64,7 +64,6 @@ def mps_ops_grad_modifier(ops):
         'logaddexp2': [torch.float32],
         'prod': [torch.float32],
         'sgn': [torch.float16, torch.float32],
-        'segment_reduce': [torch.float16, torch.float32],
         '_segment_reduce': [torch.float16, torch.float32],
         # unfold_backward is not implemented
         'unfold_copy': [torch.float16, torch.float32],
@@ -73,13 +72,17 @@ def mps_ops_grad_modifier(ops):
         'trace': [torch.float32],
         # csr not supported
         'sparse.mmreduce': [torch.float32],
-        'sparse_mm_reduce': [torch.float16, torch.float32],
         'unique_consecutive': [torch.float16, torch.float32],
         'special_modified_bessel_i0': [torch.float16, torch.float32],
         'scalar_tensor': [torch.float16, torch.float32],
         'cdist': [torch.float32],
         'nn.functional.adaptive_avg_pool1d': [torch.float16, torch.float32],
         'nn.functional.adaptive_avg_pool2d': [torch.float16, torch.float32],
+        'combinations': [torch.float16, torch.float32],
+        'masked.scatter': [torch.float16, torch.float32],
+        'nn.functional.binary_cross_entropy_with_logits': [torch.float32],
+        'nn.functional.logsigmoid': [torch.float32],
+        'nn.functional.multilabel_soft_margin_loss': [torch.float32],
 
         # Correctness issues
         'atanh': [torch.float32],
@@ -232,6 +235,7 @@ def mps_ops_modifier(ops):
         'nn.functional.tanhshrink': [torch.uint8],
         'nn.functional.triplet_margin_loss': [torch.uint8],
         'nn.functional.triplet_margin_with_distance_loss': [torch.uint8],
+        'nn.functional.pairwise_distance': [torch.uint8],
         'outer': [torch.uint8],
         'rad2deg': [torch.uint8],
         'reciprocal': [torch.uint8],
@@ -266,8 +270,6 @@ def mps_ops_modifier(ops):
         # fill tensors with uninitialized data, causing mismatch with CPU
         'empty_permuted': [torch.bool, torch.float16, torch.float32, torch.int16,
                            torch.int32, torch.int64, torch.uint8, torch.int8],
-        # fast math precision issue for fp16
-        'nn.functional.pairwise_distance': [torch.uint8, torch.float16],
     }
 
     MACOS_BEFORE_13_3_XFAILLIST = {
@@ -293,7 +295,7 @@ def mps_ops_modifier(ops):
     # Those ops are not expected to work
     UNIMPLEMENTED_XFAILLIST = {
         # Failures due to lack of op implementation on MPS backend
-        'masked_scatter_': None,
+        'masked_scatter': None,
         'fmax': None,
         'fmin': None,
         'hypot': None,
@@ -301,6 +303,9 @@ def mps_ops_modifier(ops):
         'log_sigmoid': None,
         'log_sigmoid_forward': None,
         'nn.functional.hardsigmoid': None,
+        'nn.functional.logsigmoid':  None,
+        'nn.functional.multilabel_soft_margin_loss': None,
+        'trace': None,
         'roll': None,
         'xlogy': None,
         'logit': None,
@@ -657,6 +662,10 @@ def mps_ops_modifier(ops):
 
         # Failures due to casting negative float to uint8 is undefined
         'byte': [torch.float16, torch.float32],
+
+        # Failure due to precision issue for fp16
+        # on both cpu and mps there are test cases that might produce inf result
+        'nn.functional.pairwise_distance': [torch.float16],
     }
 
     def addDecorator(op, d) -> None:
@@ -10026,7 +10035,6 @@ class TestConsistency(TestCaseMPS):
         'linalg.vector_norm',
         'addr', 'var_mean',
         'var_mean_unbiased',
-        'nn.functional.pairwise_distance',
 
         # for macOS 12
         'masked.normalize', 'masked.sum', 'masked.var',
