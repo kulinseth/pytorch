@@ -303,7 +303,8 @@ def mps_ops_modifier(ops):
         'nn.functional.hardsigmoid': None,
         'nn.functional.logsigmoid':  None,
         'nn.functional.multilabel_soft_margin_loss': None,
-        'trace': None,
+        # Fixed in https://github.com/pytorch/pytorch/pull/95045
+        'trace': [torch.int8, torch.uint8, torch.int16, torch.int32],
         'roll': None,
         'xlogy': None,
         'logit': None,
