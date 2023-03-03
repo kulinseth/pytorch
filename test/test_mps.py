@@ -59,6 +59,10 @@ _ref_test_ops = tuple(
 
 def mps_ops_grad_modifier(ops):
     XFAILLIST_GRAD = {
+
+        'addr': [torch.float16],
+        'empty': [torch.float16, torch.float32],
+
         # Unimplemented ops
         '__getitem__': [torch.float16],
         'logaddexp2': [torch.float32],
@@ -565,7 +569,6 @@ def mps_ops_modifier(ops):
         'index_add': [torch.int64],
         'log1p': [torch.int64],
         'median': [torch.int64],
-        'remainder': [torch.int64],
         'sigmoid': [torch.int64],
         'atan2': [torch.int64],
         'minreduction_with_dim': [torch.int64],
@@ -604,7 +607,7 @@ def mps_ops_modifier(ops):
     UNDEFINED_XFAILLIST = {
         # Failures due to random output that they generate using
         # Philox engine causing mismatch with CPU results
-        'addr': [torch.float16, torch.bool, torch.int16, torch.int32,
+        'addr': [torch.bool, torch.int16, torch.int32,
                  torch.int64, torch.uint8, torch.int8],  # "addmv_impl_cpu" not implemented for 'Half'
         'dist': [torch.float16],  # cpu result off, showing inf values
         'as_stridedpartial_views': [torch.bool, torch.float16, torch.float32, torch.int16,
@@ -630,13 +633,13 @@ def mps_ops_modifier(ops):
         # these fill tensors with uninitialized data, causing mismatch with CPU
         'new_empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         'empty_like': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
-        'empty': [torch.bool, torch.float16, torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
+        'empty': [torch.int8],
         'new_empty_strided': [torch.bool, torch.float16, torch.float32, torch.int16,
                               torch.int32, torch.int64, torch.uint8, torch.int8],
         # duplicate indices are used in the testcase - undefined behaviour
         'index_put': None,
         # zero to negative integer powers are undefined
-        '__rpow__': [torch.float16, torch.int8, torch.int16, torch.int32, torch.int64],
+        '__rpow__': [torch.int8, torch.int16, torch.int32, torch.int64],
         'resize_': [torch.float16, torch.float32],
         'resize_as_': [torch.float16, torch.float32],
 
