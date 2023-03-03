@@ -11343,9 +11343,6 @@ class TestConsistency(TestCaseMPS):
         'unfold': ['f16', 'f32'],
         'trace': ['f32'],
 
-        # Correctness issues
-        'atanh': ['f32'],
-
         # Unsupported dtype
         'special.ndtr': ['f32'],
         'trapezoid': ['f16', 'f32'],
