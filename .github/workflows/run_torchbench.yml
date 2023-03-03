@@ -24,12 +24,6 @@ jobs:
         uses: malfet/checkout@silent-checkout
         with:
           path: pytorch
-      - name: Update self-hosted PyTorch
-        run: |
-          pushd "${HOME}"/pytorch
-          git remote prune origin
-          git fetch
-          popd
       - name: Create conda environment and install deps
         run: |
           conda create -y -n pr-ci python="${PYTHON_VERSION}"
