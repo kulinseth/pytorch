@@ -107,7 +107,7 @@ def mps_ops_grad_modifier(ops):
         'nn.functional.mse_loss': [torch.float16],
         # "smooth_l1_backward_cpu_out" not implemented for 'Half'
         'nn.functional.smooth_l1_loss': [torch.float16],
-        # grad requires non-empty inputs
+        # cpu error: grad requires non-empty inputs
         'randn': [torch.float16, torch.float32],
         'signal.windows.bartlett': [torch.float32],
         'signal.windows.blackman': [torch.float32],
@@ -160,17 +160,12 @@ def mps_ops_modifier(ops):
     # Those ops worked on MacOS12, but broken on MacOS13, see https://github.com/pytorch/pytorch/issues/85758
     MACOS_12_3_XFAILLIST = {
         # expected failures
-        'nn.functional.interpolatenearest': [torch.float32],
-        'nn.functional.upsample_nearest': [torch.float32],
         # The result of pow(9 , 8) is showing 43046716, whereas it should've been 43046721.
         # fixed in macOS 13.3
         'pow': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8, torch.int8],
         '__rpow__': [torch.float32, torch.uint8, torch.int8],
 
         # Failures due to precision issues. These has been fixed in MacOS 13.3+
-        'masked.softmin': [torch.float32],
-        'masked.softmax': [torch.float32],
-        'masked.log_softmax': [torch.float32],
         'cdist': [torch.float32],
         'tan': [torch.uint8, torch.float32],
 
@@ -272,6 +267,8 @@ def mps_ops_modifier(ops):
         # fill tensors with uninitialized data, causing mismatch with CPU
         'empty_permuted': [torch.bool, torch.float16, torch.float32, torch.int16,
                            torch.int32, torch.int64, torch.uint8, torch.int8],
+        'empty': [torch.bool, torch.float16, torch.float32, torch.int16,
+                  torch.int32, torch.int64, torch.uint8, torch.int8],
     }
 
     MACOS_BEFORE_13_3_XFAILLIST = {
