@@ -52,6 +52,7 @@ Tensor _mps_linear(
 
   @autoreleasepool {
     string key = "mps_linear" + getTensorsStringKey({input, weight, bias}) ;
+    std::cout << key << std::endl;
     CachedGraph* cachedGraph = cache_->LookUpAs<CachedGraph>(key);
     if(!cachedGraph) {
       cachedGraph = cache_->CreateCachedGraphAs<CachedGraph>(key, ^ MPSCachedGraph * () {
