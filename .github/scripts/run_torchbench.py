@@ -78,7 +78,14 @@ def find_current_branch(repo_path: str) -> str:
 
 def deploy_torchbench_config(output_dir: str, config: str, config_name: str = TORCHBENCH_CONFIG_NAME) -> None:
     # Create test dir if needed
-    pathlib.Path(output_dir).mkdir(exist_ok=True)
+    # pathlib.Path(output_dir).mkdir(exist_ok=True)
+    try:
+        pathlib.Path(output_dir).mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        print("Folder is already there")
+    else:
+        print("Folder was created")
+
     # TorchBench config file name
     config_path = os.path.join(output_dir, config_name)
     with open(config_path, "w") as fp:
