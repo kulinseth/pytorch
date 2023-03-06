@@ -81,8 +81,8 @@ jobs:
           ${CONDA_RUN} python3 pytorch/.github/scripts/run_torchbench.py \
                   --pr-body "$PR_BODY_FILE" \
                   run \
-                  --pytorch-path ${PWD}"/pytorch \
-                  --torchbench-path ${PWD}"/pytorch/benchmark \
+                  --pytorch-path "${PWD}"/pytorch \
+                  --torchbench-path "${PWD}"/pytorch/benchmark \
                   --pr-num "$PR_NUM" \
                   --pr-base-sha "$PR_MERGE_BASE" \
                   --pr-head-sha "$PR_HEAD_SHA"
