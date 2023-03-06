@@ -1,4 +1,4 @@
-//  Copyright © 2022 Apple Inc.
+git//  Copyright © 2022 Apple Inc.
 
 #include <ATen/ATen.h>
 #include <ATen/Tensor.h>
@@ -175,10 +175,10 @@ void reduction_out_mps(
     NSString* ns_key = [[wrappedAxes valueForKey:@"description"] componentsJoinedByString:@","];
     string key = func_name                                 + ":" +
                  string([ns_key UTF8String])               + ":" +
-                 getTensorsStringKey(input_t)              + ":" +
+                 std::to_string(input_t.dim()) + ":" + getMPSTypeString(input_t.scalar_type()) + ":" +
                  std::to_string(keepdim)                   + ":" +
                  std::to_string(reduction_type)            + ":" +
-                 getTensorsStringKey(output_t)             + ":" +
+                 std::to_string(output_t.dim()) + ":" + getMPSTypeString(output_t.scalar_type()) + ":" +
                  dtype_str;
     using CachedGraph = MPSUnaryCachedGraph;
     auto cachedGraph = cache_->LookUpAs<CachedGraph>(key);
@@ -193,7 +193,7 @@ void reduction_out_mps(
           newCachedGraph = new CachedGraph(mpsGraph);
           auto inputScalarType = input_t.scalar_type();
 
-          MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, input_t);
+          MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type()));
           MPSGraphTensor* castInputTensor = inputTensor;
           MPSDataType inputCastType = MPSDataTypeInvalid;
           if (dtype.has_value() &&

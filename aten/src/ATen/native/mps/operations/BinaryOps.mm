@@ -78,7 +78,9 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
 
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
-    string key = op_name + getTensorsStringKey({self, other, output_});
+    string key = op_name + std::to_string(self.dim())    + ":"  + getMPSTypeString(self.scalar_type())
+                         + std::to_string(other.dim())   + ":" + getMPSTypeString(other.scalar_type())
+                         + std::to_string(output_.dim()) + getMPSTypeString(output_.scalar_type());
     BinaryOpCachedGraph* cachedGraph = static_cast<BinaryOpCachedGraph *>(cache_->LookUp(key));
 
     if(!cachedGraph) {
@@ -87,8 +89,8 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
         @autoreleasepool {
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new BinaryOpCachedGraph(mpsGraph);
-          newCachedGraph->primaryTensor   = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(inputDataType), getMPSShape(self));
-          newCachedGraph->secondaryTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(otherDataType), getMPSShape(other));
+          newCachedGraph->primaryTensor   = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(inputDataType));
+          newCachedGraph->secondaryTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(otherDataType));
 
           MPSGraphTensor* primaryCastTensor   = newCachedGraph->primaryTensor;
           MPSGraphTensor* secondaryCastTensor = newCachedGraph->secondaryTensor;
