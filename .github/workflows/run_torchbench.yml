@@ -65,7 +65,12 @@ jobs:
           ref: ${{ env.TORCHBENCH_BRANCH }}
 
       - name: Run TorchBench
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
         run: |
+          # shellcheck disable=SC1090
           set -x
           pushd pytorch
           PR_MERGE_BASE=$(git log origin/master | head -1)
