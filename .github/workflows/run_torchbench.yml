@@ -82,7 +82,7 @@ jobs:
                   --pr-body "$PR_BODY_FILE" \
                   run \
                   --pytorch-path "${PWD}"/pytorch \
-                  --torchbench-path "${PWD}"/pytorch/benchmark \
+                  --torchbench-path "${PWD}"/benchmark \
                   --pr-num "$PR_NUM" \
                   --pr-base-sha "$PR_MERGE_BASE" \
                   --pr-head-sha "$PR_HEAD_SHA"
