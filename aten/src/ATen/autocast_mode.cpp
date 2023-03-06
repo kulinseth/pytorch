@@ -529,6 +529,7 @@ TORCH_LIBRARY_IMPL(aten, AutocastMPS, m) {
   KERNEL_MPS(conv_transpose1d, lower_precision_fp)
   KERNEL_MPS2(conv_transpose2d, input, lower_precision_fp)
   KERNEL_MPS(convolution, lower_precision_fp)
+  KERNEL_MPS(_mps_convolution, lower_precision_fp)
   KERNEL_MPS(prelu, lower_precision_fp)
   KERNEL_MPS(addmm, lower_precision_fp)
   KERNEL_MPS(addmv, lower_precision_fp)
