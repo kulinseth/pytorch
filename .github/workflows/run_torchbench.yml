@@ -67,7 +67,7 @@ jobs:
       - name: Run TorchBench
         run: |
           set -x
-          pushd "${HOME}"/pytorch
+          pushd pytorch
           PR_MERGE_BASE=$(git merge-base "$PR_BASE_SHA" "$PR_HEAD_SHA")
           popd
           PR_BODY_FILE=/tmp/pr-body.txt
@@ -76,8 +76,8 @@ jobs:
           python3 pytorch/.github/scripts/run_torchbench.py \
                   --pr-body "$PR_BODY_FILE" \
                   run \
-                  --pytorch-path "${HOME}"/pytorch \
-                  --torchbench-path "${PWD}"/benchmark \
+                  --pytorch-path pytorch \
+                  --torchbench-path benchmark \
                   --pr-num "$PR_NUM" \
                   --pr-base-sha "$PR_MERGE_BASE" \
                   --pr-head-sha "$PR_HEAD_SHA"
