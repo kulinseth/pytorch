@@ -74,9 +74,9 @@ jobs:
         run: |
           # shellcheck disable=SC1090
           set -x
-          pushd pytorch
+          # pushd pytorch
           PR_MERGE_BASE=$(git log origin/master | head -1)
-          popd
+          # popd
           PR_BODY_FILE=/tmp/pr-body.txt
           echo "$PR_BODY" > ${PR_BODY_FILE}
           # shellcheck source=/dev/null
@@ -104,6 +104,11 @@ jobs:
         with:
           name: TorchBench result
           path: ~/.torchbench/bisection/pr${{ github.event.number }}
+
+      - name: Clean up disk space
+        if: always()
+        continue-on-error: true
+        uses: pytorch/test-infra/.github/actions/check-disk-space@main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}-${{ github.event_name == 'workflow_dispatch' }}
