@@ -56,7 +56,7 @@ jobs:
           set -ex
           PR_BODY_FILE=/tmp/pr-body.txt
           echo "$PR_BODY" > ${PR_BODY_FILE}
-          ${CONDA_RUN} python3 pytorch/.github/scripts/run_torchbench.py --pr-body "${PR_BODY_FILE}" set-torchbench-branch
+          ${CONDA_RUN} python3 .github/scripts/run_torchbench.py --pr-body "${PR_BODY_FILE}" set-torchbench-branch
 
       - name: Checkout TorchBench
         uses: malfet/checkout@silent-checkout
@@ -80,10 +80,10 @@ jobs:
           PR_BODY_FILE=/tmp/pr-body.txt
           echo "$PR_BODY" > ${PR_BODY_FILE}
           # shellcheck source=/dev/null
-          ${CONDA_RUN} python3 pytorch/.github/scripts/run_torchbench.py \
+          ${CONDA_RUN} python3 .github/scripts/run_torchbench.py \
                   --pr-body "$PR_BODY_FILE" \
                   run \
-                  --pytorch-path "${PWD}"/pytorch \
+                  --pytorch-path "${PWD}" \
                   --torchbench-path "${PWD}"/benchmark \
                   --pr-num "$PR_NUM" \
                   --pr-base-sha "$PR_MERGE_BASE" \
