@@ -38,9 +38,10 @@ jobs:
         run: |
           # shellcheck disable=SC1090
           set -ex
-          # ${CONDA_RUN} conda install -y numpy="${NUMPY_VERSION}" requests ninja pyyaml \
-          #                  setuptools cmake= typing-extensions boto3 \
-          #                  pillow pytest tabulate gitpython git-lfs tqdm psutil
+          ${CONDA_RUN} pip install boto3
+          ${CONDA_RUN} conda install pyyaml \
+                           setuptools cmake typing-extensions \
+                           pillow pytest tabulate gitpython git-lfs tqdm psutil
           ${CONDA_RUN} pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
 
       - name: Setup TorchBench branch
