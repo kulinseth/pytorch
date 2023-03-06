@@ -75,7 +75,7 @@ jobs:
           # shellcheck disable=SC1090
           set -x
           # pushd pytorch
-          PR_MERGE_BASE=$(git log origin/master | head -1)
+          PR_MERGE_BASE=$(git rev-parse origin/master)
           # popd
           PR_BODY_FILE=/tmp/pr-body.txt
           echo "$PR_BODY" > ${PR_BODY_FILE}
