@@ -1,4 +1,4 @@
-git//  Copyright © 2022 Apple Inc.
+//  Copyright © 2022 Apple Inc.
 
 #include <ATen/ATen.h>
 #include <ATen/Tensor.h>
