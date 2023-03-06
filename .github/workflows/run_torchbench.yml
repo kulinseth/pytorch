@@ -19,10 +19,12 @@ jobs:
     # Set to 12 hours
     timeout-minutes: 720
     steps:
+
+      - name: Clean up disk space before running MacOS workflow
+        uses: pytorch/test-infra/.github/actions/check-disk-space@main
+
       - name: Checkout PyTorch
-        uses: malfet/checkout@silent-checkout
-        with:
-          path: pytorch
+        uses: pytorch/pytorch/.github/actions/checkout-pytorch@master
 
       - name: Setup miniconda
         uses: pytorch/test-infra/.github/actions/setup-miniconda@main
