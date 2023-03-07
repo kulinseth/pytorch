@@ -16,8 +16,8 @@ env:
 jobs:
   run-torchbench:
     runs-on: [macos-torchbench]
-    # Set to 12 hours
-    timeout-minutes: 720
+    # Set to 6 hours
+    timeout-minutes: 360
     steps:
 
       - name: Clean up disk space before running MacOS workflow
