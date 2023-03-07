@@ -16,7 +16,7 @@ env:
 jobs:
   run-torchbench:
     runs-on: [macos-torchbench]
-    ## Set to 6 hours
+    # Set to 6 hours
     timeout-minutes: 360
     steps:
 
@@ -88,12 +88,12 @@ jobs:
                   --pr-base-sha "$PR_MERGE_BASE" \
                   --pr-head-sha "$PR_HEAD_SHA"
 
-      - name: Upload result to S3
-        run: |
-          # shellcheck source=/dev/null
-          python3 pytorch/.github/scripts/run_torchbench.py \
-                  upload-s3 \
-                  --result-dir "${HOME}/.torchbench/bisection/pr${{ github.event.number }}"
+      # - name: Upload result to S3
+      #   run: |
+      #     # shellcheck source=/dev/null
+      #     python3 pytorch/.github/scripts/run_torchbench.py \
+      #             upload-s3 \
+      #             --result-dir "${HOME}/.torchbench/bisection/pr${{ github.event.number }}"
 
       - name: Remove conda environment and cleanup
         run: |
