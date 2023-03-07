@@ -1,4 +1,4 @@
-name: TorchBench CI
+name: TorchBench MPS CI
 on:
   pull_request:
 
