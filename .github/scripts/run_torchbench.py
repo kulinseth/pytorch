@@ -1,14 +1,10 @@
 """
-Generate a torchbench test report from a file containing the PR body.
+Generate a torchbench test report from a file based on GLOBAL_PR_LIST.
 Currently, only supports running tests on specified model names
 
 Testing environment:
-- Intel Xeon 8259CL @ 2.50 GHz, 24 Cores with disabled Turbo and HT
-- Nvidia Tesla T4
-- Nvidia Driver 470.82.01
-- Python 3.8
-- CUDA 11.3
 """
+
 # Known issues:
 # 1. Does not reuse the build artifact in other CI workflows
 # 2. CI jobs are serialized because there is only one worker
