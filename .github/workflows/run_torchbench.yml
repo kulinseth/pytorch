@@ -41,10 +41,10 @@ jobs:
           # shellcheck disable=SC1090
           set -ex
           ${CONDA_RUN} pip install boto3
-          ${CONDA_RUN} conda install pyyaml \
+          ${CONDA_RUN} conda install -y pyyaml \
                            setuptools cmake typing-extensions \
                            pillow pytest tabulate gitpython git-lfs tqdm psutil
-          ${CONDA_RUN} pip install --pre torch torchtext torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
+          ${CONDA_RUN} pip install --pre --force-reinstall torch torchtext torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
 
       - name: Setup TorchBench branch
         env:
