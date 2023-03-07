@@ -22,6 +22,46 @@ from pathlib import Path
 
 from typing import List, Tuple
 
+GLOBAL_PR_LIST = [
+    "test_train[alexnet-mps-eager]",
+    "test_train[dcgan-mps-eager]",
+    "test_train[hf_Bert-mps-eager]",
+    "test_train[mnasnet1_0-mps-eager]",
+    "test_train[mobilenet_v2-mps-eager]",
+    "test_train[pytorch_unet-mps-eager]",
+    "test_train[resnet18-mps-eager]",
+    "test_train[resnet50-mps-eager]",
+    "test_train[resnext50_32x4d-mps-eager]",
+    "test_train[shufflenet_v2_x1_0-mps-eager]",
+    "test_train[timm_efficientnet-mps-eager]",
+    "test_train[timm_nfnet-mps-eager]",
+    "test_train[timm_regnet-mps-eager]",
+    "test_train[timm_resnest-mps-eager]",
+    "test_train[timm_vision_transformer-mps-eager]",
+    "test_train[timm_vovnet-mps-eager]",
+    "test_train[soft_actor_critic-mps-eager]",
+    "test_train[hf_DistilBert-mps-eager]",
+    "test_train[hf_Bart-mps-eager]",
+    "test_train[hf_Albert-mps-eager]",
+    "test_train[hf_GPT2-mps-eager]",
+    "test_train[lennard_jones-mps-eager]",
+    "test_train[pytorch_stargan-mps-eager]",
+    "test_train[pytorch_struct-mps-eager]",
+    "test_train[timm_vision_transformer_large-mps-eager]",
+    "test_train[functorch_dp_cifar10-mps-eager]",
+    "test_train[squeezenet1_1-mps-eager]",
+    "test_train[hf_T5_base-mps-eager]",
+    "test_train[hf_T5_large-mps-eager]",
+    "test_train[densenet121-mps-eager]",
+    "test_train[phlippe_resnet-mps-eager]",
+    "test_train[phlippe_densenet-mps-eager]",
+    "test_train[tts_angular-mps-eager]",
+    "test_train[DALLE2_pytorch-mps-eager]",
+    "test_train[functorch_maml_omniglot-mps-eager]",
+    "test_train[demucs-mps-eager]",
+    "test_train[vgg16-mps-eager]"
+]
+
 TORCHBENCH_CONFIG_NAME = "config.yaml"
 TORCHBENCH_USERBENCHMARK_CONFIG_NAME = "ub-config.yaml"
 MAGIC_PREFIX = "RUN_TORCHBENCH:"
@@ -107,23 +147,23 @@ def get_valid_userbenchmarks(torchbench_path: str) -> List[str]:
 def extract_models_from_pr(torchbench_path: str, prbody_file: str) -> Tuple[List[str], List[str]]:
     model_list = []
     userbenchmark_list = []
-    pr_list = []
-    with open(prbody_file, "r") as pf:
-        lines = map(lambda x: x.strip(), pf.read().splitlines())
-        magic_lines = list(filter(lambda x: x.startswith(MAGIC_PREFIX), lines))
-        if magic_lines:
-            # Only the first magic line will be recognized.
-            pr_list = list(map(lambda x: x.strip(), magic_lines[0][len(MAGIC_PREFIX):].split(",")))
-    valid_models = get_valid_models(torchbench_path)
-    valid_ubs = get_valid_userbenchmarks(torchbench_path)
+    pr_list = GLOBAL_PR_LIST
+    # with open(prbody_file, "r") as pf:
+    #     lines = map(lambda x: x.strip(), pf.read().splitlines())
+    #     magic_lines = list(filter(lambda x: x.startswith(MAGIC_PREFIX), lines))
+    #     if magic_lines:
+    #         # Only the first magic line will be recognized.
+    #         pr_list = list(map(lambda x: x.strip(), magic_lines[0][len(MAGIC_PREFIX):].split(",")))
+    # valid_models = get_valid_models(torchbench_path)
+    # valid_ubs = get_valid_userbenchmarks(torchbench_path)
     for pr_bm in pr_list:
-        if pr_bm in valid_models or pr_bm == "ALL":
-            model_list.append(pr_bm)
-        elif pr_bm in valid_ubs:
-            userbenchmark_list.append(pr_bm)
-        else:
-            print(f"The model or benchmark {pr_bm} you specified does not exist in TorchBench suite. Please double check.")
-            exit(-1)
+        # if pr_bm in valid_models or pr_bm == "ALL":
+        model_list.append(pr_bm)
+        # elif pr_bm in valid_ubs:
+        #     userbenchmark_list.append(pr_bm)
+        # else:
+        #     print(f"The model or benchmark {pr_bm} you specified does not exist in TorchBench suite. Please double check.")
+        #     exit(-1)
     # Shortcut: if pr_list is ["ALL"], run all the model tests
     if "ALL" in model_list:
         model_list = ["ALL"]
