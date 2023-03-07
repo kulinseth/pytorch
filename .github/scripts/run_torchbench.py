@@ -11,7 +11,7 @@ Testing environment:
 """
 # Known issues:
 # 1. Does not reuse the build artifact in other CI workflows
-## 2. CI jobs are serialized because there is only one worker
+# 2. CI jobs are serialized because there is only one worker
 import os
 import boto3  # type: ignore[import]
 import git  # type: ignore[import]
