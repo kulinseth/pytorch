@@ -9,6 +9,52 @@ void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds, 
   mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE);
 }
 
+void runMPSGraphExecutable(MPSStream *metalStream, NSObject* theExecutable, NSDictionary *feeds, NSDictionary *results) {
+  MPSGraphExecutable *executable = (MPSGraphExecutable *)theExecutable;
+  dispatch_sync(metalStream->queue(), ^() {
+    @autoreleasepool {
+      NSMutableArray *inputs = [NSMutableArray arrayWithCapacity:[[executable feedTensors] count]];
+      NSUInteger inputIndex = 0;
+
+      for (MPSGraphTensor *tensor in [executable feedTensors]) {
+        inputs[inputIndex++] = feeds[tensor];
+      }
+
+      NSMutableArray *outputs = [NSMutableArray arrayWithCapacity:[[executable targetTensors] count]];
+      NSUInteger ouputIndex = 0;
+
+      for (MPSGraphTensor *tensor in [executable targetTensors]) {
+        outputs[ouputIndex++] = results[tensor];
+      }
+
+      MPSGraphExecutableExecutionDescriptor *executionDescriptor =
+                        [[MPSGraphExecutableExecutionDescriptor new] autorelease];
+
+      executionDescriptor.completionHandler = ^(NSArray<MPSGraphTensorData *> * _Nonnull,
+                                                NSError * _Nullable) {
+
+      };
+#if USE_MPSCOMMANDBUFFER
+      MPSCommandBuffer* mpsCommandBuffer = metalStream->commandBuffer();
+
+      [executable encodeToCommandBuffer:mpsCommandBuffer
+                            inputsArray:inputs
+                            resultsArray:outputs
+                    executionDescriptor:executionDescriptor];
+
+#else
+      metalStream->commit(true);
+      id<MTLCommandQueue> commandQueue = metalStream->commandQueue();
+
+      [executable runAsyncWithMTLCommandQueue:commandQueue
+                                  inputsArray:inputs
+                                  resultsArray:outputs
+                          executionDescriptor:executionDescriptor];
+#endif // !USE_MPSCOMMANDBUFFER
+    }
+  });
+}
+
 MPSDataType getMPSDataType(ScalarType scalar_type) {
   switch (scalar_type) {
     case ScalarType::Float:
