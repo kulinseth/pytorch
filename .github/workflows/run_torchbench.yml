@@ -3,7 +3,7 @@ on:
   pull_request:
 
 env:
-  PYTHON_VERSION: "3.8"
+  PYTHON_VERSION: "3.9"
   # must be consistent with https://github.com/pytorch/benchmark/blob/main/requirements.txt#L19
   NUMPY_VERSION: "1.23.1"
   PR_NUM: ${{ github.event.number }}
@@ -29,28 +29,26 @@ jobs:
       - name: Setup miniconda
         uses: pytorch/test-infra/.github/actions/setup-miniconda@main
         with:
-          python-version: 3.8
+          python-version: 3.9
           environment-file: .github/requirements/conda-env-${{ runner.os }}-${{ runner.arch }}
 
       - name: Create conda environment and install deps
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
-          PY_VERS: 3.8
+          PY_VERS: 3.9
         shell: arch -arch arm64 bash {0}
         run: |
           # shellcheck disable=SC1090
           set -ex
           ${CONDA_RUN} pip install boto3
-          ${CONDA_RUN} pip3 install --pre torch torchtext torchvision torchaudio torchdata --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-          ${CONDA_RUN} python -m pip uninstall -y torch
-          ${CONDA_RUN} pip3 install --pre torch --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cpu
           ${CONDA_RUN} conda install -y pytest tabulate gitpython git-lfs tqdm psutil
           ${CONDA_RUN} conda install -yq -c conda-forge spacy sentencepiece transformers
+          ${CONDA_RUN} pip3 install --pre torch torchtext torchvision torchaudio torchdata --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 
       - name: Setup TorchBench branch
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
-          PY_VERS: 3.8
+          PY_VERS: 3.9
         shell: arch -arch arm64 bash {0}
         run: |
           # shellcheck disable=SC1090
@@ -70,7 +68,7 @@ jobs:
       - name: Run TorchBench
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
-          PY_VERS: 3.8
+          PY_VERS: 3.9
         shell: arch -arch arm64 bash {0}
         run: |
           # shellcheck disable=SC1090
