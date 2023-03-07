@@ -40,9 +40,9 @@ jobs:
         run: |
           # shellcheck disable=SC1090
           set -ex
-          ${CONDA_RUN} pip3 install boto3
+          ${CONDA_RUN} pip install boto3
           ${CONDA_RUN} pip3 install --pre torch torchtext torchvision torchaudio torchdata --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-          ${CONDA_RUN} pip3 install torchaudio --force-reinstall
+          ${CONDA_RUN} python -m pip uninstall -y torch
           ${CONDA_RUN} pip3 install --pre torch --force-reinstall --extra-index-url https://download.pytorch.org/whl/nightly/cpu
           ${CONDA_RUN} conda install -y pytest tabulate gitpython git-lfs tqdm psutil
           ${CONDA_RUN} conda install -yq -c conda-forge spacy sentencepiece transformers
