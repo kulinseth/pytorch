@@ -16,7 +16,7 @@ env:
 jobs:
   run-torchbench:
     runs-on: [macos-torchbench]
-    # Set to 6 hours
+    ## Set to 6 hours
     timeout-minutes: 360
     steps:
 
