@@ -42,9 +42,7 @@ jobs:
           set -ex
           ${CONDA_RUN} pip install boto3
           ${CONDA_RUN} pip install --pre --force-reinstall torch torchtext torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
-          ${CONDA_RUN} conda install -y pyyaml \
-                           setuptools cmake typing-extensions \
-                           pillow pytest tabulate gitpython git-lfs tqdm psutil
+          ${CONDA_RUN} conda install -y setuptools pytest tabulate gitpython git-lfs tqdm psutil
 
       - name: Setup TorchBench branch
         env:
