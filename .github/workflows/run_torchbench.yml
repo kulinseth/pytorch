@@ -94,6 +94,24 @@ jobs:
       #     python3 pytorch/.github/scripts/run_torchbench.py \
       #             upload-s3 \
       #             --result-dir "${HOME}/.torchbench/bisection/pr${{ github.event.number }}"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        continue-on-error: true
+        with:
+          name: Benchmark result
+          path: ~/.torchbench/bisection/pr${{ github.event.number }}
+
+      - name: Archive artifacts into zip
+        run: |
+          zip -1 -r torchbench_logs.zip ~/.torchbench/bisection/pr${{ github.event.number }}
+
+      - name: Store PyTorch Build Artifacts on GHA
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ env.BUILD_ENVIRONMENT }}
+          retention-days: 14
+          if-no-files-found: error
+          path: torchbench_logs.zip
 
       - name: Remove conda environment and cleanup
         run: |
