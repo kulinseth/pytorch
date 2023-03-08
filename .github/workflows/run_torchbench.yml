@@ -1,10 +1,6 @@
 name: TorchBench CI
 on:
-  push:
-    # tags:
-      # - ciflow/torchbench/*
-  pull_request_target:
-    types: [labeled, edited]
+  pull_request:
   workflow_dispatch:
 
 env:
