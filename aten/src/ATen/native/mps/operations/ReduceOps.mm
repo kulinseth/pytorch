@@ -150,6 +150,7 @@ void reduction_out_mps(
       func_name+": reduction dim must be in the range of input shape")
     }
   }
+  bool disableTypeInference = true;
 
   NSMutableArray<NSNumber*> *axes = nil;
   NSMutableArray<NSNumber*> *apparent_input_shape = nil;
@@ -173,12 +174,11 @@ void reduction_out_mps(
   @autoreleasepool {
     std::string dtype_str = dtype.has_value() ? mps::getMPSTypeString(dtype.value()) : "";
     NSString* ns_key = [[wrappedAxes valueForKey:@"description"] componentsJoinedByString:@","];
-    string key = func_name                                 + ":" +
-                 string([ns_key UTF8String])               + ":" +
-                 std::to_string(input_t.dim()) + ":" + getMPSTypeString(input_t.scalar_type()) + ":" +
-                 std::to_string(keepdim)                   + ":" +
-                 std::to_string(reduction_type)            + ":" +
-                 std::to_string(output_t.dim()) + ":" + getMPSTypeString(output_t.scalar_type()) + ":" +
+    string key = func_name                                                             + ":" +
+                 string([ns_key UTF8String])                                           + ":" +
+                 getTensorsStringKey({input_t, output_t}, false, disableTypeInference) + ":" +
+                 std::to_string(keepdim)                                               + ":" +
+                 std::to_string(reduction_type)                                        + ":" +
                  dtype_str;
     using CachedGraph = MPSUnaryCachedGraph;
     auto cachedGraph = cache_->LookUpAs<CachedGraph>(key);
@@ -193,7 +193,9 @@ void reduction_out_mps(
           newCachedGraph = new CachedGraph(mpsGraph);
           auto inputScalarType = input_t.scalar_type();
 
-          MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type()));
+          MPSGraphTensor* inputTensor = disableTypeInference ?
+                mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type())) :
+                mpsGraphRankedPlaceHolder(mpsGraph, input_t);
           MPSGraphTensor* castInputTensor = inputTensor;
           MPSDataType inputCastType = MPSDataTypeInvalid;
           if (dtype.has_value() &&
@@ -291,7 +293,23 @@ void reduction_out_mps(
     NSDictionary<MPSGraphTensor *, MPSGraphTensorData *> *results = @{
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
-    runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+
+    if (disableTypeInference) {
+      NSDictionary<MPSGraphTensor*, MPSGraphShapedType *>* shapes = @{
+        cachedGraph->inputTensor_ : [[[MPSGraphShapedType alloc] initWithShape:nil dataType:getMPSScalarType(input_t.scalar_type())] autorelease]
+      };
+      MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
+      [compilationDescriptor disableTypeInference];
+
+      MPSGraphExecutable* executable = [[cachedGraph->graph() compileWithDevice:nil
+                                                              feeds:shapes
+                                                      targetTensors:@[cachedGraph->outputTensor_]
+                                                    targetOperations:nil
+                                              compilationDescriptor:compilationDescriptor] retain];
+      runMPSGraphExecutable(stream, executable, feeds, results);
+    } else {
+      runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+    }
   }
 }
 

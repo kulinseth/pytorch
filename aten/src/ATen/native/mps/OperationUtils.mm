@@ -9,50 +9,8 @@ void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds, 
   mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE);
 }
 
-void runMPSGraphExecutable(MPSStream *metalStream, NSObject* theExecutable, NSDictionary *feeds, NSDictionary *results) {
-  MPSGraphExecutable *executable = (MPSGraphExecutable *)theExecutable;
-  dispatch_sync(metalStream->queue(), ^() {
-    @autoreleasepool {
-      NSMutableArray *inputs = [NSMutableArray arrayWithCapacity:[[executable feedTensors] count]];
-      NSUInteger inputIndex = 0;
-
-      for (MPSGraphTensor *tensor in [executable feedTensors]) {
-        inputs[inputIndex++] = feeds[tensor];
-      }
-
-      NSMutableArray *outputs = [NSMutableArray arrayWithCapacity:[[executable targetTensors] count]];
-      NSUInteger ouputIndex = 0;
-
-      for (MPSGraphTensor *tensor in [executable targetTensors]) {
-        outputs[ouputIndex++] = results[tensor];
-      }
-
-      MPSGraphExecutableExecutionDescriptor *executionDescriptor =
-                        [[MPSGraphExecutableExecutionDescriptor new] autorelease];
-
-      executionDescriptor.completionHandler = ^(NSArray<MPSGraphTensorData *> * _Nonnull,
-                                                NSError * _Nullable) {
-
-      };
-#if USE_MPSCOMMANDBUFFER
-      MPSCommandBuffer* mpsCommandBuffer = metalStream->commandBuffer();
-
-      [executable encodeToCommandBuffer:mpsCommandBuffer
-                            inputsArray:inputs
-                            resultsArray:outputs
-                    executionDescriptor:executionDescriptor];
-
-#else
-      metalStream->commit(true);
-      id<MTLCommandQueue> commandQueue = metalStream->commandQueue();
-
-      [executable runAsyncWithMTLCommandQueue:commandQueue
-                                  inputsArray:inputs
-                                  resultsArray:outputs
-                          executionDescriptor:executionDescriptor];
-#endif // !USE_MPSCOMMANDBUFFER
-    }
-  });
+void runMPSGraphExecutable(MPSStream *mpsStream, NSObject* theExecutable, NSDictionary *feeds, NSDictionary *results) {
+  mpsStream->executeMPSGraph(theExecutable, feeds, results, SyncType::COMMIT_ADAPTIVE);
 }
 
 MPSDataType getMPSDataType(ScalarType scalar_type) {
@@ -229,7 +187,7 @@ std::string getArrayRefString(const IntArrayRef s) {
   return ss.str();
 }
 
-std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype) {
+std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype, bool disable_type_inference) {
     std::string str;
     // The key format per tensor would look like ":Float32[1,1,1,10]:"
     for (const Tensor& tensor: tensors) {
@@ -241,7 +199,7 @@ std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype) {
           str += "Scalar";
         } else {
           const NSString* ns_shape_key = [[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","];
-          str += std::string(ns_shape_key.UTF8String);
+          str += (disable_type_inference ? std::to_string(tensor.dim()) : std::string(ns_shape_key.UTF8String));
         }
         str += "]";
       } else {
