@@ -46,7 +46,7 @@ from torch.testing._internal.common_nn import NNTestCase, NewModuleTest, Criteri
     ctcloss_reference, new_module_tests, single_batch_reference_fn, _test_bfloat16_ops, _test_module_empty_input
 from torch.testing._internal.common_device_type import instantiate_device_type_tests, dtypes, \
     dtypesIfCUDA, dtypesIfMPS, precisionOverride, skipCUDAIfCudnnVersionLessThan, onlyCUDA, onlyCPU, \
-    skipCUDAIfRocm, skipCUDAIf, skipCUDAIfNotRocm, \
+    skipCUDAIfRocm, skipCUDAIf, skipCUDAIfNotRocm, skipMPSIf, \
     onlyNativeDeviceTypes, deviceCountAtLeast, largeTensorTest, expectedFailureMeta, skipMeta, get_all_device_types
 
 from hypothesis import given
@@ -10108,7 +10108,7 @@ class TestNNDeviceType(NNTestCase):
         tol = 2 * torch.finfo(dtype).eps
         self.assertEqual(logits_soft.grad, logits_hard.grad, atol=tol, rtol=0)
 
-    @skipIfMps
+    @skipMPSIf(True, "MPS does not currently support float64")
     @dtypesIfCUDA(torch.half, torch.float, torch.double)
     @dtypes(torch.float, torch.double)
     def test_gumbel_softmax(self, device, dtype):
@@ -10797,7 +10797,7 @@ class TestNNDeviceType(NNTestCase):
         self.assertEqual(grad_cudnn, grad_native, atol=1e-4, rtol=0)
 
     @dtypesIfCUDA(torch.half, torch.float, torch.double)
-    @skipIfMps
+    @skipMPSIf(True, "MPSGraph crashes in test_variable_sequence")
     @dtypes(torch.float)
     @tf32_on_and_off(0.005)
     @skipIfTorchDynamo("TorchDynamo fails here for unknown reasons")
@@ -11536,7 +11536,7 @@ class TestNNDeviceType(NNTestCase):
             for p, pe in zip(test_model.parameters(), ref_model.parameters()):
                 self.assertEqual(p.grad.to(devices[0]), pe.grad)
 
-    @skipIfMps
+    @skipMPSIf(True, "BFloat16 dtype is not currently supported on MPS backend")
     def test_elu_inplace_overlap(self, device):
         x = torch.randn((1, 6), dtype=torch.bfloat16, device=device).expand((6, 6))
         with self.assertRaisesRegex(RuntimeError, 'unsupported operation'):
