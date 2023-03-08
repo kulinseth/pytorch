@@ -900,6 +900,12 @@ class skipCUDAIf(skipIf):
     def __init__(self, dep, reason):
         super().__init__(dep, reason, device_type='cuda')
 
+# Skips a test on MPS if the condition is true.
+class skipMPSIf(skipIf):
+
+    def __init__(self, dep, reason):
+        super().__init__(dep, reason, device_type='mps')
+
 # Skips a test on Meta if the condition is true.
 class skipMetaIf(skipIf):
 
