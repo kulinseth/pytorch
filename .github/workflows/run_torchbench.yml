@@ -1,6 +1,7 @@
 name: TorchBench CI
 on:
   pull_request:
+    types: [labeled]
   workflow_dispatch:
 
 env:
@@ -18,7 +19,6 @@ jobs:
     runs-on: [macos-torchbench]
     # Set to 6 hours
     timeout-minutes: 360
-    # if: ${{ github.event.label.name == 'ciflow/torchbench' }}
     if: contains(github.event.pull_request.labels.*.name, 'ciflow/torchbench')
     steps:
 
