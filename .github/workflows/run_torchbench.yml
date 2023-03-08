@@ -1,4 +1,4 @@
-name: TorchBench MPS CI
+name: TorchBench CI
 on:
   push:
     tags:
