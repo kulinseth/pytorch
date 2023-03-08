@@ -1,7 +1,7 @@
 name: TorchBench CI
 on:
   pull_request:
-    types: [labeled]
+    types: [ labeled ]
   workflow_dispatch:
 
 env:
