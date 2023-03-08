@@ -11616,6 +11616,7 @@ class TestNNDeviceType(NNTestCase):
             b.backward(torch.ones(2, device=device))
 
     # Merge into OpInfo?
+    @skipMPSIf(True, "BFloat16 is currently unsupported on MPS Backend")
     def test_leaky_relu_inplace_with_zero_slope(self, device):
         a = torch.tensor([-2., 0., 2.], device=device, requires_grad=True)
         b = torch.nn.functional.leaky_relu_(a.clone(), 0.0)
