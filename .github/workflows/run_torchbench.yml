@@ -10,7 +10,6 @@ on:
 env:
   PYTHON_VERSION: "3.9"
   # must be consistent with https://github.com/pytorch/benchmark/blob/main/requirements.txt#L19
-  NUMPY_VERSION: "1.23.1"
   PR_NUM: ${{ github.event.number }}
   PR_BODY: ${{ github.event.pull_request.body }}
   PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -21,8 +20,8 @@ env:
 jobs:
   run-torchbench:
     runs-on: [macos-torchbench]
-    # Set to 12 hours
-    timeout-minutes: 720
+    # Set to 6 hours
+    timeout-minutes: 360
     if: ${{ github.event.label.name == 'ciflow/torchbench' }}
     steps:
 
@@ -50,8 +49,6 @@ jobs:
           ${CONDA_RUN} conda install -y pytest tabulate gitpython git-lfs tqdm psutil
           ${CONDA_RUN} conda install -yq -c conda-forge spacy sentencepiece transformers
           ${CONDA_RUN} pip3 install --pre torch torchtext torchvision torchaudio torchdata --extra-index-url https://download.pytorch.org/whl/nightly/cpu
-          ${CONDA_RUN} pip3 uninstall -y numba
-          ${CONDA_RUN} pip3 install numba
 
       - name: Setup TorchBench branch
         env:

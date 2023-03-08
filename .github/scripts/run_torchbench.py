@@ -144,22 +144,8 @@ def extract_models_from_pr(torchbench_path: str, prbody_file: str) -> Tuple[List
     model_list = []
     userbenchmark_list = []
     pr_list = GLOBAL_PR_LIST
-    # with open(prbody_file, "r") as pf:
-    #     lines = map(lambda x: x.strip(), pf.read().splitlines())
-    #     magic_lines = list(filter(lambda x: x.startswith(MAGIC_PREFIX), lines))
-    #     if magic_lines:
-    #         # Only the first magic line will be recognized.
-    #         pr_list = list(map(lambda x: x.strip(), magic_lines[0][len(MAGIC_PREFIX):].split(",")))
-    # valid_models = get_valid_models(torchbench_path)
-    # valid_ubs = get_valid_userbenchmarks(torchbench_path)
     for pr_bm in pr_list:
-        # if pr_bm in valid_models or pr_bm == "ALL":
         model_list.append(pr_bm)
-        # elif pr_bm in valid_ubs:
-        #     userbenchmark_list.append(pr_bm)
-        # else:
-        #     print(f"The model or benchmark {pr_bm} you specified does not exist in TorchBench suite. Please double check.")
-        #     exit(-1)
     # Shortcut: if pr_list is ["ALL"], run all the model tests
     if "ALL" in model_list:
         model_list = ["ALL"]
