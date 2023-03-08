@@ -71,6 +71,10 @@ if TEST_SCIPY:
 if TEST_NUMPY:
     import numpy as np
 
+# MPS does not currently support double for many tests
+if torch.backends.mps.is_available():
+    torch.set_default_dtype(torch.float32)
+
 
 # WARNING: If you add a new top-level test case to this file, you MUST
 # update test/run_test.py to list it, otherwise it will NOT be run in
