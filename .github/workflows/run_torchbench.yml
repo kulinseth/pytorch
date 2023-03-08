@@ -20,7 +20,7 @@ jobs:
     runs-on: [macos-torchbench]
     # Set to 6 hours
     timeout-minutes: 360
-    if: contains(github.event.pull_request.labels.*.name, 'ciflow/torchbench')
+    # if: contains(github.event.pull_request.labels.*.name, 'ciflow/torchbench')
     steps:
 
       - name: Clean up disk space before running MacOS workflow
