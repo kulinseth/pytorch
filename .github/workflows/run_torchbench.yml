@@ -1,0 +1,110 @@
+name: TorchBench CI
+on:
+  pull_request:
+    types: [labeled, opened, synchronize, reopened]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.9"
+  # must be consistent with https://github.com/pytorch/benchmark/blob/main/requirements.txt#L19
+  PR_NUM: ${{ github.event.number }}
+  PR_BODY: ${{ github.event.pull_request.body }}
+  PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+  PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_OSSCI_METRICS_V2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_OSSCI_METRICS_V2_SECRET_ACCESS_KEY }}
+
+jobs:
+  run-torchbench:
+    runs-on: [macos-torchbench]
+    # Set to 6 hours
+    timeout-minutes: 360
+    if: contains(github.event.pull_request.labels.*.name, 'ciflow/torchbench')
+    steps:
+
+      - name: Clean up disk space before running MacOS workflow
+        uses: pytorch/test-infra/.github/actions/check-disk-space@main
+
+      - name: Checkout PyTorch
+        uses: pytorch/pytorch/.github/actions/checkout-pytorch@master
+
+      - name: Setup miniconda
+        uses: pytorch/test-infra/.github/actions/setup-miniconda@main
+        with:
+          python-version: 3.9
+          environment-file: .github/requirements/conda-env-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Create conda environment and install deps
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          ${CONDA_RUN} pip install boto3
+          ${CONDA_RUN} conda install -y pytest tabulate gitpython git-lfs tqdm psutil
+          ${CONDA_RUN} conda install -yq -c conda-forge spacy sentencepiece transformers
+          ${CONDA_RUN} pip3 install --pre torch torchtext torchvision torchaudio torchdata --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+
+      - name: Setup TorchBench branch
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -ex
+          PR_BODY_FILE=/tmp/pr-body.txt
+          echo "$PR_BODY" > ${PR_BODY_FILE}
+          ${CONDA_RUN} python3 .github/scripts/run_torchbench.py --pr-body "${PR_BODY_FILE}" set-torchbench-branch
+
+      - name: Checkout TorchBench
+        uses: malfet/checkout@silent-checkout
+        with:
+          repository: razarmehr/benchmark
+          path: benchmark
+          lfs: false
+          ref: ${{ env.TORCHBENCH_BRANCH }}
+
+      - name: Run TorchBench
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.9
+        shell: arch -arch arm64 bash {0}
+        run: |
+          # shellcheck disable=SC1090
+          set -x
+          # pushd pytorch
+          PR_MERGE_BASE=$(git rev-parse origin/master)
+          # popd
+          PR_BODY_FILE=/tmp/pr-body.txt
+          echo "$PR_BODY" > ${PR_BODY_FILE}
+          # shellcheck source=/dev/null
+          ${CONDA_RUN} python3 .github/scripts/run_torchbench.py \
+                  --pr-body "$PR_BODY_FILE" \
+                  run \
+                  --pytorch-path "${PWD}" \
+                  --torchbench-path "${PWD}"/benchmark \
+                  --pr-num "$PR_NUM" \
+                  --pr-base-sha "$PR_MERGE_BASE" \
+                  --pr-head-sha "$PR_HEAD_SHA"
+
+      - name: Remove conda environment and cleanup
+        run: |
+          rm /tmp/pr-body.txt
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: TorchBench result
+          path: ~/.torchbench/bisection/pr${{ github.event.number }}
+
+      - name: Clean up disk space
+        if: always()
+        continue-on-error: true
+        uses: pytorch/test-infra/.github/actions/check-disk-space@main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}-${{ github.event_name == 'workflow_dispatch' }}
+  cancel-in-progress: true
