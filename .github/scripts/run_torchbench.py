@@ -1,15 +1,9 @@
 """
-Generate a torchbench test report from a file containing the PR body.
+Generate a torchbench test report from a file based on GLOBAL_PR_LIST.
 Currently, only supports running tests on specified model names
 
 Testing environment:
-- Intel Xeon 8259CL @ 2.50 GHz, 24 Cores with disabled Turbo and HT
-- Nvidia Tesla T4
-- Nvidia Driver 470.82.01
-- Python 3.8
-- CUDA 11.3
 """
-import argparse
 
 # Known issues:
 # 1. Does not reuse the build artifact in other CI workflows
@@ -21,8 +15,45 @@ from pathlib import Path
 
 from typing import List, Tuple
 
-import boto3  # type: ignore[import]
-import git  # type: ignore[import]
+GLOBAL_PR_LIST = [
+    "test_train[alexnet-mps-eager]",
+    "test_train[dcgan-mps-eager]",
+    "test_train[hf_Bert-mps-eager]",
+    "test_train[mnasnet1_0-mps-eager]",
+    "test_train[mobilenet_v2-mps-eager]",
+    "test_train[pytorch_unet-mps-eager]",
+    "test_train[resnet18-mps-eager]",
+    "test_train[resnet50-mps-eager]",
+    "test_train[resnext50_32x4d-mps-eager]",
+    "test_train[shufflenet_v2_x1_0-mps-eager]",
+    "test_train[timm_efficientnet-mps-eager]",
+    "test_train[timm_nfnet-mps-eager]",
+    "test_train[timm_regnet-mps-eager]",
+    "test_train[timm_resnest-mps-eager]",
+    "test_train[timm_vision_transformer-mps-eager]",
+    "test_train[timm_vovnet-mps-eager]",
+    "test_train[soft_actor_critic-mps-eager]",
+    "test_train[hf_DistilBert-mps-eager]",
+    "test_train[hf_Bart-mps-eager]",
+    "test_train[hf_Albert-mps-eager]",
+    "test_train[hf_GPT2-mps-eager]",
+    "test_train[lennard_jones-mps-eager]",
+    "test_train[pytorch_stargan-mps-eager]",
+    "test_train[pytorch_struct-mps-eager]",
+    "test_train[timm_vision_transformer_large-mps-eager]",
+    "test_train[functorch_dp_cifar10-mps-eager]",
+    "test_train[squeezenet1_1-mps-eager]",
+    "test_train[hf_T5_base-mps-eager]",
+    "test_train[hf_T5_large-mps-eager]",
+    "test_train[densenet121-mps-eager]",
+    "test_train[phlippe_resnet-mps-eager]",
+    "test_train[phlippe_densenet-mps-eager]",
+    "test_train[tts_angular-mps-eager]",
+    "test_train[DALLE2_pytorch-mps-eager]",
+    "test_train[functorch_maml_omniglot-mps-eager]",
+    "test_train[demucs-mps-eager]",
+    "test_train[vgg16-mps-eager]"
+]
 
 TORCHBENCH_CONFIG_NAME = "config.yaml"
 TORCHBENCH_USERBENCHMARK_CONFIG_NAME = "ub-config.yaml"
@@ -89,7 +120,14 @@ def deploy_torchbench_config(
     output_dir: str, config: str, config_name: str = TORCHBENCH_CONFIG_NAME
 ) -> None:
     # Create test dir if needed
-    pathlib.Path(output_dir).mkdir(exist_ok=True)
+    # pathlib.Path(output_dir).mkdir(exist_ok=True)
+    try:
+        pathlib.Path(output_dir).mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        print("Folder is already there")
+    else:
+        print("Folder was created")
+
     # TorchBench config file name
     config_path = os.path.join(output_dir, config_name)
     with open(config_path, "w") as fp:
@@ -128,27 +166,9 @@ def extract_models_from_pr(
 ) -> Tuple[List[str], List[str]]:
     model_list = []
     userbenchmark_list = []
-    pr_list = []
-    with open(prbody_file, "r") as pf:
-        lines = (x.strip() for x in pf.read().splitlines())
-        magic_lines = list(filter(lambda x: x.startswith(MAGIC_PREFIX), lines))
-        if magic_lines:
-            # Only the first magic line will be recognized.
-            pr_list = [
-                x.strip() for x in magic_lines[0][len(MAGIC_PREFIX) :].split(",")
-            ]
-    valid_models = get_valid_models(torchbench_path)
-    valid_ubs = get_valid_userbenchmarks(torchbench_path)
+    pr_list = GLOBAL_PR_LIST
     for pr_bm in pr_list:
-        if pr_bm in valid_models or pr_bm == "ALL":
-            model_list.append(pr_bm)
-        elif pr_bm in valid_ubs:
-            userbenchmark_list.append(pr_bm)
-        else:
-            print(
-                f"The model or benchmark {pr_bm} you specified does not exist in TorchBench suite. Please double check."
-            )
-            exit(-1)
+        model_list.append(pr_bm)
     # Shortcut: if pr_list is ["ALL"], run all the model tests
     if "ALL" in model_list:
         model_list = ["ALL"]
