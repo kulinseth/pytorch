@@ -8,6 +8,7 @@
 #include <ATen/ExpandUtils.h>
 #include <ATen/MemoryOverlap.h>
 #include <ATen/mps/MPSStream.h>
+#include <ATen/mps/MPSProfiler.h>
 #include <ATen/WrapDimUtilsMulti.h>
 #include <ATen/native/LinearAlgebraUtils.h>
 #include <ATen/native/mps/OperationUtils.h>
@@ -121,6 +122,8 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
         const Tensor& indexTensor = iter.tensor(idx+2);
         [computeEncoder useResource:getMTLBufferStorage(indexTensor) usage:MTLResourceUsageRead];
       }
+      // this function call is a no-op if MPS Profiler is not enabled
+      getMPSProfiler().beginProfileKernel(indexSelectPSO, indexFunction, {inputTensor});
 
       [computeEncoder setComputePipelineState:indexSelectPSO];
       [computeEncoder setBuffer:indexAB offset:0 atIndex:0];
@@ -250,7 +253,8 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
     MPSGraphTensor* scatterDataTensor_ = nil;
     MPSGraphTensor* countNonzeroTensor_ = nil;
   };
-
+  // TODO: fix this or move it before Placeholder()'s in below to
+  // measure its effect on performance
   stream->synchronize(SyncType::COMMIT_AND_WAIT);
   Tensor count_nonzero = at::empty({1}, self.options().dtype(kInt));
   Tensor out =  at::native::empty_mps(

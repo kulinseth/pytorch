@@ -5,6 +5,7 @@
 #include <ATen/Utils.h>
 
 #include <ATen/mps/MPSStream.h>
+#include <ATen/mps/MPSProfiler.h>
 #include <ATen/native/LinearAlgebraUtils.h>
 #include <ATen/native/Repeat.h>
 #include <ATen/native/mps/OperationUtils.h>
@@ -206,6 +207,9 @@ void computeRepeatIndices(
     @autoreleasepool {
       id<MTLComputeCommandEncoder> computeEncoder = mpsStream->commandEncoder();
       id<MTLComputePipelineState> pipelineState = getPipelineState(MPSDevice::getInstance()->device(), scalar_type);
+
+      // this function call is a no-op if MPS Profiler is not enabled
+      getMPSProfiler().beginProfileKernel(pipelineState, "repeat_interleave:" + scalar_type, false);
 
       [computeEncoder setComputePipelineState: pipelineState];
       [computeEncoder setBuffer:repeatBuffer offset:0 atIndex:0];

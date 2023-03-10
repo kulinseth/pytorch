@@ -1,4 +1,5 @@
 #include <ATen/mps/MPSStream.h>
+#include <ATen/mps/MPSProfiler.h>
 #include <ATen/native/Resize.h>
 #include <fmt/format.h>
 #include <torch/library.h>
@@ -175,6 +176,9 @@ void handle_tensor_tensor_binary_op(const at::Tensor& self, const at::Tensor& ot
   if (length == 0) {
     return;
   }
+  // this function call is a no-op if MPS Profiler is not enabled
+  getMPSProfiler().beginProfileKernel(cplState, kernel_name, {self, other});
+
   dispatch_sync(stream->queue(), ^(){
     id<MTLComputeCommandEncoder> commandEncoder = stream->commandEncoder();
 
@@ -205,6 +209,8 @@ void handle_tensor_scalar_binary_op(const at::Tensor& self, const at::Scalar& ot
   if (length == 0) {
     return;
   }
+  getMPSProfiler().beginProfileKernel(cplState, kernel_name, {self});
+
   dispatch_sync(stream->queue(), ^(){
     id<MTLComputeCommandEncoder> commandEncoder  = stream->commandEncoder();
 
@@ -307,6 +313,8 @@ at::Tensor& bitwise_not_out_mps (const at::Tensor& self, at::Tensor& output_) {
                                                      getMetalType(self),
                                                      getMetalType(self),
                                                      "bitwise_not");
+  getMPSProfiler().beginProfileKernel(cplState, "bitwise_not", {self});
+
   dispatch_sync(stream->queue(), ^(){
     id<MTLComputeCommandEncoder> commandEncoder = stream->commandEncoder();
 

@@ -3,6 +3,7 @@
 #include <ATen/native/mps/OperationUtils.h>
 #include <ATen/native/Resize.h>
 #include <ATen/mps/MPSAllocatorInterface.h>
+#include <ATen/mps/MPSProfiler.h>
 #include <fmt/format.h>
 #include <torch/library.h>
 #include <ATen/mps/IndexKernels.h>
@@ -833,6 +834,9 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst) {
                                                              getGatherScatterScalarType(output),
                                                              /*needsScatter=*/false);
 
+    // this function call is a no-op if MPS Profiler is not enabled
+    getMPSProfiler().beginProfileKernel(gatherPSO, functionName, {src, output});
+
     uint32_t kernel_size = src.sizes().size();
     std::vector<uint32_t> src_sizes(kernel_size == 0 ? 1 : kernel_size);
     std::vector<uint32_t> src_strides(kernel_size == 0 ? 1 : kernel_size);
@@ -891,6 +895,8 @@ Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output){
                                                                 getGatherScatterScalarType(src),
                                                                 getGatherScatterScalarType(output),
                                                                 /*needsScatter=*/true);
+
+      getMPSProfiler().beginProfileKernel(scatterPSO, functionName, {src, output});
 
       uint32_t kernel_size = output.sizes().size();
       std::vector<uint32_t> output_sizes(kernel_size == 0 ? 1 : kernel_size);
