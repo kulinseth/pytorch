@@ -95,15 +95,13 @@ void set_axes(NSMutableArray<NSNumber *> * &axes,
 }
 
 // Helper function to prepare axes and tensor shapes
-void set_axes_and_shapes(const Tensor& input_t,
+static
+void set_axes_and_shapes(IntArrayRef& input_shape,
                          OptionalIntArrayRef opt_dims,
                          NSMutableArray<NSNumber*> * &axes,
                          NSMutableArray<NSNumber*> * &apparent_input_shape,
                          NSMutableArray<NSNumber*> * &apparent_output_shape,
                          NSMutableArray<NSNumber*> * &output_shape) {
-
-  IntArrayRef input_shape = input_t.sizes();
-
   int64_t num_input_dims = input_shape.size();
   int64_t num_reduce_dims = opt_dims.has_value() ? opt_dims.value().size() : 0;
   int64_t num_output_dims;
@@ -150,15 +148,22 @@ void reduction_out_mps(
       func_name+": reduction dim must be in the range of input shape")
     }
   }
-  bool disableTypeInference = true;
+  bool disableTypeInference = false;
+  if (input_t.dim() == 1) {
+    disableTypeInference = true;
+  }
 
   NSMutableArray<NSNumber*> *axes = nil;
   NSMutableArray<NSNumber*> *apparent_input_shape = nil;
   NSMutableArray<NSNumber*> *apparent_output_shape = nil;
   NSMutableArray<NSNumber*> *output_shape = nil;
 
-  set_axes_and_shapes(input_t, opt_dim, axes, apparent_input_shape, apparent_output_shape, output_shape);
-  NSArray<NSNumber*>* wrappedAxes = mps::getTensorAxes(input_t, opt_dim);
+  IntArrayRef inputSizes = input_t.sizes();
+  IntArrayRef flattenedSizes = input_t.dim() == 5 ? 
+      IntArrayRef{inputSizes[0] * inputSizes[1], inputSizes[2], inputSizes[3], inputSizes[4]} : 
+      inputSizes; 
+  set_axes_and_shapes(flattenedSizes,  opt_dim, axes, apparent_input_shape, apparent_output_shape, output_shape);
+  NSArray<NSNumber*>* wrappedAxes = mps::getTensorAxes(flattenedSizes, opt_dim);
   auto cache_ = MPSGraphCache::getInstance();
 
   if (output_t.numel() == 0 || input_t.numel() == 0) {
@@ -170,6 +175,12 @@ void reduction_out_mps(
     }
     return;
   }
+
+  MPSShape *inputShape = nil;
+  if (input_t.dim() == 5){ 
+    inputShape = @[@(input_t.sizes()[0] * input_t.sizes()[1]), @(input_t.sizes()[2]), @(input_t.sizes()[3]), @(input_t.sizes()[4])];
+  }
+
   auto stream = at::mps::getCurrentMPSStream();
   @autoreleasepool {
     std::string dtype_str = dtype.has_value() ? mps::getMPSTypeString(dtype.value()) : "";
@@ -195,7 +206,7 @@ void reduction_out_mps(
 
           MPSGraphTensor* inputTensor = disableTypeInference ?
                 mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type())) :
-                mpsGraphRankedPlaceHolder(mpsGraph, input_t);
+                mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(input_t.scalar_type()), inputShape ? inputShape : getMPSShape(input_t));
           MPSGraphTensor* castInputTensor = inputTensor;
           MPSDataType inputCastType = MPSDataTypeInvalid;
           if (dtype.has_value() &&
@@ -284,7 +295,7 @@ void reduction_out_mps(
       });
     }
 
-    auto inputPlaceholder = Placeholder(cachedGraph->inputTensor_, input_t);
+    auto inputPlaceholder = Placeholder(cachedGraph->inputTensor_, input_t, inputShape);
     auto outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output_t, apparent_output_shape);
     NSDictionary<MPSGraphTensor *, MPSGraphTensorData *> *feeds = @{
       inputPlaceholder.getMPSGraphTensor() : inputPlaceholder.getMPSGraphTensorData(),
@@ -506,7 +517,7 @@ void impl_func_norm_mps(
                       input_shape,
                       axes);
 
-  NSArray<NSNumber*>* wrappedAxes = mps::getTensorAxes(input_t, dim);
+  NSArray<NSNumber*>* wrappedAxes = mps::getTensorAxes(input_t.sizes(), dim);
   if (cdist) {
     apparent_input_shape  = [mps::getMPSShape(input_tensor.sizes()) mutableCopy];
     apparent_output_shape = [mps::getMPSShape(output_t.sizes()) mutableCopy];
@@ -751,7 +762,7 @@ Tensor std_var_common_impl_mps(
   int64_t correction_n = 1;
 
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
-  NSArray<NSNumber*>* wrappedAxes = getTensorAxes(input_t, dim);
+  NSArray<NSNumber*>* wrappedAxes = getTensorAxes(input_t.sizes(), dim);
 
   int64_t num_output_dims = 0;
   NSMutableArray<NSNumber *> *axes = nil;

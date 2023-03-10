@@ -36,7 +36,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
 
   const bool is_self_scalar = self.dim() == 0;
   const bool is_other_scalar = other.dim() == 0;
-  bool disableTypeInference = true;
+  bool disableTypeInference = false;
 
   auto new_size = at::infer_size(self.sizes(), other.sizes());
   if (!output_.sizes().equals(new_size)) {
@@ -81,6 +81,16 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
     }
   }
 
+  MPSShape *selfShape   = nil;
+  MPSShape *otherShape  = nil;
+  MPSShape *outputShape = nil;
+  if (self.dim() == 5 && other.dim() == 5 && op_name == "multiplication"){ 
+    selfShape = @[@(self.sizes()[0] * self.sizes()[1]), @(self.sizes()[2]), @(self.sizes()[3]), @(self.sizes()[4])];
+    otherShape = @[@(other.sizes()[0] * other.sizes()[1]), @(other.sizes()[2]), @(other.sizes()[3]), @(other.sizes()[4])];
+    outputShape = @[@(output_.sizes()[0] * output_.sizes()[1]), @(output_.sizes()[2]), @(output_.sizes()[3]), @(output_.sizes()[4])];
+  }
+
+
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
     string key = op_name + getTensorsStringKey({self, other, output_}, /*short_dtype=*/false,
@@ -97,8 +107,8 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
             newCachedGraph->primaryTensor   = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(inputDataType));
             newCachedGraph->secondaryTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(otherDataType));
           } else {
-            newCachedGraph->primaryTensor   = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(inputDataType), getMPSShape(self));
-            newCachedGraph->secondaryTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(otherDataType), getMPSShape(other));
+            newCachedGraph->primaryTensor   = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(inputDataType), selfShape ? selfShape : getMPSShape(self));
+            newCachedGraph->secondaryTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(otherDataType), otherShape ? otherShape : getMPSShape(other));
           }
 
           MPSGraphTensor* primaryCastTensor   = newCachedGraph->primaryTensor;
@@ -147,7 +157,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
       self_scalar = getMPSScalar(self.item(), inputDataType);
       feeds[cachedGraph->primaryTensor] = getMPSGraphTensorFromScalar(mpsStream, self_scalar);
     } else {
-      selfPlaceholder = Placeholder(cachedGraph->primaryTensor, self, /*mpsShape*/nil,
+      selfPlaceholder = Placeholder(cachedGraph->primaryTensor, self, selfShape,
                                     /*gatherTensorData=*/true, getMPSScalarType(inputDataType));
       feeds[selfPlaceholder.getMPSGraphTensor()] = selfPlaceholder.getMPSGraphTensorData();
     }
@@ -155,7 +165,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
       other_scalar = getMPSScalar(other.item(), otherDataType);
       feeds[cachedGraph->secondaryTensor] = getMPSGraphTensorFromScalar(mpsStream, other_scalar);
     } else {
-      otherPlaceholder = Placeholder(cachedGraph->secondaryTensor, other,  /*mpsShape*/nil,
+      otherPlaceholder = Placeholder(cachedGraph->secondaryTensor, other,  otherShape,
                                      /*gatherTensorData=*/true, getMPSScalarType(otherDataType));
       feeds[otherPlaceholder.getMPSGraphTensor()] = otherPlaceholder.getMPSGraphTensorData();
     }
@@ -166,7 +176,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
       feeds[cachedGraph->alphaTensor] = getMPSGraphTensorFromScalar(mpsStream, alpha_scalar);
     }
 
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor, needsCopyToOutput ? output : output_);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor, needsCopyToOutput ? output : output_, outputShape);
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
