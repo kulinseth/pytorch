@@ -41,7 +41,7 @@ void set_apparent_shapes(NSMutableArray<NSNumber*> * &apparent_out_shape,
                          NSMutableArray<NSNumber*> * &apparent_in_shape,
                          int64_t num_reduce_dims,
                          int64_t num_output_dims,
-                         IntArrayRef& input_shape,
+                         const IntArrayRef& input_shape,
                          NSMutableArray<NSNumber*> * &axes) {
 
   if (num_reduce_dims == 0) {
@@ -96,7 +96,7 @@ void set_axes(NSMutableArray<NSNumber *> * &axes,
 
 // Helper function to prepare axes and tensor shapes
 static
-void set_axes_and_shapes(IntArrayRef& input_shape,
+void set_axes_and_shapes(const IntArrayRef& input_shape,
                          OptionalIntArrayRef opt_dims,
                          NSMutableArray<NSNumber*> * &axes,
                          NSMutableArray<NSNumber*> * &apparent_input_shape,
@@ -158,12 +158,8 @@ void reduction_out_mps(
   NSMutableArray<NSNumber*> *apparent_output_shape = nil;
   NSMutableArray<NSNumber*> *output_shape = nil;
 
-  IntArrayRef inputSizes = input_t.sizes();
-  IntArrayRef flattenedSizes = input_t.dim() == 5 ? 
-      IntArrayRef{inputSizes[0] * inputSizes[1], inputSizes[2], inputSizes[3], inputSizes[4]} : 
-      inputSizes; 
-  set_axes_and_shapes(flattenedSizes,  opt_dim, axes, apparent_input_shape, apparent_output_shape, output_shape);
-  NSArray<NSNumber*>* wrappedAxes = mps::getTensorAxes(flattenedSizes, opt_dim);
+  set_axes_and_shapes(input_t.sizes(), opt_dim, axes, apparent_input_shape, apparent_output_shape, output_shape);
+  NSArray<NSNumber*>* wrappedAxes = mps::getTensorAxes(input_t.sizes(), opt_dim);
   auto cache_ = MPSGraphCache::getInstance();
 
   if (output_t.numel() == 0 || input_t.numel() == 0) {
@@ -174,11 +170,6 @@ void reduction_out_mps(
       output_t.zero_();
     }
     return;
-  }
-
-  MPSShape *inputShape = nil;
-  if (input_t.dim() == 5){ 
-    inputShape = @[@(input_t.sizes()[0] * input_t.sizes()[1]), @(input_t.sizes()[2]), @(input_t.sizes()[3]), @(input_t.sizes()[4])];
   }
 
   auto stream = at::mps::getCurrentMPSStream();
@@ -206,7 +197,7 @@ void reduction_out_mps(
 
           MPSGraphTensor* inputTensor = disableTypeInference ?
                 mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type())) :
-                mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(input_t.scalar_type()), inputShape ? inputShape : getMPSShape(input_t));
+                mpsGraphRankedPlaceHolder(mpsGraph, input_t);
           MPSGraphTensor* castInputTensor = inputTensor;
           MPSDataType inputCastType = MPSDataTypeInvalid;
           if (dtype.has_value() &&
@@ -295,7 +286,7 @@ void reduction_out_mps(
       });
     }
 
-    auto inputPlaceholder = Placeholder(cachedGraph->inputTensor_, input_t, inputShape);
+    auto inputPlaceholder = Placeholder(cachedGraph->inputTensor_, input_t);
     auto outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output_t, apparent_output_shape);
     NSDictionary<MPSGraphTensor *, MPSGraphTensorData *> *feeds = @{
       inputPlaceholder.getMPSGraphTensor() : inputPlaceholder.getMPSGraphTensorData(),
