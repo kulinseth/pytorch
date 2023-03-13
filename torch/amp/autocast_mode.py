@@ -214,6 +214,8 @@ class autocast:
                 assert hasattr(self.custom_device_mod, func), message + f"But the func `{func}` is missing. \n"
 
             self.fast_dtype = self.custom_device_mod.get_autocast_dtype()
+        elif self.device == 'mps':
+            self.fast_dtype = torch.get_autocast_mps_dtype()  # type: ignore[attr-defined]
         else:
             raise RuntimeError('User specified autocast device_type must be \'cuda\' or \'cpu\'')
         self._cache_enabled = torch.is_autocast_cache_enabled()
@@ -257,6 +259,13 @@ class autocast:
         elif self.device == 'cuda':
             if enabled and self.fast_dtype == torch.bfloat16 and not torch.cuda.is_bf16_supported():
                 raise RuntimeError('Current CUDA Device does not support bfloat16. Please switch dtype to float16.')
+        elif self.device == 'mps':
+            supported_dtype = [torch.float16]
+            if self.fast_dtype not in supported_dtype:
+                error_message = 'In MPS autocast, but the target dtype is not supported. Disabling autocast.\n'
+                error_message += 'MPS Autocast only supports dtype of torch.float16 currently.'
+                warnings.warn(error_message)
+                enabled = False
         self._enabled = enabled
 
     def __enter__(self):
@@ -288,6 +297,11 @@ class autocast:
             self.prev_fastdtype = self.custom_device_mod.get_autocast_dtype()
             self.custom_device_mod.set_autocast_enabled(self._enabled)
             self.custom_device_mod.set_autocast_dtype(self.fast_dtype)
+        elif self.device == 'mps':
+            self.prev = torch.is_autocast_mps_enabled()
+            self.prev_fastdtype = torch.get_autocast_mps_dtype()
+            torch.set_autocast_mps_enabled(self._enabled)
+            torch.set_autocast_mps_dtype(self.fast_dtype)
             torch.autocast_increment_nesting()
         else:
             self.prev = torch.is_autocast_enabled()
@@ -322,6 +336,11 @@ class autocast:
                 torch.clear_autocast_cache()
             self.custom_device_mod.set_autocast_enabled(self._enabled)
             self.custom_device_mod.set_autocast_dtype(self.fast_dtype)
+        elif self.device == 'mps':
+            if torch.autocast_decrement_nesting() == 0:
+                torch.clear_autocast_cache()
+            torch.set_autocast_mps_enabled(self.prev)
+            torch.set_autocast_mps_dtype(self.prev_fastdtype)
         else:
             if torch.autocast_decrement_nesting() == 0:
                 torch.clear_autocast_cache()

@@ -62,8 +62,8 @@ def set_device_states(devices, states) -> None:
             torch.cuda.set_rng_state(state)
 
 def _get_autocast_kwargs():
-    gpu_autocast_kwargs = {"enabled": torch.is_autocast_enabled(),
-                           "dtype": torch.get_autocast_gpu_dtype(),
+    gpu_autocast_kwargs = {"enabled": torch.is_autocast_enabled() or torch.is_autocast_mps_enabled(),
+                           "dtype": torch.get_autocast_mps_dtype() if torch.backends.mps.is_available() else torch.get_autocast_gpu_dtype(),
                            "cache_enabled": torch.is_autocast_cache_enabled()}
 
     cpu_autocast_kwargs = {"enabled": torch.is_autocast_cpu_enabled(),
