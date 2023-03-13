@@ -353,6 +353,7 @@ enum class DispatchKey : uint16_t {
   AutocastCPU,
   AutocastXPU,
   AutocastHPU,
+  AutocastMPS,
   // Naughtily, AutocastCUDA is also being used for XLA.  In the terminal state,
   // it probably should get its own Autocast key
   AutocastCUDA,

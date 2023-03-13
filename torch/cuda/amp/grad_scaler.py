@@ -15,7 +15,7 @@ class _MultiDeviceReplicator:
     Lazily serves copies of a tensor to requested devices.  Copies are cached per-device.
     """
     def __init__(self, master_tensor: torch.Tensor) -> None:
-        assert master_tensor.is_cuda or master_tensor.device.type == 'xla'
+        assert master_tensor.is_cuda or master_tensor.device.type == 'xla' or master_tensor.device.type == 'mps'
         self.master = master_tensor
         self._per_device_tensors: Dict[torch.device, torch.Tensor] = {}
 
@@ -163,7 +163,7 @@ class GradScaler:
 
         # Short-circuit for the common case.
         if isinstance(outputs, torch.Tensor):
-            assert outputs.is_cuda or outputs.device.type == 'xla'
+            assert outputs.is_cuda or outputs.device.type == 'xla' or outputs.device.type == 'mps'
             if self._scale is None:
                 self._lazy_init_scale_growth_tracker(outputs.device)
             assert self._scale is not None
@@ -174,7 +174,7 @@ class GradScaler:
 
         def apply_scale(val):
             if isinstance(val, torch.Tensor):
-                assert val.is_cuda or val.device.type == 'xla'
+                assert val.is_cuda or val.device.type == 'xla' or val.device.type == 'mps'
                 if len(stash) == 0:
                     if self._scale is None:
                         self._lazy_init_scale_growth_tracker(val.device)
@@ -278,7 +278,7 @@ class GradScaler:
 
         # FP32 division can be imprecise for certain compile options, so we carry out the reciprocal in FP64.
         assert self._scale is not None
-        inv_scale = self._scale.double().reciprocal().float()
+        inv_scale = self._scale.float().reciprocal().float() if torch.backends.mps.is_available() else self._scale.double().reciprocal().float()
         found_inf = torch.full((1,), 0.0, dtype=torch.float32, device=self._scale.device)
 
         optimizer_state["found_inf_per_device"] = self._unscale_grads_(optimizer, inv_scale, found_inf, False)
