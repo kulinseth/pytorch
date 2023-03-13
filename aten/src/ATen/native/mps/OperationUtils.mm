@@ -9,8 +9,19 @@ void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds, 
   mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE);
 }
 
-void runMPSGraphExecutable(MPSStream *mpsStream, NSObject* theExecutable, NSDictionary *feeds, NSDictionary *results) {
-  mpsStream->executeMPSGraph(theExecutable, feeds, results, SyncType::COMMIT_ADAPTIVE);
+void runMPSGraphExecutable(MPSStream *mpsStream, MPSGraph* mpsGraph, MPSGraphTensor* outputTensor, NSDictionary *feeds, NSDictionary *shapes, NSDictionary *results) {
+  @autoreleasepool {
+    MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
+    [compilationDescriptor disableTypeInference];
+
+    MPSGraphExecutable* executable = [[mpsGraph compileWithDevice:nil
+                                                            feeds:shapes
+                                                    targetTensors:@[outputTensor]
+                                                 targetOperations:nil
+                                              compilationDescriptor:compilationDescriptor] retain];
+
+    mpsStream->executeMPSGraph(executable, feeds, results, SyncType::COMMIT_ADAPTIVE);
+  }
 }
 
 MPSDataType getMPSDataType(ScalarType scalar_type) {

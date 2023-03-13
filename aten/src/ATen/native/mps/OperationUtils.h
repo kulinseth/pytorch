@@ -42,10 +42,13 @@ void runMPSGraph(
     NSDictionary* results);
 
 void runMPSGraphExecutable(
-  MPSStream *metalStream,
-  NSObject* theExecutable,
+  MPSStream *mpsStream,
+  MPSGraph* mpsGraph,
+  MPSGraphTensor* outputTensor,
   NSDictionary *feeds,
+  NSDictionary *shapes,
   NSDictionary *results);
+
 
 MPSDataType getMPSDataType(ScalarType scalar_type);
 MPSDataType getMPSScalarType(ScalarType scalar_type);

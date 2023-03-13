@@ -178,18 +178,9 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
       shapes[cachedGraph->secondaryTensor] = [[[MPSGraphShapedType alloc] initWithShape:nil dataType:getMPSScalarType(otherDataType)] autorelease];
       if (cachedGraph->alphaTensor) {
         shapes[cachedGraph->alphaTensor] = [[[MPSGraphShapedType alloc] initWithShape:@[@1] dataType:getMPSScalarType(otherDataType)] autorelease];
-
       }
 
-      MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
-      [compilationDescriptor disableTypeInference];
-
-      MPSGraphExecutable* executable = [[cachedGraph->graph() compileWithDevice:nil
-                                                                          feeds:shapes
-                                                                  targetTensors:@[cachedGraph->outputTensor]
-                                                               targetOperations:nil
-                                                           compilationDescriptor:compilationDescriptor] retain];
-      runMPSGraphExecutable(mpsStream, executable, feeds, results);
+      runMPSGraphExecutable(mpsStream, cachedGraph->graph(), cachedGraph->outputTensor, feeds, shapes, results);
     } else {
       runMPSGraph(mpsStream, cachedGraph->graph(), feeds, results);
     }

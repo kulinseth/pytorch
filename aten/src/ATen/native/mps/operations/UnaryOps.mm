@@ -68,15 +68,7 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
       NSDictionary<MPSGraphTensor*, MPSGraphShapedType *>* shapes = @{
         cachedGraph->inputTensor_ : [[[MPSGraphShapedType alloc] initWithShape:nil dataType:getMPSScalarType(self.scalar_type())] autorelease]
       };
-      MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
-      [compilationDescriptor disableTypeInference];
-
-      MPSGraphExecutable* executable = [[cachedGraph->graph() compileWithDevice:nil
-                                                              feeds:shapes
-                                                      targetTensors:@[cachedGraph->outputTensor_]
-                                                    targetOperations:nil
-                                              compilationDescriptor:compilationDescriptor] retain];
-      runMPSGraphExecutable(getCurrentMPSStream(), executable, feeds, results);
+      runMPSGraphExecutable(getCurrentMPSStream(), cachedGraph->graph(), cachedGraph->outputTensor_, feeds, shapes, results);
     } else {
       runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
     }

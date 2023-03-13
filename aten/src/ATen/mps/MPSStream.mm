@@ -156,8 +156,7 @@ void MPSStream::copy_and_sync(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer, 
 }
 
 void
-MPSStream::executeMPSGraph(NSObject* theExecutable, NSDictionary* feeds, NSDictionary* results, SyncType syncType) {
-  MPSGraphExecutable *executable = (MPSGraphExecutable *)theExecutable;
+MPSStream::executeMPSGraph(MPSGraphExecutable* executable, NSDictionary* feeds, NSDictionary* results, SyncType syncType) {
   dispatch_sync(_serialQueue, ^() {
     @autoreleasepool {
       NSMutableArray *inputs = [NSMutableArray arrayWithCapacity:[[executable feedTensors] count]];

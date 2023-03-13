@@ -300,15 +300,7 @@ void reduction_out_mps(
       NSDictionary<MPSGraphTensor*, MPSGraphShapedType *>* shapes = @{
         cachedGraph->inputTensor_ : [[[MPSGraphShapedType alloc] initWithShape:nil dataType:getMPSScalarType(input_t.scalar_type())] autorelease]
       };
-      MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
-      [compilationDescriptor disableTypeInference];
-
-      MPSGraphExecutable* executable = [[cachedGraph->graph() compileWithDevice:nil
-                                                              feeds:shapes
-                                                      targetTensors:@[cachedGraph->outputTensor_]
-                                                    targetOperations:nil
-                                              compilationDescriptor:compilationDescriptor] retain];
-      runMPSGraphExecutable(stream, executable, feeds, results);
+      runMPSGraphExecutable(stream, cachedGraph->graph(), cachedGraph->outputTensor_, feeds, shapes, results);
     } else {
       runMPSGraph(stream, cachedGraph->graph(), feeds, results);
     }
