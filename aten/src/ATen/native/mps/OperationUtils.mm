@@ -9,6 +9,21 @@ void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds, 
   mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE);
 }
 
+void runMPSGraphExecutable(MPSStream *mpsStream, MPSGraph* mpsGraph, MPSGraphTensor* outputTensor, NSDictionary *feeds, NSDictionary *shapes, NSDictionary *results) {
+  @autoreleasepool {
+    MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
+    [compilationDescriptor disableTypeInference];
+
+    MPSGraphExecutable* executable = [[mpsGraph compileWithDevice:nil
+                                                            feeds:shapes
+                                                    targetTensors:@[outputTensor]
+                                                 targetOperations:nil
+                                              compilationDescriptor:compilationDescriptor] retain];
+
+    mpsStream->executeMPSGraph(executable, feeds, results, SyncType::COMMIT_ADAPTIVE);
+  }
+}
+
 MPSDataType getMPSDataType(ScalarType scalar_type) {
   switch (scalar_type) {
     case ScalarType::Float:
@@ -148,8 +163,7 @@ std::string scalarToMetalTypeString(const c10::ScalarType& scalar_type) {
   }
 }
 
-NSArray<NSNumber*>* getTensorAxes(const Tensor& t) {
-  int64_t ndim = t.dim();
+NSArray<NSNumber*>* getTensorAxes(int64_t ndim) {
   auto axes = [NSMutableArray<NSNumber*> arrayWithCapacity:ndim];
   for (const auto i : c10::irange(ndim)) {
     axes[i] = [NSNumber numberWithInteger:i];
@@ -157,7 +171,15 @@ NSArray<NSNumber*>* getTensorAxes(const Tensor& t) {
   return axes;
 }
 
-NSArray<NSNumber*>* getTensorAxes(const Tensor& t, at::OptionalIntArrayRef dim) {
+NSArray<NSNumber*>* getTensorAxes(const Tensor& t) {
+  return getTensorAxes(t.dim());
+}
+
+NSArray<NSNumber*>* getTensorAxes(const IntArrayRef& sizes) {
+  return getTensorAxes(sizes.size());
+}
+
+NSArray<NSNumber*>* getTensorAxes(const IntArrayRef& sizes, at::OptionalIntArrayRef dim) {
   if (dim.has_value() && dim.value().size() != 0) {
     IntArrayRef dimValues = dim.value();
     int ndim = dimValues.size();
@@ -169,7 +191,7 @@ NSArray<NSNumber*>* getTensorAxes(const Tensor& t, at::OptionalIntArrayRef dim) 
     return axes;
   }
 
-  return getTensorAxes(t);
+  return getTensorAxes(sizes);
 }
 
 std::string getMPSShapeString(MPSShape* shape) {
@@ -186,16 +208,21 @@ std::string getArrayRefString(const IntArrayRef s) {
   return ss.str();
 }
 
-std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype) {
-  std::string str;
-  // The key format per tensor would look like ":Float32[1,1,1,10]:"
-  for (const Tensor& tensor : tensors) {
-    str += ":";
-    if (tensor.defined()) {
-      str += getMPSTypeString(tensor.scalar_type(), short_dtype) + "[";
-      // if tensor is a scalar
-      if (tensor.dim() == 0) {
-        str += "Scalar";
+std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype, bool disable_type_inference) {
+    std::string str;
+    // The key format per tensor would look like ":Float32[1,1,1,10]:"
+    for (const Tensor& tensor: tensors) {
+      str += ":";
+      if (tensor.defined()) {
+        str += getMPSTypeString(tensor.scalar_type(), short_dtype) + "[";
+        // if tensor is a scalar
+        if (tensor.dim() == 0) {
+          str += "Scalar";
+        } else {
+          const NSString* ns_shape_key = [[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","];
+          str += (disable_type_inference ? std::to_string(tensor.dim()) : std::string(ns_shape_key.UTF8String));
+        }
+        str += "]";
       } else {
         const NSString* ns_shape_key = [[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","];
         str += std::string(ns_shape_key.UTF8String);

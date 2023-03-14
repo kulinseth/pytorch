@@ -161,6 +161,48 @@ void MPSStream::copy_and_sync(id<MTLBuffer> srcBuffer,
       srcBuffer, dstBuffer, length, srcOffset, dstOffset, !non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT);
 }
 
+void
+MPSStream::executeMPSGraph(MPSGraphExecutable* executable, NSDictionary* feeds, NSDictionary* results, SyncType syncType) {
+  dispatch_sync(_serialQueue, ^() {
+    @autoreleasepool {
+      NSMutableArray *inputs = [NSMutableArray arrayWithCapacity:[[executable feedTensors] count]];
+      NSUInteger inputIndex = 0;
+
+      for (MPSGraphTensor *tensor in [executable feedTensors]) {
+        inputs[inputIndex++] = feeds[tensor];
+      }
+
+      NSMutableArray *outputs = [NSMutableArray arrayWithCapacity:[[executable targetTensors] count]];
+      NSUInteger ouputIndex = 0;
+
+      for (MPSGraphTensor *tensor in [executable targetTensors]) {
+        outputs[ouputIndex++] = results[tensor];
+      }
+
+      MPSGraphExecutableExecutionDescriptor *executionDescriptor =
+                        [[MPSGraphExecutableExecutionDescriptor new] autorelease];
+
+      executionDescriptor.completionHandler = ^(NSArray<MPSGraphTensorData *> * _Nonnull,
+                                                NSError * _Nullable) {
+
+      };
+#if USE_COMMIT_AND_CONTINUE
+      [executable encodeToCommandBuffer:commandBuffer()
+                            inputsArray:inputs
+                           resultsArray:outputs
+                    executionDescriptor:executionDescriptor];
+      synchronize(syncType);
+#else
+      commit(true);
+      [executable runAsyncWithMTLCommandQueue:_commandQueue
+                                  inputsArray:inputs
+                                  resultsArray:outputs
+                          executionDescriptor:executionDescriptor];
+#endif // !USE_MPSCOMMANDBUFFER
+    }
+  });
+}
+
 void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results, SyncType syncType) {
   dispatch_sync(_serialQueue, ^() {
 #if USE_COMMIT_AND_CONTINUE
