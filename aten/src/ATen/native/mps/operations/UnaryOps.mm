@@ -25,9 +25,10 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
     output.copy_(self);
     return;
   }
+  bool disableTypeInference = true;
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
-    string key = op_name + getTensorsStringKey({self, output});
+    string key = op_name + getTensorsStringKey({self, output}, false, disableTypeInference);
     auto cachedGraph = cache_->LookUpAs<MPSUnaryCachedGraph>(key);
 
     if(!cachedGraph) {
@@ -36,7 +37,9 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
         @autoreleasepool {
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new MPSUnaryCachedGraph(mpsGraph);
-          newCachedGraph->inputTensor_ = mpsGraphRankedPlaceHolder(mpsGraph, self);
+          newCachedGraph->inputTensor_ = disableTypeInference ?
+                mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(self.scalar_type())) :
+                mpsGraphRankedPlaceHolder(mpsGraph, self);
           MPSGraphTensor* castTensor = newCachedGraph->inputTensor_;
           // Integer input must be cast to float if output is float
           if (isIntegralType(self.scalar_type(), true) && isFloatingType(output.scalar_type())) {
@@ -61,7 +64,14 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
-    runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
+    if (disableTypeInference) {
+      NSDictionary<MPSGraphTensor*, MPSGraphShapedType *>* shapes = @{
+        cachedGraph->inputTensor_ : [[[MPSGraphShapedType alloc] initWithShape:nil dataType:getMPSScalarType(self.scalar_type())] autorelease]
+      };
+      runMPSGraphExecutable(getCurrentMPSStream(), cachedGraph->graph(), cachedGraph->outputTensor_, feeds, shapes, results);
+    } else {
+      runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
+    }
   }
 }
 
