@@ -71,6 +71,8 @@ public:
                      size_t length, size_t srcOffset, size_t dstOffset, bool non_blocking);
   void flush();
   void executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results, SyncType syncType = SyncType::NONE);
+  void executeMPSGraph(MPSGraphExecutable* executable, NSDictionary* feeds, NSDictionary* results, SyncType syncType = SyncType::NONE);
+
   void addCompletedHandler(MTLCommandBufferHandler block);
 
   /// Get the MPS device index that this stream is associated with.
