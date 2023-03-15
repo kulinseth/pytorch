@@ -59,7 +59,7 @@ id<MTLComputePipelineState> MPSDevice::metalIndexingFunction(const std::string& 
     return state;
   }
 
-  id<MTLFunction> indexFunction = [[_mtl_indexing_library newFunctionWithName: [NSString stringWithUTF8String: kernel.c_str()]] autorelease];
+  id<MTLFunction> indexFunction = [[indexing_lib newFunctionWithName: [NSString stringWithUTF8String: kernel.c_str()]] autorelease];
   TORCH_CHECK(indexFunction, "Failed to load the Metal Shader function: ", kernel, ", error: ", [[error description] UTF8String]);
 
   state = [_mtl_device newComputePipelineStateWithFunction:indexFunction error:&error];

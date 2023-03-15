@@ -127,7 +127,7 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
         }
 
         indexSelectPSO = [[device newComputePipelineStateWithFunction: indexKernelFunction
-                                                                                            error: &error] autorelease];
+                                                                error: &error] autorelease];
         TORCH_CHECK(indexSelectPSO, "Failed to created pipeline state object, error: ", [[error description] UTF8String]);
       }
 
