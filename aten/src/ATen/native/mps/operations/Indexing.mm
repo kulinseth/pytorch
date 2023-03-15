@@ -270,7 +270,7 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
     return out_;
   }
 
-  bool contiguous_output = (out_.is_contiguous() && !out_.is_view());
+  bool contiguous_output = out_.is_contiguous();
   Tensor out = out_;
   if (!contiguous_output) {
     out = at::native::empty_mps(
