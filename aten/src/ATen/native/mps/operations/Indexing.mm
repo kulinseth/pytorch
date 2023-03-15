@@ -300,7 +300,7 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
 
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
-    string key = "nonzero_out_mps" + getTensorsStringKey(self, false, true);
+    string key = "nonzero_out_mps" + getTensorsStringKey(self);
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
 
     if(!cachedGraph) {
