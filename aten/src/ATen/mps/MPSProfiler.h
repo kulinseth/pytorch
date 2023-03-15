@@ -162,7 +162,7 @@ public:
     // prints graph or native kernel info (id/key/run_count) before execution
     KERNEL_INFO      = (1 << 0),
     // prints copy info (src/dst tensors/buffers, size, etc.)
-    BLIT_COPY_INFO   = (1 << 1),
+    COPY_INFO        = (1 << 1),
     // prints accumulated GPU times for kernels before process terminates
     KERNEL_PROFILING = (1 << 2),
     // prints memory allocation info from MPSAllocator
@@ -200,7 +200,7 @@ public:
   }
   bool isCopyProfilingEnabled() const {
     return (m_signpost_types & SignpostTypes::BLIT_COPY) ||
-           (m_log_options & LogOptions::BLIT_COPY_INFO);
+           (m_log_options & LogOptions::COPY_INFO);
   }
 
   uint32_t getSignpostTypes() const { return m_signpost_types; }

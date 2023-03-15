@@ -174,7 +174,11 @@ void MPSProfiler::addProfilerCompletedHandler(Profiler::BaseInfo* info, Signpost
       }
     }
     // logging the copy/kernel info is enabled via the env-var defined in kEVLogProfileInfoStr
-    if (m_log_options & (LogOptions::BLIT_COPY_INFO | LogOptions::KERNEL_INFO)) {
+    // check if console-logging of copy info is enable
+    if ((info->type == Profiler::BaseInfo::Type::COPY && (m_log_options & LogOptions::COPY_INFO)) ||
+        // or check if console-logging of kernel or graph info is enable
+        ((info->type == Profiler::BaseInfo::Type::KERNEL || info->type == Profiler::BaseInfo::Type::GRAPH) &&
+         (m_log_options & LogOptions::KERNEL_INFO))) {
       fmt::print(stderr, "{}\n", infoStr);
     }
 
