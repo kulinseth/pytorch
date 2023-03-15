@@ -72,9 +72,7 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
 
       MTLSize gridSize = MTLSizeMake(numThreads, 1, 1);
       id<MTLComputeCommandEncoder> computeEncoder = mpsStream->commandEncoder();
-      id<MTLFunction> kernelDataOffsetsFunction = MPSDevice::getInstance()->metalIndexingFunction("kernel_index_offsets", nil);
-      id<MTLComputePipelineState> kernelDataOffsetsPSO = [[device newComputePipelineStateWithFunction: kernelDataOffsetsFunction
-                                                                                                error: &error] autorelease];
+      id<MTLComputePipelineState> kernelDataOffsetsPSO  = MPSDevice::getInstance()->metalIndexingFunction("kernel_index_offsets");
       id<MTLBuffer> kernelDataOffsets = [[device newBufferWithLength: numThreads * sizeof(simd_uint3)
                                                              options: 0] autorelease];
       TORCH_CHECK(kernelDataOffsetsPSO, "Failed to created pipeline state object, error: ", [[error description] UTF8String]);
@@ -87,35 +85,25 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
       [computeEncoder setBytes:&nOffsets length:sizeof(uint32_t) atIndex:4];
 
       NSUInteger kernelOffsetsTGSize = kernelDataOffsetsPSO.maxTotalThreadsPerThreadgroup;
-      if (kernelOffsetsTGSize > numThreads)
+      if (kernelOffsetsTGSize > numThreads) {
           kernelOffsetsTGSize = numThreads;
+      }
 
       MTLSize kernelOffsetsThreadGroupSize = MTLSizeMake(kernelOffsetsTGSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: kernelOffsetsThreadGroupSize];
 
-      MTLFunctionConstantValues* constantValues = [[MTLFunctionConstantValues new] autorelease];
-      [constantValues setConstantValue: &num_indices type:MTLDataTypeUInt atIndex:0];
-
       std::string indexFunction = getIndexFunctionName(inputTensor.scalar_type(), index_select, accumulate);
-      id<MTLFunction> indexKernelFunction = MPSDevice::getInstance()->metalIndexingFunction(indexFunction, constantValues);
-      id<MTLArgumentEncoder> argumentEncoder = [[indexKernelFunction newArgumentEncoderWithBufferIndex:0] autorelease];
-      NSUInteger argumentBufferLength = argumentEncoder.encodedLength;
-      id<MTLBuffer> indexAB = [[device newBufferWithLength:argumentBufferLength options:0] autorelease];
-      [argumentEncoder setArgumentBuffer:indexAB offset:0];
+      id<MTLComputePipelineState> indexSelectPSO = MPSDevice::getInstance()->metalIndexingFunction(indexFunction);
 
+      size_t argumentBufferLength = sizeof(uint64_t) * num_indices;
+      id<MTLBuffer> indexAB = [[device newBufferWithLength:argumentBufferLength options:0] autorelease];
+      uint64_t* indexABContents = (uint64_t*)(indexAB.contents);
       for (uint32_t idx = 0; idx < num_indices; idx++) {
         const Tensor& indexTensor = iter.tensor(idx+2);
-        [argumentEncoder setBuffer: getMTLBufferStorage(indexTensor)
-                            offset: indexTensor.storage_offset() * indexTensor.element_size()
-                           atIndex: idx];
+        indexABContents[idx] = getMTLBufferStorage(indexTensor).gpuAddress + (indexTensor.storage_offset() * indexTensor.element_size());
         TORCH_CHECK(indexTensor.scalar_type() == ScalarType::Long, "index(): Expected dtype int64 for Index");
       }
-
-      // FIXME: PSO needs to be cached
-      id<MTLComputePipelineState> indexSelectPSO = [[device newComputePipelineStateWithFunction: indexKernelFunction
-                                                                                          error: &error] autorelease];
-      TORCH_CHECK(indexSelectPSO, "Failed to created pipeline state object, error: ", [[error description] UTF8String]);
 
       for (uint32_t idx = 0; idx < num_indices; idx++) {
         const Tensor& indexTensor = iter.tensor(idx+2);
@@ -129,10 +117,12 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
       [computeEncoder setBuffer:kernelDataOffsets offset:0 atIndex:3];
       [computeEncoder setBuffer:inputBuffer offset:inputTensor.storage_offset() * inputTensor.element_size() atIndex:4];
       [computeEncoder setBuffer:outputBuffer offset:outputTensor.storage_offset() * outputTensor.element_size() atIndex:5];
+      [computeEncoder setBytes:&num_indices length:sizeof(uint32_t) atIndex:6];
 
       NSUInteger tgSize = indexSelectPSO.maxTotalThreadsPerThreadgroup;
-      if (tgSize > numThreads)
+      if (tgSize > numThreads) {
           tgSize = numThreads;
+      }
 
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize

@@ -13,10 +13,10 @@ namespace mps {
 static std::unique_ptr<MPSDevice> mps_device;
 static c10::once_flag mpsdev_init;
 
-static inline MTLLanguageVersion getMetalLanguageVersion(const id<MTLDevice>& device) {
+static inline MTLLanguageVersion getMetalLanguageVersion(const id<MTLDevice>& device, bool macOS13Plus) {
   // MPS Advanced Indexing needs at least Metal 2.0 (support for Argument Buffers and function constants)
   // host_name attribute needs at least Metal 2.2
-  MTLLanguageVersion languageVersion = MTLLanguageVersion2_2;
+  MTLLanguageVersion languageVersion = macOS13Plus ? MTLLanguageVersion3_0 : MTLLanguageVersion2_2;
 
   TORCH_CHECK([device supportsFamily:MTLGPUFamilyMac2], "Missing Metal support for MTLGPUFamilyMac2");
   return languageVersion;
@@ -29,12 +29,13 @@ MPSDevice* MPSDevice::getInstance() {
   return mps_device.get();
 }
 
-id<MTLFunction> MPSDevice::metalIndexingFunction(const std::string& kernel, MTLFunctionConstantValues* constantValues) {
+id<MTLComputePipelineState> MPSDevice::metalIndexingFunction(const std::string& kernel) {
   TORCH_INTERNAL_ASSERT_DEBUG_ONLY(_mtl_device);
+  static  std::unordered_map<std::string, id<MTLComputePipelineState>> psoCache;
   NSError* error = nil;
   if (!_mtl_indexing_library) {
     MTLCompileOptions *options = [MTLCompileOptions new];
-    [options setLanguageVersion: getMetalLanguageVersion(_mtl_device)];
+    [options setLanguageVersion: getMetalLanguageVersion(_mtl_device, isMacOS13Plus(MacOSVersion::MACOS_VER_13_0_PLUS))];
     [options setFastMathEnabled: YES];
     _mtl_indexing_library = [_mtl_device newLibraryWithSource: [NSString stringWithCString: mps::indexing_metal_shaders encoding:NSASCIIStringEncoding]
                                                       options: options
@@ -42,18 +43,18 @@ id<MTLFunction> MPSDevice::metalIndexingFunction(const std::string& kernel, MTLF
     TORCH_CHECK(_mtl_indexing_library, "Failed to create indexing library, error: ", [[error description] UTF8String]);
   }
 
-  id<MTLFunction> indexFunction = nil;
-  if (constantValues) {
-    indexFunction = [[_mtl_indexing_library newFunctionWithName: [NSString stringWithUTF8String: kernel.c_str()]
-                                                constantValues: constantValues
-                                                         error: &error] autorelease];
-  } else {
-    indexFunction = [[_mtl_indexing_library newFunctionWithName: [NSString stringWithUTF8String: kernel.c_str()]] autorelease];
+  id<MTLComputePipelineState> state = psoCache[kernel];
+  if (state) {
+    return state;
   }
 
-  TORCH_CHECK(indexFunction, "Failed to create specialized function state object: ", kernel, ", error: ", [[error description] UTF8String]);
+  id<MTLFunction> indexFunction = [[_mtl_indexing_library newFunctionWithName: [NSString stringWithUTF8String: kernel.c_str()]] autorelease];
+  TORCH_CHECK(indexFunction, "Failed to load the Metal Shader function: ", kernel, ", error: ", [[error description] UTF8String]);
 
-  return indexFunction;
+  state = [_mtl_device newComputePipelineStateWithFunction:indexFunction error:&error];
+  TORCH_CHECK(state, error.localizedDescription.UTF8String);
+  psoCache[kernel] = state;
+  return state;
 }
 
 MPSDevice::~MPSDevice() {
