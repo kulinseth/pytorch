@@ -34,9 +34,8 @@ MPSDevice* MPSDevice::getInstance() {
   return mps_device.get();
 }
 
-id<MTLComputePipelineState> MPSDevice::metalIndexingFunction(const std::string& kernel) {
+id<MTLLibrary> MPSDevice::getMetalIndexingLibrary() {
   TORCH_INTERNAL_ASSERT_DEBUG_ONLY(_mtl_device);
-  static  std::unordered_map<std::string, id<MTLComputePipelineState>> psoCache;
   NSError* error = nil;
   if (!_mtl_indexing_library) {
     MTLCompileOptions *options = [MTLCompileOptions new];
@@ -47,7 +46,14 @@ id<MTLComputePipelineState> MPSDevice::metalIndexingFunction(const std::string& 
                                                         error: &error];
     TORCH_CHECK(_mtl_indexing_library, "Failed to create indexing library, error: ", [[error description] UTF8String]);
   }
+  return _mtl_indexing_library;
+}
 
+id<MTLComputePipelineState> MPSDevice::metalIndexingFunction(const std::string& kernel) {
+  TORCH_INTERNAL_ASSERT_DEBUG_ONLY(_mtl_device);
+  NSError* error = nil;
+  static std::unordered_map<std::string, id<MTLComputePipelineState>> psoCache;
+  id<MTLLibrary> indexing_lib = getMetalIndexingLibrary();
   id<MTLComputePipelineState> state = psoCache[kernel];
   if (state) {
     return state;
