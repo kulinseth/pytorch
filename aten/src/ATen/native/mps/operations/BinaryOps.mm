@@ -193,15 +193,7 @@ void binaryOpTensor(const Tensor& self,
     };
 
     if (disableTypeInference) {
-      NSMutableDictionary<MPSGraphTensor*, MPSGraphShapedType *>* shapes = [[NSMutableDictionary new] autorelease];
-
-      shapes[cachedGraph->primaryTensor] = [[[MPSGraphShapedType alloc] initWithShape:nil dataType:getMPSScalarType(inputDataType)] autorelease];
-      shapes[cachedGraph->secondaryTensor] = [[[MPSGraphShapedType alloc] initWithShape:nil dataType:getMPSScalarType(otherDataType)] autorelease];
-      if (cachedGraph->alphaTensor) {
-        shapes[cachedGraph->alphaTensor] = [[[MPSGraphShapedType alloc] initWithShape:@[@1] dataType:getMPSScalarType(otherDataType)] autorelease];
-      }
-
-      runMPSGraphExecutable(mpsStream, cachedGraph->graph(), cachedGraph->outputTensor, feeds, shapes, results);
+      runMPSGraphExecutable(mpsStream, cachedGraph, feeds, results);
     } else {
       runMPSGraph(mpsStream, cachedGraph->graph(), feeds, results);
     }
