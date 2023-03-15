@@ -157,15 +157,13 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool
       }
     }
 
-    size_t size_to_copy = src.nbytes();
+    size_t size_to_copy = dst.nbytes();
     // In case of dtype change, first convert src inplace
     if (src_.dtype() != dst.dtype()) {
       copy_cast_mps(dst, src, tmpBuffer, sourceBuffer, non_blocking);
     }
 
     if (needsBlit) {
-      size_to_copy = (size_to_copy / src.element_size()) * dst.element_size();
-
       // If there's anything wrong with source, we shouldn't return dst_ silently and must error out.
       TORCH_INTERNAL_ASSERT(sourceBuffer && dst_tensor_nbytes > 0);
 
