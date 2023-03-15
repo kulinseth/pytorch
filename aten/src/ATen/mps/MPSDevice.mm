@@ -16,7 +16,12 @@ static c10::once_flag mpsdev_init;
 static inline MTLLanguageVersion getMetalLanguageVersion(const id<MTLDevice>& device, bool macOS13Plus) {
   // MPS Advanced Indexing needs at least Metal 2.0 (support for Argument Buffers and function constants)
   // host_name attribute needs at least Metal 2.2
-  MTLLanguageVersion languageVersion = macOS13Plus ? MTLLanguageVersion3_0 : MTLLanguageVersion2_2;
+  MTLLanguageVersion languageVersion = MTLLanguageVersion2_2;
+#if defined(__MAC_13_0)
+  if (macOS13Plus) {
+    languageVersion = MTLLanguageVersion3_0;
+  }
+#endif
 
   TORCH_CHECK([device supportsFamily:MTLGPUFamilyMac2], "Missing Metal support for MTLGPUFamilyMac2");
   return languageVersion;
