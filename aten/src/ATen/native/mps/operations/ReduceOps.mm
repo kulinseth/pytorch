@@ -297,10 +297,7 @@ void reduction_out_mps(
     };
 
     if (disableTypeInference) {
-      NSDictionary<MPSGraphTensor*, MPSGraphShapedType *>* shapes = @{
-        cachedGraph->inputTensor_ : [[[MPSGraphShapedType alloc] initWithShape:nil dataType:getMPSScalarType(input_t.scalar_type())] autorelease]
-      };
-      runMPSGraphExecutable(stream, cachedGraph->graph(), cachedGraph->outputTensor_, feeds, shapes, results);
+      runMPSGraphExecutable(stream, cachedGraph, feeds, results);
     } else {
       runMPSGraph(stream, cachedGraph->graph(), feeds, results);
     }
