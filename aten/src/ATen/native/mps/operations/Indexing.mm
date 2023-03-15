@@ -394,7 +394,7 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_){
   if (!contiguous_output) {
     out_.copy_(out);
   }
- 
+
   return out_;
 }
 
