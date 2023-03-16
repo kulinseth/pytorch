@@ -17,6 +17,7 @@ MPSStream::MPSStream(Stream stream) : _stream(stream) {
   TORCH_CHECK(_stream.device_type() == DeviceType::MPS);
   _serialQueue = dispatch_queue_create("metal gpu stream", nullptr);
   _executionDescriptor = [MPSGraphExecutionDescriptor new];
+  _executableExecutionDescriptor = [MPSGraphExecutableExecutionDescriptor new];
   _executionDescriptor.completionHandler = ^(NSDictionary<MPSGraphTensor *,
                                              MPSGraphTensorData *> * resultsDictionary,
                                              NSError * _Nullable error) { };
@@ -155,14 +156,32 @@ void MPSStream::copy_and_sync(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer, 
        !non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT);
 }
 
-void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results, SyncType syncType) {
+void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
+                                SyncType syncType, MPSGraphExecutable* executable) {
   dispatch_sync(_serialQueue, ^() {
 #if USE_COMMIT_AND_CONTINUE
-    [mpsGraph encodeToCommandBuffer:commandBuffer()
-                              feeds:feeds
-                   targetOperations:nil
-                  resultsDictionary:results
-                executionDescriptor:_executionDescriptor];
+    if (executable) {
+      NSMutableArray *inputsArray  = [NSMutableArray arrayWithCapacity:[feeds count]];
+      NSMutableArray *resultsArray = [NSMutableArray arrayWithCapacity:[results count]];
+      NSUInteger inputIndex = 0, ouputIndex = 0;
+      // the order of tensors inserted in the array is important
+      for (MPSGraphTensor *tensor in [executable feedTensors]) {
+        inputsArray[inputIndex++] = feeds[tensor];
+      }
+      for (MPSGraphTensor *tensor in [executable targetTensors]) {
+        resultsArray[ouputIndex++] = results[tensor];
+      }
+      [executable encodeToCommandBuffer:commandBuffer()
+                            inputsArray:inputsArray
+                           resultsArray:resultsArray
+                    executionDescriptor:_executableExecutionDescriptor];
+    } else {
+      [mpsGraph encodeToCommandBuffer:commandBuffer()
+                                feeds:feeds
+                     targetOperations:nil
+                    resultsDictionary:results
+                  executionDescriptor:_executionDescriptor];
+    }
     // mostly the syncType is NONE, but in some cases we may want to sync and wait (e.g., gatherViewTensor)
     synchronize(syncType);
 #else

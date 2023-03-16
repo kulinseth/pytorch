@@ -25,9 +25,10 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
     output.copy_(self);
     return;
   }
+  bool disableTypeInference = true;
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
-    string key = op_name + getTensorsStringKey({self, output});
+    string key = op_name + getTensorsStringKey({self, output}, false, disableTypeInference);
     auto cachedGraph = cache_->LookUpAs<MPSUnaryCachedGraph>(key);
 
     if(!cachedGraph) {
@@ -36,7 +37,9 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
         @autoreleasepool {
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new MPSUnaryCachedGraph(mpsGraph);
-          newCachedGraph->inputTensor_ = mpsGraphRankedPlaceHolder(mpsGraph, self);
+          newCachedGraph->inputTensor_ = disableTypeInference ?
+                mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(self.scalar_type())) :
+                mpsGraphRankedPlaceHolder(mpsGraph, self);
           MPSGraphTensor* castTensor = newCachedGraph->inputTensor_;
           // Integer input must be cast to float if output is float
           if (isIntegralType(self.scalar_type(), true) && isFloatingType(output.scalar_type())) {
@@ -61,7 +64,11 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
-    runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
+    if (disableTypeInference) {
+      runMPSGraphExecutable(getCurrentMPSStream(), cachedGraph, feeds, results);
+    } else {
+      runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
+    }
   }
 }
 
@@ -418,6 +425,7 @@ TORCH_IMPL_FUNC(cumsum_out_mps)
  c10::optional<ScalarType> dtype,
  const Tensor& result) {
 
+  bool macOS13_3_plus = is_macos_13_or_newer(MacOSVersion::MACOS_VER_13_3_PLUS);
   auto nDims = self.dim();
   auto wrapped_dim = maybe_wrap_dim(dim, nDims);
   TORCH_CHECK(wrapped_dim >=0 && wrapped_dim < std::max(1LL, self.ndimension()), "Expected wrapped dim to be between 0 and ", self.ndimension(), " but got ", wrapped_dim , "(original dim is ", dim, ")");
@@ -428,18 +436,26 @@ TORCH_IMPL_FUNC(cumsum_out_mps)
     return;
   }
   auto input = dtype.has_value() ? self.to(dtype.value()) : self;
-  TORCH_CHECK(input.scalar_type() != ScalarType::Long, "MPS does not support cumsum op with int64 input");
+
+  // issue #103810551: cumsum is horribly broken for int8, int16 and as chances for overflow is pretty high, cast to int32
+  // fixed in macOS 13.3
+  bool castInputData = (isIntegralType(input.scalar_type()) &&
+                        input.scalar_type() != ScalarType::Int &&
+                        input.scalar_type() != ScalarType::Long);
+
+  TORCH_CHECK(macOS13_3_plus || input.scalar_type() != ScalarType::Long,
+              "MPS does not support cumsum op with int64 input. Support has been added in macOS 13.3");
+
   mps::unary_op(input, result, "cumsum_out_mp" + std::to_string(dim),
                 ^ MPSGraphTensor* (MPSGraph* mpsGraph, MPSGraphTensor* inputTensor) {
-       // cumsum is horribly broken for int8, int16 and as chances for overflow is pretty high, cast to int32
-       if (isIntegralType(input.scalar_type()) && input.scalar_type() !=ScalarType::Int) {
+
+       if (castInputData) {
            inputTensor = mps::castMPSTensor(mpsGraph, inputTensor, ScalarType::Int);
        }
        auto rc = [mpsGraph cumulativeSumWithTensor: inputTensor
                                               axis: dim
                                               name: nil];
-       if (result.scalar_type()!= input.scalar_type() ||
-           (isIntegralType(input.scalar_type()) && input.scalar_type() !=ScalarType::Int)) {
+       if ((mps::getMPSDataType(result.scalar_type()) != [rc dataType]) || castInputData) {
          return mps::castMPSTensor(mpsGraph, rc, result.scalar_type());
        }
        return rc;

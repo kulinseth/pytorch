@@ -70,7 +70,9 @@ public:
   void copy_and_sync(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer,
                      size_t length, size_t srcOffset, size_t dstOffset, bool non_blocking);
   void flush();
-  void executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results, SyncType syncType = SyncType::NONE);
+  void executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
+                       SyncType syncType = SyncType::NONE, MPSGraphExecutable* executable = nullptr);
+
   void addCompletedHandler(MTLCommandBufferHandler block);
 
   /// Get the MPS device index that this stream is associated with.
@@ -88,6 +90,7 @@ private:
   MTLCommandQueue_t   _commandQueue = nil;
   MPSCommandBuffer*  _commandBuffer = nil;
   MPSGraphExecutionDescriptor *_executionDescriptor = nil;
+  MPSGraphExecutableExecutionDescriptor *_executableExecutionDescriptor = nil;
   void _flush(bool commitAndWait) const;
 
   dispatch_queue_t    _serialQueue = nullptr;

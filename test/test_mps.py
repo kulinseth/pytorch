@@ -139,7 +139,6 @@ def mps_ops_modifier(ops):
         'nn.functional.conv2d': [torch.int64],
         'nn.functional.conv_transpose1d': [torch.int64],
         'nn.functional.conv_transpose2d': [torch.int64],
-        'remainder': [torch.int64],
         'sigmoid': [torch.int64],
         # Accuracy problems
         'pow': [torch.float32],
@@ -263,6 +262,40 @@ class MpsMemoryLeakCheck():
                 self.driver_before, driver_mem_allocated)
 
             raise RuntimeError(msg)
+
+class TestAutocastMPS(TestCase):
+    # Compares no scaling + no autocasting against scaling + autocasting.
+    def _grad_scaling_autocast_test(self, *, atol=1e-3, optimizer_ctor=torch.optim.SGD, optimizer_kwargs=None):
+        try_pickle = False
+
+        def run(data, model, optimizer, scaler, loss_fn, skip_iter, try_scaling_api):
+            for i, (input, target) in enumerate(data):
+                optimizer.zero_grad()
+                with torch.autocast('mps', enabled=try_scaling_api):
+                    output = model(input)
+                    loss = loss_fn(output, target)
+                if try_scaling_api:
+                    scaler.scale(loss).backward()
+                    if i == skip_iter and scaler.is_enabled():
+                        with torch.no_grad():
+                            model[1].weight.grad.fill_(float('inf'))
+                    scaler.step(optimizer)
+                    scaler.update()
+                    if try_pickle:
+                        scaler = pickle.loads(pickle.dumps(scaler))
+                else:
+                    loss.backward()
+                    if (not scaler.is_enabled()) or (i != skip_iter):
+                        optimizer.step()
+            return scaler
+
+    def test_grad_scaling_autocast(self):
+        for optimizer_ctor in (torch.optim.SGD, torch.optim.Adam, torch.optim.AdamW):
+            self._grad_scaling_autocast_test(optimizer_ctor=optimizer_ctor)
+
+    def test_grad_scaling_autocast_fused(self):
+        for optimizer_ctor in (torch.optim.Adam, torch.optim.AdamW):
+            self._grad_scaling_autocast_test(optimizer_ctor=optimizer_ctor, optimizer_kwargs={"fused": True})
 
 # Expand TestCase class with Memory Leak Detection on MPS device
 class TestCaseMPS(TestCase):
@@ -2031,6 +2064,15 @@ class TestMPS(TestCaseMPS):
         helper([3, 4, 18, 22])
         helper([3, 4, 18, 22, 150])
 
+    def test_contiguous_slice_3d(self):
+        x = torch.randn(2, 3, 3, device="mps")
+        x_cpu = x.detach().clone().cpu()
+        x = x[:1]
+        x_cpu = x_cpu[:1]
+        out = x[:, 0:1, 0:1] * x[:, 1:2, 1:2]
+        out_cpu = x_cpu[:, 0:1, 0:1] * x_cpu[:, 1:2, 1:2]
+        self.assertEqual(out, out_cpu)
+
     def test_view_slice(self):
         # https://github.com/pytorch/pytorch/issues/83995
         NUM_SAMPLES = 60
@@ -2742,7 +2784,7 @@ class TestMPS(TestCaseMPS):
             helper(torch.int64)
         except Exception as e:
             e_string = str(e)
-            self.assertEqual(e_string, "MPS does not support cumsum op with int64 input")
+            self.assertEqual(e_string, "MPS does not support cumsum op with int64 input. Support has been added in macOS 13.3")
 
     def test_gelu_tanh(self):
         def helper(shape):
@@ -3795,6 +3837,15 @@ class TestNLLLoss(TestCaseMPS):
         helper(2, 8, 4, 4, "min", torch.float16)
         helper(2, 8, 4, 4, "min", torch.int64)
 
+    @unittest.skipIf(product_version < 13.3, "Long data type supported from macOS 13.3 and above")
+    def test_reduction_sum_max_long_val(self):
+        x_mps = torch.tensor([sys.maxsize, sys.maxsize - 10, sys.maxsize - 5, sys.maxsize - 18], device="mps")
+        x_cpu = x_mps.detach().clone().cpu()
+
+        res_mps = torch.sum(x_mps)
+        res_cpu = torch.sum(x_cpu)
+        self.assertEqual(res_mps, res_cpu)
+
     # Test forward max
     # Note - don't test grad now
     def test_max_el(self):
@@ -3986,6 +4037,16 @@ class TestNLLLoss(TestCaseMPS):
         helper((1, 1, 3, 3))
         helper((7, 13))
         helper((2, 8, 4, 5))
+
+    @unittest.skip("Test is crashing")
+    def test_reduction_ops_5D(self):
+        def helper(fn, dim):
+            x_cpu = fn(torch.zeros(1, 1, 1, 1, 1), dim=dim)
+            x_mps = fn(torch.zeros(1, 1, 1, 1, 1, device="mps"), dim=dim)
+            self.assertEqual(x_cpu, x_mps.to('cpu'))
+        for fn in [torch.any]:
+            for dim in range(0, 4):
+                helper(fn, dim)
 
     def test_all(self):
         def helper(shape):
@@ -7190,6 +7251,44 @@ class TestViewOpsMPS(TestCaseMPS):
         v[6] = 0
         self.assertEqual(t[1, 1], v[6])
 
+    def test_reshape_storage_offset(self):
+        # issue https://github.com/pytorch/pytorch/issues/95883
+        B = 4
+        T = 1
+
+        lin_cpu = nn.Linear(10, 256)
+        lin_mps = nn.Linear(10, 256, device="mps")
+
+        # Use the same weights and bias as the ones from the cpu
+        lin_mps.weight.data = lin_cpu.weight.data.detach().clone().to("mps").requires_grad_()
+        lin_mps.bias.data = lin_cpu.bias.data.detach().clone().to("mps").requires_grad_()
+
+        x_mps = torch.rand([B, T, 10], device="mps", requires_grad=True)
+        x_cpu = x_mps.detach().clone().cpu().requires_grad_()
+        x_mps = lin_mps(x_mps)
+        x_cpu = lin_cpu(x_cpu)
+
+        self.assertEqual(x_mps.shape, (B, T, 256))
+        self.assertEqual(x_cpu.shape, (B, T, 256))
+
+        cls_token_mps = torch.rand([1, 256], device="mps", requires_grad=True).repeat(B, 1, 1)
+        cls_token_cpu = cls_token_mps.detach().clone().cpu()
+        x_mps = torch.cat([cls_token_mps, x_mps], dim=1)
+        x_cpu = torch.cat([cls_token_cpu, x_cpu], dim=1)
+
+        x_mps = x_mps.transpose(0, 1)
+        x_cpu = x_cpu.transpose(0, 1)
+
+        target_mps = torch.rand_like(x_mps)
+        target_cpu = target_mps.detach().clone().cpu()
+        loss_mps = F.mse_loss(x_mps, target_mps)
+        loss_cpu = F.mse_loss(x_cpu, target_cpu)
+        self.assertEqual(loss_mps, loss_cpu)
+
+        loss_mps.backward()
+        loss_cpu.backward()
+        self.assertEqual(x_mps.grad, x_cpu.grad)
+
     def test_reshape_as_view(self, device="mps"):
         t = torch.ones(5, 5, device=device)
         e = torch.empty((25,), device=device)
@@ -9420,7 +9519,7 @@ class TestConsistency(TestCaseMPS):
         'cummax': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'cummin': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'cumprod': ['f32', 'i16', 'i32', 'i64', 'u8'],
-        'cumsum': ['f32', 'i16', 'i32', 'i64', 'u8'],
+        'cumsum': ['i8', 'b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'deg2rad': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'diag': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'diag_embed': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -10582,9 +10681,6 @@ class TestConsistency(TestCaseMPS):
         'unfold': ['f16', 'f32'],
         'trace': ['f32'],
 
-        # Correctness issues
-        'atanh': ['f32'],
-
         # Unsupported dtype
         'special.ndtr': ['f32'],
         'trapezoid': ['f16', 'f32'],
@@ -11003,6 +11099,7 @@ class TestConsistency(TestCaseMPS):
         'outer',
         'sum_to_size', 'sum',
         'mul',
+        'norm'
     }
 
     BLOCKLIST_MACOS_12 = {
