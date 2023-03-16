@@ -192,11 +192,7 @@ void binaryOpTensor(const Tensor& self,
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    if (disableTypeInference) {
-      runMPSGraphExecutable(mpsStream, cachedGraph, feeds, results);
-    } else {
-      runMPSGraph(mpsStream, cachedGraph->graph(), feeds, results);
-    }
+    runMPSGraph(mpsStream, cachedGraph->graph(), feeds, results, disableTypeInference);
 
     if (needsCopyToOutput) {
       output_.copy_(output);

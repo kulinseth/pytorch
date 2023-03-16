@@ -66,11 +66,8 @@ void unary_op(const Tensor& self,
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
-    if (disableTypeInference) {
-      runMPSGraphExecutable(getCurrentMPSStream(), cachedGraph, feeds, results);
-    } else {
-      runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
-    }
+
+    runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results, disableTypeInference);
   }
 }
 
