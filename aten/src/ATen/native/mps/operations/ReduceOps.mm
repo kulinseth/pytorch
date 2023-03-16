@@ -450,9 +450,19 @@ void impl_func_norm_mps(
   NormOpBlock normOpBlock = nullptr
   ) {
 
+
+  // std::cout << "Input sizes: " << input_tensor.sizes() << std::endl;
+  // std::cout << "Input numel: " << input_tensor.numel() << std::endl;
+  // std::cout << "Output sizes: " << output_t.sizes() << std::endl;
+  // std::cout << "Output numel: " << output_t.numel() << std::endl;
+
+
+  auto p = opt_p.has_value() ? opt_p.get().to<double>() : Scalar(2.0).to<double>();
   if (input_tensor.numel() == 0) {
+    output_t.fill_((p < 0) ? INFINITY : 0);
     return;
   }
+
 
   auto input_t = (input_tensor.sizes().size() == 0) ? input_tensor.view({1}) : input_tensor;
   auto in_dtype = opt_dtype.value_or(input_tensor.scalar_type());
@@ -467,7 +477,6 @@ void impl_func_norm_mps(
 
   auto cache_ = MPSGraphCache::getInstance();
 
-  auto p = opt_p.has_value() ? opt_p.get().to<double>() : Scalar(2.0).to<double>();
   auto reciprocal_p = 1 / p;
   bool pIsZero = (p == 0.0);
   bool pIsPosInf = (p == numeric_limits<double>::infinity());
@@ -537,14 +546,13 @@ void impl_func_norm_mps(
           MPSGraphTensor *outputTensor;
 
           if (pIsZero) {
-              MPSGraphTensor *absoluteTensor = [mpsGraph absoluteWithTensor:inputTensor
-                                                                       name:nil];
-              MPSGraphTensor *powerValTensor = [mpsGraph constantWithScalar:p
-                                                                   dataType:mps_input_dtype];
-              MPSGraphTensor *powerTensor = [mpsGraph powerWithPrimaryTensor:absoluteTensor
-                                                             secondaryTensor:powerValTensor
+              MPSGraphTensor* zeros = [mpsGraph constantWithScalar:0.0 dataType:mps_input_dtype];
+              MPSGraphTensor* ones = [mpsGraph constantWithScalar:1.0 dataType:mps_input_dtype];
+              MPSGraphTensor* nonZeros = [mpsGraph selectWithPredicateTensor:inputTensor
+                                                         truePredicateTensor:ones
+                                                        falsePredicateTensor:zeros
                                                                         name:nil];
-              outputTensor = [mpsGraph reductionSumWithTensor:powerTensor
+              outputTensor = [mpsGraph reductionSumWithTensor:nonZeros
                                                          axes:wrappedAxes
                                                          name:nil];
           }
@@ -631,6 +639,31 @@ TORCH_IMPL_FUNC(norm_dtype_out_mps)
  ScalarType dtype,
  const Tensor& result) {
   impl_func_norm_mps(self, self, opt_p, dim, keepdim, dtype, result, /*cdist=*/false);
+}
+
+TORCH_IMPL_FUNC(linalg_vector_norm_out_mps)
+(const Tensor& self,
+ const Scalar& scalar_ord,
+ OptionalIntArrayRef opt_dim,
+ bool keepdim,
+ c10::optional<ScalarType> opt_dtype,
+ const Tensor& result) {
+  // std::cout << "IN NORM 3: " << std::endl;
+  // Tensor self_ = self;
+  // if (!opt_dim.has_value()) {
+  //   self_ = self.reshape(-1);
+  // }
+//   std::cout << "scalar_ord: " << scalar_ord << std::endl;
+//   std::cout << "opt_dim: " << opt_dim.has_value() << std::endl;
+//   if (opt_dim.has_value()) {
+//     std::cout << "opt_dim value: " << opt_dim.value() << std::endl;
+//   }
+//   std::cout << "opt_dtype.has_value(): " << opt_dtype.has_value() << std::endl;
+//  if (opt_dtype.has_value()) {
+//     std::cout << "opt_dtype value: " << opt_dtype.value() << std::endl;
+//   }
+
+  impl_func_norm_mps(self, self, scalar_ord, IntArrayRef{}, keepdim, opt_dtype.value_or(self.scalar_type()), result, /*cdist=*/false);
 }
 
 Tensor _cdist_forward_mps(const Tensor& x1, const Tensor& x2, const double p, c10::optional<int64_t> compute_mode) {
