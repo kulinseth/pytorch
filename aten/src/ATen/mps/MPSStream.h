@@ -71,7 +71,7 @@ public:
                      size_t length, size_t srcOffset, size_t dstOffset, bool non_blocking);
   void flush();
   void executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
-                       SyncType syncType = SyncType::NONE, MPSGraphExecutable* executable = nullptr);
+                       SyncType syncType = SyncType::NONE, bool disableTypeInference = false);
 
   void addCompletedHandler(MTLCommandBufferHandler block);
 
@@ -90,7 +90,7 @@ private:
   MTLCommandQueue_t   _commandQueue = nil;
   MPSCommandBuffer*  _commandBuffer = nil;
   MPSGraphExecutionDescriptor *_executionDescriptor = nil;
-  MPSGraphExecutableExecutionDescriptor *_executableExecutionDescriptor = nil;
+
   void _flush(bool commitAndWait) const;
 
   dispatch_queue_t    _serialQueue = nullptr;

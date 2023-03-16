@@ -17,7 +17,6 @@ MPSStream::MPSStream(Stream stream) : _stream(stream) {
   TORCH_CHECK(_stream.device_type() == DeviceType::MPS);
   _serialQueue = dispatch_queue_create("metal gpu stream", nullptr);
   _executionDescriptor = [MPSGraphExecutionDescriptor new];
-  _executableExecutionDescriptor = [MPSGraphExecutableExecutionDescriptor new];
   _executionDescriptor.completionHandler = ^(NSDictionary<MPSGraphTensor *,
                                              MPSGraphTensorData *> * resultsDictionary,
                                              NSError * _Nullable error) { };
@@ -27,6 +26,7 @@ MPSStream::~MPSStream() {
   [_commandQueue release];
   _commandQueue = nil;
   [_executionDescriptor release];
+  _executionDescriptor = nil;
 
   assert(_commandBuffer == nil);
 }
@@ -157,41 +157,35 @@ void MPSStream::copy_and_sync(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer, 
 }
 
 void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
-                                SyncType syncType, MPSGraphExecutable* executable) {
+                                SyncType syncType, bool disableTypeInference) {
   dispatch_sync(_serialQueue, ^() {
+    @autoreleasepool {
 #if USE_COMMIT_AND_CONTINUE
-    if (executable) {
-      NSMutableArray *inputsArray  = [NSMutableArray arrayWithCapacity:[feeds count]];
-      NSMutableArray *resultsArray = [NSMutableArray arrayWithCapacity:[results count]];
-      NSUInteger inputIndex = 0, ouputIndex = 0;
-      // the order of tensors inserted in the array is important
-      for (MPSGraphTensor *tensor in [executable feedTensors]) {
-        inputsArray[inputIndex++] = feeds[tensor];
+      if (disableTypeInference) {
+        MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
+        [compilationDescriptor disableTypeInference];
+        _executionDescriptor.compilationDescriptor = compilationDescriptor;
+      } else {
+        // there's no enableTypeInference, so we just need to set it to nil to
+        // re-enable type inference
+        _executionDescriptor.compilationDescriptor = nil;
       }
-      for (MPSGraphTensor *tensor in [executable targetTensors]) {
-        resultsArray[ouputIndex++] = results[tensor];
-      }
-      [executable encodeToCommandBuffer:commandBuffer()
-                            inputsArray:inputsArray
-                           resultsArray:resultsArray
-                    executionDescriptor:_executableExecutionDescriptor];
-    } else {
       [mpsGraph encodeToCommandBuffer:commandBuffer()
                                 feeds:feeds
                      targetOperations:nil
                     resultsDictionary:results
                   executionDescriptor:_executionDescriptor];
-    }
-    // mostly the syncType is NONE, but in some cases we may want to sync and wait (e.g., gatherViewTensor)
-    synchronize(syncType);
+      // mostly the syncType is NONE, but in some cases we may want to sync and wait (e.g., gatherViewTensor)
+      synchronize(syncType);
 #else
-    commit(true);
-    [mpsGraph runAsyncWithMTLCommandQueue:_commandQueue
-                                    feeds:feeds
-                         targetOperations:nil
-                        resultsDictionary:results
-                      executionDescriptor:_executionDescriptor];
+      commit(true);
+      [mpsGraph runAsyncWithMTLCommandQueue:_commandQueue
+                                      feeds:feeds
+                          targetOperations:nil
+                          resultsDictionary:results
+                        executionDescriptor:_executionDescriptor];
 #endif
+    }
  });
 }
 
