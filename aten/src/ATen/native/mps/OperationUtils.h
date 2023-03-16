@@ -39,7 +39,8 @@ void runMPSGraph(
     MPSStream* mpsStream,
     MPSGraph* mpsGraph,
     NSDictionary* feeds,
-    NSDictionary* results);
+    NSDictionary* results,
+    bool disableTypeInference = false);
 
 struct MPSCachedGraph;
 
@@ -137,11 +138,8 @@ struct MPSCachedGraph
 
   MPSGraph *graph() const { return (MPSGraph *)_object; }
   NSObject *object() const { return _object; }
-  MPSGraphExecutable *getExecultable() const { return _executable; }
-  void setExecultable(MPSGraphExecutable *executable) { _executable = executable; }
 private:
   NSObject *_object = nullptr;
-  MPSGraphExecutable* _executable = nullptr;
 };
 
 struct MPSUnaryCachedGraph : public MPSCachedGraph

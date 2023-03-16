@@ -296,11 +296,7 @@ void reduction_out_mps(
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    if (disableTypeInference) {
-      runMPSGraphExecutable(stream, cachedGraph, feeds, results);
-    } else {
-      runMPSGraph(stream, cachedGraph->graph(), feeds, results);
-    }
+    runMPSGraph(stream, cachedGraph->graph(), feeds, results, disableTypeInference);
   }
 }
 
