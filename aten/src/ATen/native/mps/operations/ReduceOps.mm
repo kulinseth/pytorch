@@ -514,7 +514,7 @@ void impl_func_norm_mps(
 
   auto stream = at::mps::getCurrentMPSStream();
   @autoreleasepool {
-    NSString* ns_key = [[axes valueForKey:@"description"] componentsJoinedByString:@","];
+    NSString* ns_key = [[wrappedAxes valueForKey:@"description"] componentsJoinedByString:@","];
       string keepdim_info = (keepdim) ? "keepdim=1" : "keepdim=0";
       string tensor_key = cdist ? getTensorsStringKey({input_tensor, other_tensor}) : getTensorsStringKey({input_t});
       string key =  string("norm_out_mps:") + [ns_key UTF8String] + ":" + tensor_key + ":p" + to_string(p) + ":" + keepdim_info;
@@ -648,22 +648,7 @@ TORCH_IMPL_FUNC(linalg_vector_norm_out_mps)
  bool keepdim,
  c10::optional<ScalarType> opt_dtype,
  const Tensor& result) {
-  // std::cout << "IN NORM 3: " << std::endl;
-  // Tensor self_ = self;
-  // if (!opt_dim.has_value()) {
-  //   self_ = self.reshape(-1);
-  // }
-//   std::cout << "scalar_ord: " << scalar_ord << std::endl;
-//   std::cout << "opt_dim: " << opt_dim.has_value() << std::endl;
-//   if (opt_dim.has_value()) {
-//     std::cout << "opt_dim value: " << opt_dim.value() << std::endl;
-//   }
-//   std::cout << "opt_dtype.has_value(): " << opt_dtype.has_value() << std::endl;
-//  if (opt_dtype.has_value()) {
-//     std::cout << "opt_dtype value: " << opt_dtype.value() << std::endl;
-//   }
-
-  impl_func_norm_mps(self, self, scalar_ord, IntArrayRef{}, keepdim, opt_dtype.value_or(self.scalar_type()), result, /*cdist=*/false);
+  impl_func_norm_mps(self, self, scalar_ord, opt_dim.value_or(IntArrayRef{}), keepdim, opt_dtype, result, /*cdist=*/false);
 }
 
 Tensor _cdist_forward_mps(const Tensor& x1, const Tensor& x2, const double p, c10::optional<int64_t> compute_mode) {

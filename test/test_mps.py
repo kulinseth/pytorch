@@ -1466,9 +1466,6 @@ class TestMPS(TestCaseMPS):
         for dim in range(0, B_mps.dim()):
             res_mps = torch.linalg.vector_norm(B_mps, ord=3.5, dim=dim)
             res_cpu = torch.linalg.vector_norm(B_cpu, ord=3.5, dim=dim)
-            # print(res_mps)
-            # print(res_cpu)
-            # print(dim)
             self.assertEqual(res_mps, res_cpu)
 
 
