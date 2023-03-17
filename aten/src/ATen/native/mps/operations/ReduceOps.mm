@@ -449,14 +449,6 @@ void impl_func_norm_mps(
   c10::optional<IntArrayRef> input_broadcasted_shape = c10::nullopt,
   NormOpBlock normOpBlock = nullptr
   ) {
-
-
-  // std::cout << "Input sizes: " << input_tensor.sizes() << std::endl;
-  // std::cout << "Input numel: " << input_tensor.numel() << std::endl;
-  // std::cout << "Output sizes: " << output_t.sizes() << std::endl;
-  // std::cout << "Output numel: " << output_t.numel() << std::endl;
-
-
   auto p = opt_p.has_value() ? opt_p.get().to<double>() : Scalar(2.0).to<double>();
   if (input_tensor.numel() == 0) {
     output_t.fill_((p < 0) ? INFINITY : 0);
