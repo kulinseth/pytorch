@@ -1,4 +1,4 @@
-//  Copyright © 2022 Apple Inc.
+git//  Copyright © 2022 Apple Inc.
 
 #include <ATen/ATen.h>
 #include <ATen/Tensor.h>
@@ -504,6 +504,14 @@ void impl_func_norm_mps(
     return;
   }
 
+  // Cast FP16 to FP32 on macOS Monterey due to precision issues.
+  // This is fixed starting with macOS Ventura.
+  bool castInputData = false;
+  if (!is_macos_13_or_newer(MacOSVersion::MACOS_VER_13_0_PLUS) && mps_input_dtype == MPSDataTypeFloat16) {
+    castInputData = true;
+    mps_input_dtype = MPSDataTypeFloat32;
+  }
+
   auto stream = at::mps::getCurrentMPSStream();
   @autoreleasepool {
     NSString* ns_key = [[wrappedAxes valueForKey:@"description"] componentsJoinedByString:@","];
@@ -529,10 +537,9 @@ void impl_func_norm_mps(
 
           MPSGraphTensor* inputTensor = cdist ? normOpBlock(newCachedGraph, newCachedGraph->inputTensor_, newCachedGraph->otherTensor_) :
                                                 newCachedGraph->inputTensor_;
-          if (opt_dtype.has_value()) {
-            inputTensor = [mpsGraph castTensor:inputTensor
-                                        toType:mps_input_dtype
-                                          name:@"castInputTensor"];
+
+          if (opt_dtype.has_value() || castInputData) {
+            inputTensor = castMPSTensor(mpsGraph, inputTensor, mps_input_dtype);
           }
 
           MPSGraphTensor *outputTensor;
@@ -588,7 +595,7 @@ void impl_func_norm_mps(
             outputTensor= [mpsGraph reshapeTensor:outputTensor withShape:mps::getMPSShape(output_t) name: nil];
           }
 
-          newCachedGraph->outputTensor_ = outputTensor;
+          newCachedGraph->outputTensor_ = castInputData ? castMPSTensor(mpsGraph, outputTensor, output_t.scalar_type()) : outputTensor;
         }
         return newCachedGraph;
       });
