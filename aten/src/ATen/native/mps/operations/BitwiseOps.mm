@@ -176,8 +176,7 @@ void handle_tensor_tensor_binary_op(const at::Tensor& self, const at::Tensor& ot
     return;
   }
   dispatch_sync(stream->queue(), ^(){
-    id<MTLCommandBuffer> buffer = stream->commandBuffer();
-    id<MTLComputeCommandEncoder> commandEncoder = [buffer computeCommandEncoder];
+    id<MTLComputeCommandEncoder> commandEncoder = stream->commandEncoder();
 
     id<MTLBuffer> outBuf = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
     id<MTLBuffer> selfBuf = __builtin_bit_cast(id<MTLBuffer>, self.storage().data());
@@ -190,8 +189,6 @@ void handle_tensor_tensor_binary_op(const at::Tensor& self, const at::Tensor& ot
     [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
     [commandEncoder setBuffer:otherBuf offset:other.storage_offset()*other.itemsize() atIndex:3];
     dispatch1DJob(commandEncoder, cplState, length);
-    [commandEncoder endEncoding];
-    stream->commit(true);
   });
 }
 
@@ -209,8 +206,7 @@ void handle_tensor_scalar_binary_op(const at::Tensor& self, const at::Scalar& ot
     return;
   }
   dispatch_sync(stream->queue(), ^(){
-    id<MTLCommandBuffer> buffer = stream->commandBuffer();
-    id<MTLComputeCommandEncoder> commandEncoder = [buffer computeCommandEncoder];
+    id<MTLComputeCommandEncoder> commandEncoder  = stream->commandEncoder();
 
     id<MTLBuffer> outBuf = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
     id<MTLBuffer> selfBuf = __builtin_bit_cast(id<MTLBuffer>, self.storage().data());
@@ -222,8 +218,6 @@ void handle_tensor_scalar_binary_op(const at::Tensor& self, const at::Scalar& ot
     [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
     [commandEncoder setBytes:&sval length:sizeof(sval) atIndex:3];
     dispatch1DJob(commandEncoder, cplState, length);
-    [commandEncoder endEncoding];
-    stream->commit(true);
   });
 }
 
@@ -314,8 +308,7 @@ at::Tensor& bitwise_not_out_mps (const at::Tensor& self, at::Tensor& output_) {
                                                      getMetalType(self),
                                                      "bitwise_not");
   dispatch_sync(stream->queue(), ^(){
-    id<MTLCommandBuffer> buffer = stream->commandBuffer();
-    id<MTLComputeCommandEncoder> commandEncoder = [buffer computeCommandEncoder];
+    id<MTLComputeCommandEncoder> commandEncoder = stream->commandEncoder();
 
     id<MTLBuffer> outBuf = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
     id<MTLBuffer> selfBuf = __builtin_bit_cast(id<MTLBuffer>, self.storage().data());
@@ -326,8 +319,6 @@ at::Tensor& bitwise_not_out_mps (const at::Tensor& self, at::Tensor& output_) {
     [commandEncoder setBuffer:outBuf offset:output.storage_offset()*output.itemsize() atIndex:1];
     [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
     dispatch1DJob(commandEncoder, cplState, length);
-    [commandEncoder endEncoding];
-    stream->commit(true);
   });
   if (needs_output_copy) {
       output_.copy_(output);

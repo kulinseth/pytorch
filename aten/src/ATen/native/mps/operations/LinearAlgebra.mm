@@ -770,6 +770,7 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
 
   dispatch_sync(mpsStream->queue(), ^(){
     @autoreleasepool {
+      mpsStream->endKernelCoalescing();
       id<MTLCommandBuffer> commandBuffer = mpsStream->commandBuffer();
       uint64_t batchSize = A_.sizes().size() > 2 ? A_.size(0) : 1;
       uint64_t aRows = A_.size(-2);
