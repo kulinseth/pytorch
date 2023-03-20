@@ -71,8 +71,7 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
       }
 
       MTLSize gridSize = MTLSizeMake(numThreads, 1, 1);
-      id<MTLCommandBuffer> commandBuffer = mpsStream->commandBuffer();
-      id<MTLComputeCommandEncoder> computeEncoder = [commandBuffer computeCommandEncoder];
+      id<MTLComputeCommandEncoder> computeEncoder = mpsStream->commandEncoder();
       id<MTLFunction> kernelDataOffsetsFunction = MPSDevice::getInstance()->metalIndexingFunction("kernel_index_offsets", nil);
       id<MTLComputePipelineState> kernelDataOffsetsPSO = [[device newComputePipelineStateWithFunction: kernelDataOffsetsFunction
                                                                                                 error: &error] autorelease];
@@ -138,9 +137,6 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
-
-      [computeEncoder endEncoding];
-      mpsStream->synchronize(SyncType::COMMIT_AND_CONTINUE);
     }
   });
 

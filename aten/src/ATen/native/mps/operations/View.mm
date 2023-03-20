@@ -814,8 +814,8 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst) {
   }
 
   if (src.dim() > 5) {
-  ViewCachedGraph* cachedGraph = createViewGraph(src, dst, src.sizes(), src.strides(),
-                                                 src.storage_offset(), /*needsScatter*/ false);
+    ViewCachedGraph* cachedGraph = createViewGraph(src, dst, src.sizes(), src.strides(),
+                                                   src.storage_offset(), /*needsScatter*/ false);
     return runViewGraph(cachedGraph, src, dst.has_storage() ? dst : output, /*needsScatter*/ false);
   }
 
@@ -825,7 +825,7 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst) {
 
   MPSStream* mpsStream = getCurrentMPSStream();
   dispatch_sync(mpsStream->queue(), ^(){
-    id<MTLComputeCommandEncoder> computeEncoder = [mpsStream->commandBuffer() computeCommandEncoder];
+    id<MTLComputeCommandEncoder> computeEncoder = mpsStream->commandEncoder();
     std::string functionName = getGatherScatterFunctionName(output.scalar_type(), output.dim(), /*needsScatter=*/false);
     id<MTLComputePipelineState> gatherPSO = getPipelineState(MPSDevice::getInstance()->device(),
                                                              functionName,
@@ -861,8 +861,6 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst) {
 
     MTLSize threadsPerThreadgroup = MTLSizeMake(threadsPerThreadgroup_, 1, 1);
     [computeEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadsPerThreadgroup];
-    [computeEncoder endEncoding];
-    mpsStream->synchronize(SyncType::COMMIT_AND_CONTINUE);
   });
 
   return (dst.has_storage()) ? dst : output;
@@ -886,8 +884,7 @@ Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output){
   MPSStream* mpsStream = getCurrentMPSStream();
   dispatch_sync(mpsStream->queue(), ^(){
     @autoreleasepool {
-      id<MTLCommandBuffer> commandBuffer = mpsStream->commandBuffer();
-      id<MTLComputeCommandEncoder> computeEncoder = [commandBuffer computeCommandEncoder];
+      id<MTLComputeCommandEncoder> computeEncoder = mpsStream->commandEncoder();
       std::string functionName = getGatherScatterFunctionName(output.scalar_type(), output.dim(), /*needsScatter=*/true);
       id<MTLComputePipelineState> scatterPSO = getPipelineState(MPSDevice::getInstance()->device(),
                                                                 functionName,
@@ -923,8 +920,6 @@ Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output){
 
       MTLSize threadsPerThreadgroup = MTLSizeMake(threadsPerThreadgroup_, 1, 1);
       [computeEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadsPerThreadgroup];
-      [computeEncoder endEncoding];
-      mpsStream->synchronize(SyncType::COMMIT_AND_CONTINUE);
     }
   });
 
