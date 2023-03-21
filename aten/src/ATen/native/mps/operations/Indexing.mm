@@ -22,6 +22,7 @@
 #include <c10/core/QScheme.h>
 #include <c10/util/SmallVector.h>
 #include <ATen/native/IndexKernel.h>
+#include <ATen/mps/MPSAllocatorInterface.h>
 
 #ifdef __OBJC__
 #include <MetalPerformanceShaders/MetalPerformanceShaders.h>
@@ -73,8 +74,7 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
       MTLSize gridSize = MTLSizeMake(numThreads, 1, 1);
       id<MTLComputeCommandEncoder> computeEncoder = mpsStream->commandEncoder();
       id<MTLComputePipelineState> kernelDataOffsetsPSO  = MPSDevice::getInstance()->metalIndexingFunction("kernel_index_offsets");
-      id<MTLBuffer> kernelDataOffsets = [[device newBufferWithLength: numThreads * sizeof(simd_uint3)
-                                                             options: 0] autorelease];
+      id<MTLBuffer> kernelDataOffsets = (id<MTLBuffer>)getIMPSAllocator()->allocate(numThreads * sizeof(simd_uint3)).get();
       TORCH_CHECK(kernelDataOffsetsPSO, "Failed to created pipeline state object, error: ", [[error description] UTF8String]);
 
       [computeEncoder setComputePipelineState:kernelDataOffsetsPSO];
@@ -99,13 +99,13 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
 #if defined(__MAC_13_0)
       if (is_macos_13_or_newer(MacOSVersion::MACOS_VER_13_0_PLUS)) {
         indexSelectPSO = MPSDevice::getInstance()->metalIndexingFunction(indexFunction);
-        size_t argumentBufferLength = sizeof(uint64_t) * num_indices;
-        indexAB = [[device newBufferWithLength:argumentBufferLength options:0] autorelease];
+        indexAB = (id<MTLBuffer>)getIMPSAllocator(true)->allocate(sizeof(uint64_t) * num_indices).get();
         uint64_t* indexABContents = (uint64_t*)(indexAB.contents);
         for (uint32_t idx = 0; idx < num_indices; idx++) {
           const Tensor& indexTensor = iter.tensor(idx+2);
           indexABContents[idx] = getMTLBufferStorage(indexTensor).gpuAddress + (indexTensor.storage_offset() * indexTensor.element_size());
           TORCH_CHECK(indexTensor.scalar_type() == ScalarType::Long, "index(): Expected dtype int64 for Index");
+          [computeEncoder useResource:getMTLBufferStorage(indexTensor) usage:MTLResourceUsageRead];
         }
       }
       else
@@ -115,7 +115,7 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
         id<MTLFunction> indexKernelFunction = [[lib newFunctionWithName: [NSString stringWithUTF8String: indexFunction.c_str()]] autorelease];
         id<MTLArgumentEncoder> argumentEncoder = [[indexKernelFunction newArgumentEncoderWithBufferIndex:0] autorelease];
         NSUInteger argumentBufferLength = argumentEncoder.encodedLength;
-        indexAB = [[device newBufferWithLength:argumentBufferLength options:0] autorelease];
+        indexAB = (id<MTLBuffer>)getIMPSAllocator(true)->allocate(argumentBufferLength).get();
         [argumentEncoder setArgumentBuffer:indexAB offset:0];
 
         for (uint32_t idx = 0; idx < num_indices; idx++) {
@@ -124,16 +124,12 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
                               offset: indexTensor.storage_offset() * indexTensor.element_size()
                              atIndex: idx];
           TORCH_CHECK(indexTensor.scalar_type() == ScalarType::Long, "index(): Expected dtype int64 for Index");
+          [computeEncoder useResource:getMTLBufferStorage(indexTensor) usage:MTLResourceUsageRead];
         }
 
         indexSelectPSO = [[device newComputePipelineStateWithFunction: indexKernelFunction
                                                                 error: &error] autorelease];
         TORCH_CHECK(indexSelectPSO, "Failed to created pipeline state object, error: ", [[error description] UTF8String]);
-      }
-
-      for (uint32_t idx = 0; idx < num_indices; idx++) {
-        const Tensor& indexTensor = iter.tensor(idx+2);
-        [computeEncoder useResource:getMTLBufferStorage(indexTensor) usage:MTLResourceUsageRead];
       }
 
       [computeEncoder setComputePipelineState:indexSelectPSO];

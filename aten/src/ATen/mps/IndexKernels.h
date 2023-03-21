@@ -134,13 +134,13 @@ kernel void kernel_index_offsets(constant packed_uint3 * strides         [[buffe
                                  constant uint         & num_dimensions  [[buffer(3)]],
                                  constant uint         & num_offsets     [[buffer(4)]],
                                  uint thread_index [[thread_position_in_grid]]) {
+    data_offsets[thread_index] = 0;
     uint32_t idx = thread_index;
     for (uint32_t dim = 0; dim < num_dimensions; dim++) {
         uint32_t remainder = idx % iter_shape[dim];
         idx /= iter_shape[dim];
 
-        for (uint32_t offset = 0; offset < num_offsets; offset++)
-            data_offsets[thread_index][offset] += remainder * strides[dim][offset];
+        data_offsets[thread_index] += remainder * strides[dim];
     }
 }
 
