@@ -54,7 +54,7 @@ void binaryOpTensor(const Tensor& self,
     return;
   }
 
-  if (self.dim() == 1 && other.dim() == 1) {
+  if (self.dim() == 1 || other.dim() == 1 || self.dim() >= 5 || other.dim() >= 5) {
     disableTypeInference = true;
   }
 
