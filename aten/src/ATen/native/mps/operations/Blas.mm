@@ -145,10 +145,9 @@ Tensor& addmv_out_mps_impl(
     string key = "addmv_out_mps_impl" + getTensorsStringKey({self, matMulVec})
                                        + ":" + to_string(beta_.toDouble())
                                        + ":" + to_string(alpha_.toDouble());
-    CachedGraph* cachedGraph = nil;
+    CachedGraph* cachedGraph = cache_->LookUpAs<CachedGraph>(key);
     if(!cachedGraph) {
-
-      mps::MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ mps::MPSCachedGraph * () {
+        cachedGraph = cache_->CreateCachedGraphAs<CachedGraph>(key, ^ mps::MPSCachedGraph * () {
         CachedGraph *newCachedGraph = nil;
 
         @autoreleasepool{
@@ -189,7 +188,6 @@ Tensor& addmv_out_mps_impl(
         }
         return newCachedGraph;
       });
-      cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
 
     Placeholder matMulVecPlaceholder = Placeholder(cachedGraph->matMulVecTensor_, matMulVec);
