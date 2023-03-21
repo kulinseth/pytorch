@@ -119,15 +119,16 @@ Tensor& addmv_out_mps_impl(const Tensor& self,
   Tensor matMulVec = mm(mat, vec.unsqueeze(1)).squeeze(1);
 
   @autoreleasepool {
-    string key = "addmv_out_mps_impl" + getTensorsStringKey({self, matMulVec}) + ":" + to_string(beta_.toDouble()) +
-        ":" + to_string(alpha_.toDouble());
-    CachedGraph* cachedGraph = nil;
-    if (!cachedGraph) {
-      mps::MPSCachedGraph* tmpCachedGraph = cache_->CreateCachedGraph(key, ^mps::MPSCachedGraph*() {
-        CachedGraph* newCachedGraph = nil;
+    string key = "addmv_out_mps_impl" + getTensorsStringKey({self, matMulVec})
+                                       + ":" + to_string(beta_.toDouble())
+                                       + ":" + to_string(alpha_.toDouble());
+    CachedGraph* cachedGraph = cache_->LookUpAs<CachedGraph>(key);
+    if(!cachedGraph) {
+        cachedGraph = cache_->CreateCachedGraphAs<CachedGraph>(key, ^ mps::MPSCachedGraph * () {
+        CachedGraph *newCachedGraph = nil;
 
-        @autoreleasepool {
-          MPSGraph* mpsGraph = mps::make_mps_graph();
+        @autoreleasepool{
+          MPSGraph *mpsGraph = mps::make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
           MPSGraphTensor* matMulVecTensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, matMulVec);
@@ -163,7 +164,6 @@ Tensor& addmv_out_mps_impl(const Tensor& self,
         }
         return newCachedGraph;
       });
-      cachedGraph = static_cast<CachedGraph*>(tmpCachedGraph);
     }
 
     Placeholder matMulVecPlaceholder = Placeholder(cachedGraph->matMulVecTensor_, matMulVec);
