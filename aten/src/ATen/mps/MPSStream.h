@@ -67,15 +67,14 @@ public:
   void endKernelCoalescing();
   void commitAndWait();
   void commitAndContinue();
-  // specialization of commit() with profiling features for kernels.
-  // typically, "handle" is the id<MTLComputePipelineState> of kernel.
-  void commitKernel(void* handle);
   void synchronize(SyncType syncType);
   void fill(id<MTLBuffer> buffer, uint8_t value, size_t length, size_t offset, SyncType syncType = SyncType::NONE);
   void copy(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer,
-            size_t length, size_t srcOffset, size_t dstOffset, SyncType syncType = SyncType::NONE);
+            size_t length, size_t srcOffset, size_t dstOffset,
+            uint64_t profileId, SyncType syncType = SyncType::NONE);
   void copy_and_sync(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer,
-                     size_t length, size_t srcOffset, size_t dstOffset, bool non_blocking);
+                     size_t length, size_t srcOffset, size_t dstOffset,
+                     bool non_blocking, uint64_t profileId);
   void executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
                        SyncType syncType = SyncType::NONE, bool disableTypeInference = false);
 

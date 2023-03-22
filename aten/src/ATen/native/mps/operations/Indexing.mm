@@ -140,6 +140,8 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
+
+      getMPSProfiler().endProfileKernel(indexSelectPSO);
     }
   });
 

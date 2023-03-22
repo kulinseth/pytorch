@@ -197,6 +197,8 @@ void cross_mps_impl(const Tensor& out, const Tensor& input, const Tensor& other,
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
+
+      getMPSProfiler().endProfileKernel(crossPSO);
     }
   });
 }

@@ -117,16 +117,6 @@ void MPSStream::flush() {
   }
 }
 
-void MPSStream::commitKernel(void* handle) {
-  MPSProfiler& profiler = getMPSProfiler();
-  if (profiler.isKernelProfilingEnabled()) {
-      // with profiler enabled, we commit after adding the completedHandler
-      profiler.endProfileKernel(handle);
-  } else {
-    commit();
-  }
-}
-
 void MPSStream::addCompletedHandler(MTLCommandBufferHandler block) {
  dispatch_sync(_serialQueue, ^() {
     @autoreleasepool {
@@ -154,7 +144,8 @@ void MPSStream::fill(id<MTLBuffer> buffer, uint8_t value, size_t length, size_t 
 }
 
 void MPSStream::copy(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer,
-                    size_t length, size_t srcOffset, size_t dstOffset, SyncType syncType) {
+                    size_t length, size_t srcOffset, size_t dstOffset,
+                    uint64_t profileId, SyncType syncType) {
   dispatch_sync(_serialQueue, ^() {
     @autoreleasepool {
       endKernelCoalescing();
@@ -170,7 +161,7 @@ void MPSStream::copy(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer,
       MPSProfiler& profiler = getMPSProfiler();
       // check if copy profiling is enabled
       if (profiler.isCopyProfilingEnabled()) {
-        profiler.endProfileCopy(dstBuffer);
+        profiler.endProfileCopy(profileId, syncType);
       } else {
         synchronize(syncType);
       }
@@ -179,16 +170,25 @@ void MPSStream::copy(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer,
 }
 
 void MPSStream::copy_and_sync(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer, size_t length,
-                              size_t srcOffset, size_t dstOffset, bool non_blocking) {
-  copy(srcBuffer, dstBuffer, length, srcOffset, dstOffset,
+                              size_t srcOffset, size_t dstOffset, bool non_blocking, uint64_t profileId) {
+  copy(srcBuffer, dstBuffer, length, srcOffset, dstOffset, profileId,
        !non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT);
 }
 
 void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
                                 SyncType syncType, bool disableTypeInference) {
+  MPSProfiler& profiler = getMPSProfiler();
+  const bool isGraphProfilingEnabled = profiler.isGraphProfilingEnabled();
+
   dispatch_sync(_serialQueue, ^() {
     @autoreleasepool {
       endKernelCoalescing();
+      if (isGraphProfilingEnabled) {
+        // this function call is only relevant for interval-based Signposts
+        // which exclude schedule time (only includes GPU run time)
+        profiler.beginProfileGPUInterval(mpsGraph);
+      }
+
       if (disableTypeInference) {
         MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
         [compilationDescriptor disableTypeInference];
@@ -205,11 +205,10 @@ void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDicti
                     resultsDictionary:results
                   executionDescriptor:_executionDescriptor];
 
-      MPSProfiler& profiler = getMPSProfiler();
       // check if graph execution profiling is enabled
-      if (profiler.isGraphProfilingEnabled()) {
+      if (isGraphProfilingEnabled) {
         // with profiler enabled, we commit after adding the completedHandler
-        profiler.endProfileKernel(mpsGraph);
+        profiler.endProfileKernel(mpsGraph, SyncType::COMMIT);
       } else {
         // if commitAndContinue is disabled, we need to always commit manually after encoding
         synchronize(_enableCommitAndContinue == false ? SyncType::COMMIT : syncType);

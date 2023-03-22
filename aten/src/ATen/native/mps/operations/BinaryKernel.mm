@@ -174,6 +174,8 @@ void fmax_fmin_mps_impl(TensorIteratorBase& iter, const std::string max_min) {
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
+
+      getMPSProfiler().endProfileKernel(fmaxfminPSO);
     }
   });
 }
