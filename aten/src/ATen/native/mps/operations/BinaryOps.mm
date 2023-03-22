@@ -52,14 +52,20 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
     disableTypeInference = true;
   }
 
-  Tensor output = output_;
+  Tensor output;
   bool needsCopyToOutput = false;
 
   if (!output_.is_contiguous()) {
-    output = output_.contiguous();
+    // std::cout << "output_.is_contiguous: " << output_.is_contiguous() << std::endl;
+    // std::cout << "output_.is_contiguous(mem_format): " << output_.is_contiguous(output_.suggest_memory_format()) << std::endl;
+    // std::cout << output_.suggest_memory_format() << std::endl; 
+    // std::cout << self.suggest_memory_format() << std::endl; 
+    // std::cout << other.suggest_memory_format() << std::endl; 
+    output = at::native::empty_mps(output_.sizes(), output_.scalar_type(), c10::nullopt, kMPS);
     needsCopyToOutput = true;
   // else, determine if this is an in-place operation on a view output
   } else if (output_.storage_offset() && (self.is_alias_of(output_) || other.is_alias_of(output_))) {
+    // std::cout << ">>>>>>> STORAGE OFFSET??\n";
     output = at::native::empty_mps(output_.sizes(), output_.scalar_type(), c10::nullopt, kMPS);
     needsCopyToOutput = true;
   }
