@@ -57,7 +57,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
 
   // determine if this is an in-place operation
   if (self.is_alias_of(output_) || other.is_alias_of(output_)) {
-    if (output.storage_offset() || !output.is_contiguous()) {
+    if (output_.storage_offset() || !output_.is_contiguous()) {
       output = at::native::empty_mps(output_.sizes(), output_.scalar_type(), c10::nullopt, kMPS);
       needsCopyToOutput = true;
     }
