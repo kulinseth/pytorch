@@ -40,7 +40,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
 
   auto new_size = at::infer_size(self.sizes(), other.sizes());
   if (!output_.sizes().equals(new_size)) {
-      output_.resize_(new_size, MemoryFormat::Contiguous);
+      output_.resize_(new_size);
   }
 
   // it's possible to receive empty tensors here
