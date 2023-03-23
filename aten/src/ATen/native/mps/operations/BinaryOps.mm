@@ -40,7 +40,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
 
   auto new_size = at::infer_size(self.sizes(), other.sizes());
   if (!output_.sizes().equals(new_size)) {
-      output_.resize_(new_size);
+      output_.resize_(new_size, MemoryFormat::Contiguous);
   }
 
   // it's possible to receive empty tensors here
@@ -55,10 +55,12 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
   Tensor output;
   bool needsCopyToOutput = false;
 
-  if ((!output_.is_contiguous()) ||
-      (output_.storage_offset() && (self.is_alias_of(output_) || other.is_alias_of(output_)))) {
+  // determine if this is an in-place operation
+  if (self.is_alias_of(output_) || other.is_alias_of(output_)) {
     output = at::native::empty_mps(output_.sizes(), output_.scalar_type(), c10::nullopt, kMPS);
     needsCopyToOutput = true;
+  } else if (!output_.is_contiguous()) {
+    output_.unsafeGetTensorImpl()->empty_tensor_restride(MemoryFormat::Contiguous);
   }
 
   auto inputDataType = self.scalar_type();
