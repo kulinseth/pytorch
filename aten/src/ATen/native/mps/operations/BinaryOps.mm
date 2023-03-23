@@ -52,16 +52,15 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
     disableTypeInference = true;
   }
 
-  Tensor output = output_;
+  Tensor output;
   bool needsCopyToOutput = false;
 
-  if (!output_.is_contiguous()) {
-    output = output_.contiguous();
-    needsCopyToOutput = true;
-  // else, determine if this is an in-place operation on a view output
-  } else if (output_.storage_offset() && (self.is_alias_of(output_) || other.is_alias_of(output_))) {
+  // determine if this is an in-place operation
+  if (self.is_alias_of(output_) || other.is_alias_of(output_)) {
     output = at::native::empty_mps(output_.sizes(), output_.scalar_type(), c10::nullopt, kMPS);
     needsCopyToOutput = true;
+  } else if (!output_.is_contiguous()) {
+    output_.unsafeGetTensorImpl()->empty_tensor_restride(MemoryFormat::Contiguous);
   }
 
   auto inputDataType = self.scalar_type();
