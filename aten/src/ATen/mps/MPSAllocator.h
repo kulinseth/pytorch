@@ -246,7 +246,10 @@ public:
   {
     init_allocator();
   }
-
+  ~MPSHeapAllocatorImpl() {
+    // make sure completion handlers are finished before destruction
+    m_stream->synchronize(SyncType::COMMIT_AND_WAIT);
+  }
   // interface exposed to at::Allocator
   id<MTLBuffer> malloc(size_t size, uint32_t usage);
   // frees a buffer and returns it into buffer pool

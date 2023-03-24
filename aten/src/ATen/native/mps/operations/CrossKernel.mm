@@ -1,6 +1,7 @@
 //  Copyright © 2022 Apple Inc.
 
 #include <ATen/native/mps/OperationUtils.h>
+#include <ATen/mps/MPSProfiler.h>
 #include <ATen/native/Cross.h>
 
 namespace at::native {
@@ -173,6 +174,10 @@ void cross_mps_impl(const Tensor& out, const Tensor& input, const Tensor& other,
                 threadsPerThreadgroup: kernelOffsetsThreadGroupSize];
 
       id<MTLComputePipelineState> crossPSO = crossPipelineState(device, out.scalar_type());
+
+       // this function call is a no-op if MPS Profiler is not enabled
+       getMPSProfiler().beginProfileKernel(crossPSO, "cross", {input, other});
+
       [computeEncoder setComputePipelineState:crossPSO];
       [computeEncoder setBuffer:inputBuffer  offset:input.storage_offset() * input.element_size() atIndex:0];
       [computeEncoder setBuffer:otherBuffer  offset:other.storage_offset() * other.element_size() atIndex:1];
@@ -190,6 +195,8 @@ void cross_mps_impl(const Tensor& out, const Tensor& input, const Tensor& other,
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
+
+      getMPSProfiler().endProfileKernel(crossPSO);
     }
   });
 }
