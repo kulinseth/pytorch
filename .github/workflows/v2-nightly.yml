@@ -57,7 +57,9 @@ jobs:
           # shellcheck disable=SC1090
           set -ex
           ${CONDA_RUN} conda install -y git-lfs
+          pushd benchmark
           ${CONDA_RUN} python install.py --continue_on_fail
+          popd
 
       - name: Run benchmark
         env:
@@ -65,9 +67,10 @@ jobs:
           PY_VERS: 3.8
         shell: arch -arch arm64 bash {0}
         run: |
+          pushd benchmark
           WORKFLOW_HOME="${HOME}/${{ env.OUTPUT_DIR }}/gh${GITHUB_RUN_ID}"
-          ${CONDA_RUN} bash ./.github/scripts/run.sh "${WORKFLOW_HOME}"
-
+          ${CONDA_RUN} bash .github/scripts/run.sh "${WORKFLOW_HOME}"
+          popd
       - name: Generate the bisection config
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
