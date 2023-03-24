@@ -627,6 +627,9 @@ struct TORCH_API MPSAllocator final : public IMPSAllocator {
   void setBufferShape(void* ptr, const IntArrayRef& shape) const override {
     _getAllocImpl().setBufferShape(ptr, shape);
   }
+  std::string formatSize(size_t size) const override {
+    return _getAllocImpl().format_size(size); 
+  }
   size_t getTotalAllocatedMemory() const override {
     return _getAllocImpl().getTotalAllocatedMemory();
   }

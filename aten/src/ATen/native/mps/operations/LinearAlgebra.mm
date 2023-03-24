@@ -3,6 +3,7 @@
 #include <ATen/native/LinearAlgebraUtils.h>
 #include <ATen/native/Resize.h>
 #include <ATen/native/mps/OperationUtils.h>
+#include <ATen/mps/MPSProfiler.h>
 
 namespace at::native {
 namespace mps {
@@ -609,7 +610,7 @@ Tensor& linalg_solve_triangular_mps_impl(const Tensor& A,
                   rightHandSideMatrix:rightHandSideMatrix
                        solutionMatrix:solutionMatrix];
       }
-      mpsStream->commit(true);
+      mpsStream->commit();
     }
   });
   return out;
@@ -851,6 +852,7 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
       uint64_t aElemSize = A_.element_size();
       uint64_t bElemSize = B_.element_size();
 
+      // TODO: cache this filter to not recreate it on each run
       MPSMatrixSolveTriangular *filter = [[[MPSMatrixSolveTriangular alloc] initWithDevice:device
                                                                                      right:!left
                                                                                      upper:upper
@@ -859,6 +861,8 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
                                                                                      order:left ? bRows : bCols
                                                                     numberOfRightHandSides:left ? bCols : bRows
                                                                                      alpha:1.0f] autorelease];
+      // this function call is a no-op if MPS Profiler is not enabled
+      getMPSProfiler().beginProfileKernel(filter, " solve_triangular_mps", {A_, B_});
 
       MPSMatrixDescriptor* sourceMatrixDesc = [MPSMatrixDescriptor matrixDescriptorWithRows:aRows
                                                                                     columns:aCols
@@ -890,7 +894,7 @@ Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool
                   rightHandSideMatrix:rightHandSideMatrix
                        solutionMatrix:solutionMatrix];
       }
-      mpsStream->commit(true);
+      getMPSProfiler().endProfileKernel(filter);
     }
   });
   return out;

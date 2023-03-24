@@ -7,6 +7,8 @@
 #include <ATen/ExpandUtils.h>
 #include <ATen/MemoryOverlap.h>
 #include <ATen/NativeFunctions.h>
+#include <ATen/mps/MPSStream.h>
+#include <ATen/mps/MPSProfiler.h>
 #include <ATen/WrapDimUtilsMulti.h>
 #include <ATen/ceil_div.h>
 #include <ATen/mps/MPSStream.h>
@@ -129,6 +131,8 @@ static bool dispatchIndexKernel(TensorIteratorBase& iter,
                                                                 error: &error] autorelease];
         TORCH_CHECK(indexSelectPSO, "Failed to created pipeline state object, error: ", [[error description] UTF8String]);
       }
+      // this function call is a no-op if MPS Profiler is not enabled
+      getMPSProfiler().beginProfileKernel(indexSelectPSO, indexFunction, {inputTensor});
 
       [computeEncoder setComputePipelineState:indexSelectPSO];
       [computeEncoder setBuffer:indexAB offset:0 atIndex:0];
@@ -147,6 +151,8 @@ static bool dispatchIndexKernel(TensorIteratorBase& iter,
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
+
+      getMPSProfiler().endProfileKernel(indexSelectPSO);
     }
   });
 
@@ -260,7 +266,8 @@ Tensor& nonzero_out_mps(const Tensor& self, Tensor& out_) {
     MPSGraphTensor* outputTensor_ = nil;
     MPSGraphTensor* scatterDataTensor_ = nil;
   };
-
+  // TODO: fix this or move it before Placeholder()'s in below to
+  // measure its effect on performance
   stream->synchronize(SyncType::COMMIT_AND_WAIT);
   int64_t total_nonzero = at::count_nonzero(self).item<int64_t>();
   at::native::resize_output(out_, {total_nonzero, nDim});

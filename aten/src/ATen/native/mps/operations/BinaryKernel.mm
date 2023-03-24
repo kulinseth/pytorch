@@ -1,3 +1,5 @@
+#include <ATen/native/mps/OperationUtils.h>
+#include <ATen/mps/MPSProfiler.h>
 #include <ATen/native/BinaryOps.h>
 #include <ATen/native/mps/OperationUtils.h>
 
@@ -206,14 +208,18 @@ void binary_mps_impl(TensorIteratorBase& iter, const std::string func_name) {
       [computeEncoder dispatchThreads:gridSize threadsPerThreadgroup:kernelOffsetsThreadGroupSize];
 
       const std::string kernel = func_name + "_" + scalarToMetalTypeString(input.scalar_type());
-      id<MTLComputePipelineState> binaryPSO = binaryPipelineState(device, kernel);
-      [computeEncoder setComputePipelineState:binaryPSO];
-      [computeEncoder setBuffer:inputBuffer offset:input.storage_offset() * input.element_size() atIndex:0];
-      [computeEncoder setBuffer:otherBuffer offset:other.storage_offset() * other.element_size() atIndex:1];
+      id<MTLComputePipelineState> fmaxfminPSO = binaryPipelineState(device, kernel);
+
+      // this function call is a no-op if MPS Profiler is not enabled
+      getMPSProfiler().beginProfileKernel(fmaxfminPSO, kernel, {input, other});
+
+      [computeEncoder setComputePipelineState:fmaxfminPSO];
+      [computeEncoder setBuffer:inputBuffer  offset:input.storage_offset() * input.element_size() atIndex:0];
+      [computeEncoder setBuffer:otherBuffer  offset:other.storage_offset() * other.element_size() atIndex:1];
       [computeEncoder setBuffer:outputBuffer offset:out.storage_offset() * out.element_size() atIndex:2];
       [computeEncoder setBuffer:kernelDataOffsets offset:0 atIndex:3];
 
-      NSUInteger tgSize = binaryPSO.maxTotalThreadsPerThreadgroup;
+      NSUInteger tgSize = fmaxfminPSO.maxTotalThreadsPerThreadgroup;
       if (tgSize > numThreads) {
         tgSize = numThreads;
       }
@@ -221,6 +227,8 @@ void binary_mps_impl(TensorIteratorBase& iter, const std::string func_name) {
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
+
+      getMPSProfiler().endProfileKernel(fmaxfminPSO);
     }
   });
 }
