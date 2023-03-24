@@ -45,8 +45,7 @@ jobs:
           ${CONDA_RUN} pip install requests bs4 argparse gitpython boto3 regex
           # Check if nightly builds are available
           # Install PyTorch nightly from pip
-          ${CONDA_RUN} pip install --pre torch torchtext torchvision torchaudio \
-          -f --index-url https://download.pytorch.org/whl/nightly/cpu
+          ${CONDA_RUN} pip3 install --pre torch torchvision torchtext torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
 
       - name: Install other TorchBench dependencies
         env:
