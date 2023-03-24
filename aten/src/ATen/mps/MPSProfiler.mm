@@ -354,13 +354,15 @@ void MPSProfiler::logCopyProfilingStats(std::FILE* f) {
 
   for (const auto& copyStatPair : m_copy_stat_list) {
     const auto& copyStat = *copyStatPair.second;
-    fmt::print(f, "{:^13}{:^11}{:^18}{:^17}{:^16}{:^11}{:^14}\n",
-               copyStat.kindStr, copyStat.totalCount,
-               getIMPSAllocator()->formatSize(copyStat.length),
-               fmt::format("{:.3f}", copyStat.totalKernelTime),
-               fmt::format("{:.3f}", copyStat.totalGpuTime), copyStat.scalarsCount,
-               fmt::format("{:.2f} %", (1.0 - ((copyStat.totalGpuTime - copyStat.scalarsGpuTime) /
-                           copyStat.totalGpuTime)) * 100.0));
+    if (copyStat.totalCount > 0) {
+      fmt::print(f, "{:^13}{:^11}{:^18}{:^17}{:^16}{:^11}{:^14}\n",
+                copyStat.kindStr, copyStat.totalCount,
+                getIMPSAllocator()->formatSize(copyStat.length),
+                fmt::format("{:.3f}", copyStat.totalKernelTime),
+                fmt::format("{:.3f}", copyStat.totalGpuTime), copyStat.scalarsCount,
+                fmt::format("{:.2f} %", (1.0 - ((copyStat.totalGpuTime - copyStat.scalarsGpuTime) /
+                            copyStat.totalGpuTime)) * 100.0));
+    }
   }
 }
 
