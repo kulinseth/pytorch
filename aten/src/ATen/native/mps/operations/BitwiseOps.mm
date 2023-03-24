@@ -1,4 +1,5 @@
 #include <ATen/mps/MPSStream.h>
+#include <ATen/mps/MPSProfiler.h>
 #include <ATen/native/Resize.h>
 #include <fmt/format.h>
 #include <torch/library.h>
@@ -175,7 +176,11 @@ void handle_tensor_tensor_binary_op(const at::Tensor& self, const at::Tensor& ot
   if (length == 0) {
     return;
   }
+
   dispatch_sync(stream->queue(), ^(){
+    // this function call is a no-op if MPS Profiler is not enabled
+    getMPSProfiler().beginProfileKernel(cplState, kernel_name, {self, other});
+
     id<MTLComputeCommandEncoder> commandEncoder = stream->commandEncoder();
 
     id<MTLBuffer> outBuf = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
@@ -189,6 +194,8 @@ void handle_tensor_tensor_binary_op(const at::Tensor& self, const at::Tensor& ot
     [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
     [commandEncoder setBuffer:otherBuf offset:other.storage_offset()*other.itemsize() atIndex:3];
     dispatch1DJob(commandEncoder, cplState, length);
+
+    getMPSProfiler().endProfileKernel(cplState);
   });
 }
 
@@ -205,7 +212,10 @@ void handle_tensor_scalar_binary_op(const at::Tensor& self, const at::Scalar& ot
   if (length == 0) {
     return;
   }
+
   dispatch_sync(stream->queue(), ^(){
+    getMPSProfiler().beginProfileKernel(cplState, kernel_name, {self});
+
     id<MTLComputeCommandEncoder> commandEncoder  = stream->commandEncoder();
 
     id<MTLBuffer> outBuf = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
@@ -218,6 +228,8 @@ void handle_tensor_scalar_binary_op(const at::Tensor& self, const at::Scalar& ot
     [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
     [commandEncoder setBytes:&sval length:sizeof(sval) atIndex:3];
     dispatch1DJob(commandEncoder, cplState, length);
+
+    getMPSProfiler().endProfileKernel(cplState);
   });
 }
 
@@ -307,7 +319,10 @@ at::Tensor& bitwise_not_out_mps (const at::Tensor& self, at::Tensor& output_) {
                                                      getMetalType(self),
                                                      getMetalType(self),
                                                      "bitwise_not");
+
   dispatch_sync(stream->queue(), ^(){
+    getMPSProfiler().beginProfileKernel(cplState, "bitwise_not", {self});
+
     id<MTLComputeCommandEncoder> commandEncoder = stream->commandEncoder();
 
     id<MTLBuffer> outBuf = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
@@ -319,6 +334,8 @@ at::Tensor& bitwise_not_out_mps (const at::Tensor& self, at::Tensor& output_) {
     [commandEncoder setBuffer:outBuf offset:output.storage_offset()*output.itemsize() atIndex:1];
     [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
     dispatch1DJob(commandEncoder, cplState, length);
+
+    getMPSProfiler().endProfileKernel(cplState);
   });
   if (needs_output_copy) {
       output_.copy_(output);
