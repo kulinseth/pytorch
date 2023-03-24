@@ -20,6 +20,7 @@ public:
   virtual bool isSharedBuffer(void* ptr) const = 0;
   virtual bool isSharedStorageSupported() const = 0;
   virtual c10::DataPtr allocScalarBufferWithValue(void* value, size_t size) const = 0;
+  virtual std::string formatSize(size_t size) const = 0;
   virtual void setLowWatermarkRatio(double ratio) const = 0;
   virtual void setHighWatermarkRatio(double ratio) const = 0;
   virtual ssize_t getLowWatermarkValue() const = 0;

@@ -2,6 +2,7 @@
 
 #include <ATen/native/mps/OperationUtils.h>
 #include <ATen/mps/MPSAllocatorInterface.h>
+#include <ATen/mps/MPSProfiler.h>
 
 namespace at::native::mps {
 
@@ -442,6 +443,17 @@ string get_mem_format_string(c10::MemoryFormat memory_format) {
 }
 
 MPSGraphCache* MPSGraphCache::_instance_cache = nullptr;
+
+void MPSGraphCache::profileCachedGraph(const CacheEntry& cacheEntry) const {
+  MPSProfiler& profiler = getMPSProfiler();
+  if (profiler.isGraphProfilingEnabled()) {
+    std::string graphKey = cacheEntry.key_;
+    // for interval-based signpost tracing, we begin the interval here to be able
+    // to measure the time it takes to compile the graphs (if graph newly created),
+    // and also the time potentially spent on gather/scatter of graph's input tensors
+    profiler.beginProfileKernel(cacheEntry.cachedGraph_->graph(), graphKey, true);
+  }
+}
 
 class MPSGraphCacheCallback : public IMpsAllocatorCallback {
 public:

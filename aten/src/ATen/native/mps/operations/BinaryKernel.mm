@@ -1,4 +1,5 @@
 #include <ATen/native/mps/OperationUtils.h>
+#include <ATen/mps/MPSProfiler.h>
 #include <ATen/native/BinaryOps.h>
 
 namespace at::native {
@@ -153,6 +154,10 @@ void fmax_fmin_mps_impl(TensorIteratorBase& iter, const std::string max_min) {
 
       const std::string kernel = "f" + max_min + "_" + scalarToMetalTypeString(out.scalar_type());
       id<MTLComputePipelineState> fmaxfminPSO = binaryPipelineState(device, kernel);
+
+      // this function call is a no-op if MPS Profiler is not enabled
+      getMPSProfiler().beginProfileKernel(fmaxfminPSO, kernel, {input, other});
+
       [computeEncoder setComputePipelineState:fmaxfminPSO];
       [computeEncoder setBuffer:inputBuffer  offset:input.storage_offset() * input.element_size() atIndex:0];
       [computeEncoder setBuffer:otherBuffer  offset:other.storage_offset() * other.element_size() atIndex:1];
@@ -167,6 +172,8 @@ void fmax_fmin_mps_impl(TensorIteratorBase& iter, const std::string max_min) {
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
+
+      getMPSProfiler().endProfileKernel(fmaxfminPSO);
     }
   });
 }
