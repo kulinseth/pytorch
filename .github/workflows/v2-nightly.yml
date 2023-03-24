@@ -28,6 +28,12 @@ jobs:
           path: benchmark
           ref: ${{ env.TORCHBENCH_BRANCH }}
 
+      - name: Setup miniconda
+        uses: pytorch/test-infra/.github/actions/setup-miniconda@main
+        with:
+          python-version: 3.9
+          environment-file: .github/requirements/conda-env-${{ runner.os }}-${{ runner.arch }}
+
       - name: Create conda environment and install deps
         env:
           ENV_NAME: conda-test-env-${{ github.run_id }}
