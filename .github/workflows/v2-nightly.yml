@@ -36,14 +36,6 @@ jobs:
         run: |
           # shellcheck disable=SC1090
           set -ex
-
-      - name: Install PyTorch nightly
-        env:
-          ENV_NAME: conda-test-env-${{ github.run_id }}
-          PY_VERS: 3.8
-        shell: arch -arch arm64 bash {0}
-        run: |
-          # Install dependencies
           ${CONDA_RUN} pip install requests bs4 argparse gitpython boto3 regex
           # Check if nightly builds are available
           # Install PyTorch nightly from pip
@@ -56,6 +48,8 @@ jobs:
           PY_VERS: 3.8
         shell: arch -arch arm64 bash {0}
         run: |
+          # shellcheck disable=SC1090
+          set -ex
           ${CONDA_RUN} conda install -y git-lfs
           ${CONDA_RUN} python install.py --continue_on_fail
 
