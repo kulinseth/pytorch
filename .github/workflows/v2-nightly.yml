@@ -21,11 +21,12 @@ jobs:
       - name: Clean up disk space before running MacOS workflow
         uses: pytorch/test-infra/.github/actions/check-disk-space@main
 
-      - name: Checkout
-        uses: actions/checkout@v3
+      - name: Checkout TorchBench
+        uses: malfet/checkout@silent-checkout
         with:
           repository: razarmehr/benchmark
           path: benchmark
+          lfs: false
           ref: ${{ env.TORCHBENCH_BRANCH }}
 
       - name: Setup miniconda
