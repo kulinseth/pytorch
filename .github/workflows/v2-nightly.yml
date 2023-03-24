@@ -24,32 +24,33 @@ jobs:
           repository: razarmehr/benchmark
           path: benchmark
           ref: ${{ env.TORCHBENCH_BRANCH }}
-      - name: Create conda env
+      - name: Create conda environment and install deps
+        env:
+          ENV_NAME: conda-test-env-${{ github.run_id }}
+          PY_VERS: 3.8
+        shell: arch -arch arm64 bash {0}
         run: |
-          conda create -y -q --name "${CONDA_ENV_NAME}" python=${{ env.PYTHON_VER }}
+          # shellcheck disable=SC1090
+          set -ex
       - name: Install PyTorch nightly
         run: |
-          . activate "${CONDA_ENV_NAME}"
           # Install dependencies
-          pip install requests bs4 argparse gitpython boto3 regex
+          ${CONDA_RUN} pip install requests bs4 argparse gitpython boto3 regex
           # Check if nightly builds are available
           # Install PyTorch nightly from pip
-          pip install --pre torch torchtext torchvision torchaudio \
+          ${CONDA_RUN} pip install --pre torch torchtext torchvision torchaudio \
           -f --index-url https://download.pytorch.org/whl/nightly/cpu
       - name: Install other TorchBench dependencies
         run: |
-          . activate "${CONDA_ENV_NAME}"
-          conda install -y git-lfs
-          python install.py --continue_on_fail
+          ${CONDA_RUN} conda install -y git-lfs
+          ${CONDA_RUN} python install.py --continue_on_fail
       - name: Run benchmark
         run: |
-          . activate "${CONDA_ENV_NAME}"
           WORKFLOW_HOME="${HOME}/${{ env.OUTPUT_DIR }}/gh${GITHUB_RUN_ID}"
-          bash ./.github/scripts/run.sh "${WORKFLOW_HOME}"
+          ${CONDA_RUN} bash ./.github/scripts/run.sh "${WORKFLOW_HOME}"
       - name: Generate the bisection config
         run: |
           set -x
-          . activate "${CONDA_ENV_NAME}"
           WORKFLOW_HOME="${HOME}/${{ env.OUTPUT_DIR }}/gh${GITHUB_RUN_ID}"
           mkdir -p benchmark-output/
           # Update the self-hosted pytorch version
@@ -58,7 +59,7 @@ jobs:
           popd
           pip install gitpython pyyaml dataclasses argparse
           # Compare the result from yesterday and report any perf signals
-          python ./.github/scripts/generate-abtest-config.py \
+          ${CONDA_RUN} python ./.github/scripts/generate-abtest-config.py \
                  --pytorch-dir "${HOME}/pytorch" \
                  --github-issue "${WORKFLOW_HOME}/gh-issue.md" \
                  --benchmark-dir "${WORKFLOW_HOME}" \
