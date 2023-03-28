@@ -20,8 +20,8 @@ MPSStream::MPSStream(Stream stream) : _stream(stream) {
   TORCH_CHECK(_stream.device_type() == DeviceType::MPS);
   _serialQueue = dispatch_queue_create("metal gpu stream", nullptr);
   _executionDescriptor = [MPSGraphExecutionDescriptor new];
-  // disable commitAndContinue if Signpost tracking is enabled
-  if (getMPSProfiler().getSignpostTypes() != MPSProfiler::SignpostTypes::SIGNPOST_NONE) {
+  // disable commitAndContinue if Signpost tracing is enabled
+  if (getMPSProfiler().isSignpostTracingEnabled()) {
     _enableCommitAndContinue = false;
   }
   _executionDescriptor.enableCommitAndContinue = _enableCommitAndContinue;
@@ -158,7 +158,7 @@ void MPSStream::copy(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer,
                              size:(NSUInteger)length];
       [blitEncoder endEncoding];
 
-      MPSProfiler& profiler = getMPSProfiler();
+      auto& profiler = getMPSProfiler();
       // check if copy profiling is enabled
       if (profiler.isCopyProfilingEnabled()) {
         profiler.endProfileCopy(profileId, syncType);
@@ -177,7 +177,7 @@ void MPSStream::copy_and_sync(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer, 
 
 void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
                                 SyncType syncType, bool disableTypeInference) {
-  MPSProfiler& profiler = getMPSProfiler();
+  auto& profiler = getMPSProfiler();
   const bool isGraphProfilingEnabled = profiler.isGraphProfilingEnabled();
 
   dispatch_sync(_serialQueue, ^() {
