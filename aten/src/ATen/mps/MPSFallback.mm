@@ -1,6 +1,7 @@
 //  Copyright © 2022 Apple Inc.
 
 #include <ATen/native/CPUFallback.h>
+#include <ATen/mps/MPSProfiler.h>
 
 namespace at {
 
@@ -9,7 +10,34 @@ void mps_fallback(const c10::OperatorHandle& op, torch::jit::Stack* stack)
   TORCH_WARN_ONCE("The operator '", op.schema().operator_name(), "' is not currently supported ",
                   "on the MPS backend and will fall back to run on the CPU.",
                   " This may have performance implications.");
+
+  auto& profiler = mps::getMPSProfiler();
+  const bool isCPUFallbackProfilingEnabled = profiler.isCPUFallbackProfilingEnabled();
+
+  // only do profiling if CPU Fallback op execution tracing or logging is enabled
+  if (isCPUFallbackProfilingEnabled) {
+    // we create a Tensors list to compute the size of copies required to convert
+    // the input MPS tensors to CPU, and the CPU results back to MPS
+    std::vector<at::Tensor> tensor_args;
+    for (const auto& ivalue : torch::jit::last(stack, op.schema().arguments().size())) {
+      if (ivalue.isTensor()) {
+        tensor_args.push_back(ivalue.toTensor());
+      }
+    }
+    // TODO: check if any returns exist at this stage
+    for (const auto& ivalue : torch::jit::last(stack, op.schema().returns().size())) {
+      if (ivalue.isTensor()) {
+        tensor_args.push_back(ivalue.toTensor());
+      }
+    }
+    profiler.beginProfileCPUFallback(op.schema().name(), tensor_args);
+  }
+
   native::cpu_fallback(op, stack);
+
+  if (isCPUFallbackProfilingEnabled) {
+    profiler.endProfileCPUFallback(op.schema().name());
+  }
 }
 
 void mps_error_fallback(const c10::OperatorHandle& op, torch::jit::Stack* stack)
