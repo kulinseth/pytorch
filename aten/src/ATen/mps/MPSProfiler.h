@@ -15,6 +15,7 @@
 #include <atomic>
 #include <unordered_map>
 #include <utility>
+#include <ctime>
 
 namespace at::mps {
 
@@ -26,6 +27,7 @@ struct BaseInfo {
     GRAPH,
     KERNEL,
     COPY,
+    CPU_FALLBACK,
   };
 
   BaseInfo(Type infoType, uint64_t Id, const uintptr_t Handle) :
@@ -40,9 +42,9 @@ struct BaseInfo {
   // since it's possible to use event and interval-based signposts at the
   // same time, we need separate IDs for each.
   os_signpost_id_t eventSignpostId = 0, intervalSignpostId = 0;
-  // accumulated GPU time
+  // accumulated GPU time in ms
   std::atomic<double> totalGpuTime{0.0};
-  // accumulated Kernel time
+  // accumulated Kernel time in ms
   std::atomic<double> totalKernelTime{0.0};
   // indicates if the graph/kernel or copy execution has completed
   std::atomic_bool completed{false};
@@ -72,7 +74,6 @@ struct BaseInfo {
 struct KernelInfo : BaseInfo {
   KernelInfo(const void* Handle, bool IsGraph, uint64_t Id, const std::string& StrKey) :
       BaseInfo(IsGraph ? Type::GRAPH : Type::KERNEL, Id, uintptr_t(Handle)), strKey(StrKey) { }
-  ~KernelInfo() override = default;
 
   uint64_t runCount = 0;
   std::string strKey;
@@ -94,6 +95,36 @@ struct KernelInfo : BaseInfo {
   }
 };
 
+struct CpuFbInfo : BaseInfo {
+  CpuFbInfo(const std::string& OpName, uint64_t Id) :
+      BaseInfo(Type::CPU_FALLBACK, Id, 0), opName(OpName) { }
+
+  uint64_t runCount = 0;
+  // the current and total overhead of copies in bytes required to convert the Op's
+  // input tensors from MPS to CPU and then output from CPU back to MPS
+  size_t currentCopyOverhead = 0;
+  size_t totalCopyOverhead = 0;
+  std::string opName;
+  std::clock_t startTime{};
+
+  const std::string toString(double gpuTime = 0, double kernelTime = 0) const override {
+    return fmt::format("CPU Fallback Op #{} [Run#={}, CopyOverhead={}{}]: {}",
+                       profileId, runCount,
+                       getIMPSAllocator()->formatSize(currentCopyOverhead),
+                       kernelTime > 0. ? fmt::format(", CPU={:.3f} ms", kernelTime) : "", opName);
+  }
+
+  void updateCopyOverhead(const TensorList& tensors) {
+    currentCopyOverhead = 0;
+    for (const Tensor& tensor: tensors) {
+      if (tensor.defined()) {
+        currentCopyOverhead += tensor.nbytes();
+      }
+    }
+    totalCopyOverhead += currentCopyOverhead;
+  }
+};
+
 struct CopyInfo : BaseInfo {
   enum class Kind {
     MPS_TO_MPS,
@@ -104,7 +135,6 @@ struct CopyInfo : BaseInfo {
   CopyInfo(const void* Handle, size_t Length, uint64_t Id, bool IsNonBlocking) :
            BaseInfo(Type::COPY, Id, uintptr_t(Handle)), kind(Kind::MPS_TO_MPS),
            length(Length), isNonBlocking(IsNonBlocking) { }
-  ~CopyInfo() override = default;
 
   Kind kind;
   size_t length;
@@ -160,20 +190,18 @@ struct CopyStat : CopyInfo {
   size_t totalCount = 0;
   // number of Scalar copies (i.e., less than sizeof(int64))
   size_t scalarsCount = 0;
-  // accumulated GPU time for the scalar copies
+  // accumulated GPU time in ms for the scalar copies
   std::atomic<double> scalarsGpuTime{0.0};
   // copy kind in string type
   std::string kindStr;
 };
-
-} // namespace Profiler
 
 class MPSProfiler {
 public:
   // lower 16 bits used for profiler options
   enum ProfileOptions : uint32_t {
     OPTIONS_NONE = 0,
-    // ALL_* means, all signpost types (RUN_MPSGRAPH|RUN_KERNEL|BLIT_COPY, etc.)
+    // ALL_* means, all signpost types (RUN_MPSGRAPH|RUN_KERNEL|BLIT_COPY|CPU_FALLBACK, etc.)
     // (used for convenience to not compute bit flags by OR-ing manually)
     // trace all signpost types using events
     ALL_SIGNPOST_EVENTS    = (1 << 0),
@@ -206,8 +234,10 @@ public:
     RUN_KERNEL   = (1 << 17),
     // trace signposts for blitter copies
     BLIT_COPY    = (1 << 18),
+    // trace signposts for ops that fall back on CPU
+    CPU_FALLBACK = (1 << 19),
     // used for sanity check (Change this when new type added)
-    SIGNPOST_COUNT = (BLIT_COPY << 1) - 1,
+    SIGNPOST_COUNT = (CPU_FALLBACK << 1) - 1,
   };
 
   enum LogOptions : uint32_t {
@@ -216,12 +246,20 @@ public:
     KERNEL_INFO  = (1 << 0),
     // prints copy info (src/dst tensors/buffers, size, etc.)
     COPY_INFO    = (1 << 1),
+    // prints CPU Fallback info (id/runCount/opName/copyOverhead) before execution
+    CPU_FB_INFO  = (1 << 2),
+    // prints all stats (KERNEL_STATS, COPY_STATS, CPU_FB_STATS) before process terminates
+    // this is convenient to not combine following stats bit flags manually
+    ALL_STATS    = (1 << 3),
     // prints kernels stats (GPU times, run count, etc.) before process terminates
-    KERNEL_STATS = (1 << 2),
+    KERNEL_STATS = (1 << 4),
     // prints copies stats (GPU times, copy kinds, sizes, etc.) before process terminates
-    COPY_STATS   = (1 << 3),
+    COPY_STATS   = (1 << 5),
+    // prints CPU Fallback stats (CPU times, run times, size of MPS<->CPU copies
+    // for tensors, etc.) before process terminates
+    CPU_FB_STATS = (1 << 6),
     // used for sanity check (Change this when new option added)
-    LOG_COUNT = (COPY_STATS << 1) - 1,
+    LOG_COUNT = (CPU_FB_STATS << 1) - 1,
   };
 
   explicit MPSProfiler();
@@ -235,10 +273,12 @@ public:
                             const OptionalTensorRef srcTensor,
                             const OptionalTensorRef dstTensor,
                             size_t length, bool isNonBlocking);
-
+  uint64_t beginProfileCPUFallback(const std::string& opName, const TensorList& tensors);
   void beginProfileGPUInterval(const void* handle);
+
   void endProfileCopy(uint64_t profileId, SyncType syncType);
   void endProfileKernel(const void* handle, SyncType syncType = SyncType::NONE);
+  void endProfileCPUFallback(const std::string& opName);
 
   // convenience functions to indicate whether signpost tracing or
   // logging are enabled for the SignpostTypes
@@ -254,10 +294,13 @@ public:
     return (m_signpost_types & SignpostTypes::BLIT_COPY) ||
            (m_log_options & (LogOptions::COPY_INFO | LogOptions::COPY_STATS));
   }
-
-  uint32_t getSignpostTypes() const { return m_signpost_types; }
-  uint32_t getProfileOptions() const { return m_profile_options; }
-  uint32_t getLogOptions() const { return m_log_options; }
+  bool isCPUFallbackProfilingEnabled() const {
+    return (m_signpost_types & SignpostTypes::CPU_FALLBACK) ||
+           (m_log_options & (LogOptions::CPU_FB_INFO | LogOptions::CPU_FB_STATS));
+  }
+  bool isSignpostTracingEnabled() const {
+    return (m_signpost_types != SignpostTypes::SIGNPOST_NONE);
+  }
 
  private:
   // indicates what type of signpost types are enabled and traced by MPS profiler.
@@ -266,11 +309,17 @@ public:
   uint32_t m_log_options = 0;
   uint64_t m_kernel_counter = 0;
   uint64_t m_graph_counter = 0;
+  uint64_t m_cpu_fb_counter = 0;
   uint64_t m_copy_counter = 0;
   // technically, it's possible to trace both events and intervals at the same time
   // so we use separate os_log categories for them
   os_log_t m_os_log_events;
   os_log_t m_os_log_intervals;
+  // stats logging could run either from destructor or signal handler
+  // so this is used to check if logging has already started.
+  std::atomic_bool hasLoggedStats{false};
+  // used to capture sigint signal to log profiling stats
+  static struct sigaction currentSigint, previousSigint;
 
   // We use the following lists for two reasons:
   // 1- for interval-based signposts the "begin" point won't be in same function
@@ -279,32 +328,42 @@ public:
 
   // the pointer key for this map is either "MPSGraph*" or "id<MTLComputePipelineState>" for Metal Kernels
   // this list is retained and could be logged along with aggregate profiling numbers when the process ends.
-  std::unordered_map<uintptr_t, std::unique_ptr<Profiler::KernelInfo>> m_kernel_info_list{};
+  std::unordered_map<uintptr_t, std::unique_ptr<KernelInfo>> m_kernel_info_list{};
+  // the string key for this map is the op name that we fall back to execute on CPU
+  // this list is retained and could be logged along with aggregate profiling numbers when the process ends.
+  std::unordered_map<std::string, std::unique_ptr<CpuFbInfo>> m_cpu_fb_info_list{};
   // this list contains the info for copies, and its key is the unique profileId
   // which is generated from m_copy_counter
   // The copyInfo list is not retained.
-  std::unordered_map<uint64_t, std::unique_ptr<Profiler::CopyInfo>> m_copy_info_list{};
+  std::unordered_map<uint64_t, std::unique_ptr<CopyInfo>> m_copy_info_list{};
   // a short list that contains copy stats
-  std::unordered_map<Profiler::CopyInfo::Kind, std::unique_ptr<Profiler::CopyStat>> m_copy_stat_list{};
+  std::unordered_map<CopyInfo::Kind, std::unique_ptr<CopyStat>> m_copy_stat_list{};
 
-  void beginProfileExecution(Profiler::BaseInfo& info);
-  void addProfilerScheduledHandler(Profiler::BaseInfo& info);
-  void addProfilerCompletedHandler(Profiler::BaseInfo& info, SyncType syncType);
+  void beginProfileExecution(BaseInfo& info);
+  void addProfilerScheduledHandler(BaseInfo& info);
+  void addProfilerCompletedHandler(BaseInfo& info, SyncType syncType);
   void emitSignpostEvent(SignpostTypes signpost_type, os_signpost_id_t signpost_id,
                          const std::string& msg) const;
   void beginSignpostInterval(SignpostTypes signpost_type, os_signpost_id_t signpost_id,
                              const std::string& msg) const;
   void endSignpostInterval(SignpostTypes signpost_type, os_signpost_id_t signpost_id) const;
 
+  // logs all the profiling stats that are enabled
+  void logProfilingStats();
   // logs kernel profiling stats when the process ends.
   void logKernelProfilingStats(std::FILE* f) const;
+  // logs CPU Fallback profiling stats when the process ends.
+  void logCPUFallbackProfilingStats(std::FILE* f) const;
   // logs copy profiling stats when the process ends.
-  void logCopyProfilingStats(std::FILE* f);
+  void logCopyProfilingStats(std::FILE* f) const;
 
   os_signpost_id_t generateSignpostId(os_signpost_type_t signpostType, const void* ptr = nullptr);
-  static SignpostTypes getSignpostType(Profiler::BaseInfo::Type infoType);
+  static SignpostTypes getSignpostType(BaseInfo::Type infoType);
+  static void handleIntSignal(int signal);
 };
 
-MPSProfiler& getMPSProfiler();
+} // namespace Profiler
+
+Profiler::MPSProfiler& getMPSProfiler();
 
 } // namespace at::mps
