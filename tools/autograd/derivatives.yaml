@@ -338,6 +338,9 @@
   batch2: maybe_multiply(batch1.transpose(1, 2).conj().bmm(grad), alpha.conj())
   result: maybe_multiply(self_t, beta) + maybe_multiply(batch1_t.bmm(batch2_p), alpha) + maybe_multiply(batch1_p.bmm(batch2_t), alpha)
 
+- name: ndmm(Tensor self, Tensor mat2) -> Tensor
+  self, mat2: ndmm_backward(self, mat2, grad, grad_input_mask)
+
 - name: bernoulli(Tensor self, *, Generator? generator=None) -> Tensor
   self: zeros_like(grad)
   result: auto_element_wise
