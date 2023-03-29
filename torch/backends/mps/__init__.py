@@ -29,7 +29,12 @@ if is_built():
     from ...library import Library as _Library
     from ..._refs import var_mean as _var_mean, native_group_norm as _native_group_norm
     from ..._decomp.decompositions import native_group_norm_backward as _native_group_norm_backward
+    from ..._decomp.decompositions import im2col as _im2col
+    from ..._decomp.decompositions import col2im as _col2im
+
     _lib = _Library("aten", "IMPL")
     _lib.impl("var_mean.correction", _var_mean, "MPS")
     _lib.impl("native_group_norm", _native_group_norm, "MPS")
     _lib.impl("native_group_norm_backward", _native_group_norm_backward, "MPS")
+    _lib.impl("im2col", _im2col, "MPS")
+    _lib.impl("col2im", _col2im, "MPS")
