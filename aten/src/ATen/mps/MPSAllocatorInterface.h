@@ -29,6 +29,7 @@ public:
   virtual size_t getTotalAllocatedMemory() const = 0;
   virtual size_t getCurrentAllocatedMemory() const = 0;
   virtual size_t getDriverAllocatedMemory() const = 0;
+  virtual std::pair<void*, uint32_t> getSharedBufferPtr(void* buffer) const = 0;
 };
 
 class IMpsAllocatorCallback {

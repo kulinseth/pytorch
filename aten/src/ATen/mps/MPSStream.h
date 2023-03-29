@@ -94,6 +94,7 @@ private:
   Stream _stream;
   MTLCommandQueue_t _commandQueue = nil;
   MPSCommandBuffer* _commandBuffer = nil;
+  MPSCommandBuffer* _prevCommandBuffer = nil;
   MTLComputeCommandEncoder_t _commandEncoder = nil;
   MPSGraphExecutionDescriptor *_executionDescriptor = nil;
 
