@@ -29,12 +29,9 @@ TORCH_IMPL_FUNC(linalg_inv_ex_out_mps)(const Tensor& A, bool check_errors, const
     return;
   }
 
-  Tensor output = result;
-  bool isContiguous = true;
-  if (!result.is_contiguous()) {
-    output = result.contiguous();
-    isContiguous = false;
-  }
+    if (!result.is_contiguous()) {
+        result.unsafeGetTensorImpl()->empty_tensor_restride(MemoryFormat::Contiguous);
+    }
 
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
 
@@ -54,9 +51,18 @@ TORCH_IMPL_FUNC(linalg_inv_ex_out_mps)(const Tensor& A, bool check_errors, const
           newCachedGraph->outputTensor_ = outputTensor;
         }
 
-        return newCachedGraph;
-      });
-      cachedGraph = static_cast<CachedGraph*>(tmpCachedGraph);
+        Placeholder inputPlaceholder = Placeholder(cachedGraph->inputTensor_, A);
+        Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result);
+
+        NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
+            inputPlaceholder.getMPSGraphTensor() : inputPlaceholder.getMPSGraphTensorData()
+        };
+
+        NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
+            outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
+        };
+
+        runMPSGraph(stream, cachedGraph->graph(), feeds, results);
     }
 
     Placeholder inputPlaceholder = Placeholder(cachedGraph->inputTensor_, A);
