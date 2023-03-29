@@ -35,8 +35,11 @@ TORCH_IMPL_FUNC(linalg_inv_ex_out_mps)(const Tensor& A, bool check_errors, const
         MPSGraphTensor* outputTensor_ = nil;
     };
 
+    Tensor output = result;
+    bool isContiguous = true;
     if (!result.is_contiguous()) {
-        result.unsafeGetTensorImpl()->empty_tensor_restride(MemoryFormat::Contiguous);
+        output = result.contiguous();
+        isContiguous = false;
     }
 
     MPSGraphCache* cache_ = MPSGraphCache::getInstance();
@@ -68,10 +71,14 @@ TORCH_IMPL_FUNC(linalg_inv_ex_out_mps)(const Tensor& A, bool check_errors, const
 
         Placeholder inputPlaceholder = Placeholder(cachedGraph->inputTensor_, A);
 <<<<<<< HEAD
+<<<<<<< HEAD
         Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result);
 =======
         Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result, nil, false);
 >>>>>>> 4c1d5a8065a (Add support for strided mul op)
+=======
+        Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, isContiguous ? result : output);
+>>>>>>> e48b02f477f (Revert changes)
 
         NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
             inputPlaceholder.getMPSGraphTensor() : inputPlaceholder.getMPSGraphTensorData()
@@ -82,6 +89,9 @@ TORCH_IMPL_FUNC(linalg_inv_ex_out_mps)(const Tensor& A, bool check_errors, const
         };
 
         runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+        if (!isContiguous) {
+            result.copy_(output);
+        }
     }
 }
 
