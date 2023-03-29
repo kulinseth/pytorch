@@ -57,8 +57,6 @@ kernel void {3}_kernel_scalar_strided(uint tid           [[thread_position_in_gr
 )METAL_BINARY";
 
 const std::string& getMetalType(const c10::ScalarType& t) {
-  // Mapping from c10::ScalarType to integral type that can be used for bitwise ops
-  // As bitwise ops sign-agnostic map signed/unsigned char and boolean to the same type
   static std::unordered_map<c10::ScalarType, std::string> scalar_to_metal_type = {
     {c10::ScalarType::Float, "float"},
     {c10::ScalarType::Half,  "half"},
