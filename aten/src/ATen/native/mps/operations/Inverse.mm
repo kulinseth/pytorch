@@ -67,7 +67,11 @@ TORCH_IMPL_FUNC(linalg_inv_ex_out_mps)(const Tensor& A, bool check_errors, const
         }
 
         Placeholder inputPlaceholder = Placeholder(cachedGraph->inputTensor_, A);
+<<<<<<< HEAD
         Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result);
+=======
+        Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result, nil, false);
+>>>>>>> 4c1d5a8065a (Add support for strided mul op)
 
         NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
             inputPlaceholder.getMPSGraphTensor() : inputPlaceholder.getMPSGraphTensorData()
