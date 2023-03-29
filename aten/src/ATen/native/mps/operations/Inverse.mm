@@ -35,11 +35,8 @@ TORCH_IMPL_FUNC(linalg_inv_ex_out_mps)(const Tensor& A, bool check_errors, const
         MPSGraphTensor* outputTensor_ = nil;
     };
 
-    Tensor output = result;
-    bool isContiguous = true;
     if (!result.is_contiguous()) {
-        output = result.contiguous();
-        isContiguous = false;
+        result.unsafeGetTensorImpl()->empty_tensor_restride(MemoryFormat::Contiguous);
     }
 
     MPSGraphCache* cache_ = MPSGraphCache::getInstance();
