@@ -69,7 +69,7 @@ HeapBlock* MPSHeapAllocatorImpl::get_free_heap(AllocParams& params) {
     if (heap_block) {
       if (m_debug_verbosity & DebugVerbosity::ALLOCATIONS) {
         std::cerr << "\nAllocated "
-                  << ((pool.usage & UsageFlags::SHARED) ? "shared " : "private ")
+                  << ((pool.usage & UsageFlags::SHARED) ? "shared" : "private")
                   << " heap #" << heap_block->heap_id
                   << " of size " << format_size(heap_block->size.total)
                   << " (#heaps: " << (pool.heaps.size() + 1)
@@ -193,7 +193,7 @@ BufferBlock* MPSHeapAllocatorImpl::alloc_buffer_block(size_t size, uint32_t usag
   TORCH_CHECK(size < m_max_buffer_size, "Invalid buffer size: ", format_size(size));
 
   size_t alloc_size = get_allocation_size(size, usage);
-  auto& pool = get_pool(alloc_size, usage);
+  auto& pool = get_pool(size, usage);
   AllocParams params(alloc_size, size, &pool);
   // we care about memory pressure if only we're allocating large buffers when the
   // low watermark limit has been reached
@@ -477,10 +477,27 @@ id<MTLBuffer> MPSHeapAllocatorImpl::allocScalarBufferWithValue(void* value, size
     if (!buffer_block) {
       return nullptr;
     }
+    if (!buffer_block->cpu_ptr) {
+      buffer_block->cpu_ptr = [buffer_block->buffer contents];
+    }
   }
   // buffer is out of the pool, so no mutex lock is needed
-  memcpy([buffer_block->buffer contents], value, size);
+  memcpy(buffer_block->cpu_ptr, value, size);
   return buffer_block->buffer;
+}
+
+std::pair<void*, uint32_t> MPSHeapAllocatorImpl::getSharedBufferPtr(void* buffer) {
+  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+
+  BufferBlock* buffer_block = get_allocated_buffer_block(buffer);
+  // return if buffer was not allocated on MPSAllocator or isn't a Shared buffer
+  if (!buffer_block || !(buffer_block->heap->pool->usage & UsageFlags::SHARED)) {
+    return {nullptr, 0};
+  }
+  if (!buffer_block->cpu_ptr) {
+    buffer_block->cpu_ptr = [buffer_block->buffer contents];
+  }
+  return {buffer_block->cpu_ptr, buffer_block->retainCount()};
 }
 
 ssize_t MPSHeapAllocatorImpl::getUnalignedBufferSize(void* ptr) {
@@ -603,6 +620,9 @@ public:
   DataPtr allocScalarBufferWithValue(void *value, size_t size) const override {
     id<MTLBuffer> buf = _getAllocImpl().allocScalarBufferWithValue(value, size);
     return { buf, buf, &Delete, at::Device(at::DeviceType::MPS, 0)};
+  }
+  std::pair<void*, uint32_t> getSharedBufferPtr(void* buffer) const override {
+    return _getAllocImpl().getSharedBufferPtr(buffer);
   }
   bool isSharedBuffer(void* ptr) const override { return _getAllocImpl().isSharedBuffer(ptr); }
   bool isSharedStorageSupported() const override { return m_has_unified_memory; }
