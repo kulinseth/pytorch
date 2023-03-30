@@ -39,8 +39,7 @@ void runMPSGraph(
     MPSStream* mpsStream,
     MPSGraph* mpsGraph,
     NSDictionary* feeds,
-    NSDictionary* results,
-    bool disableTypeInference = false);
+    NSDictionary* results);
 
 struct MPSCachedGraph;
 

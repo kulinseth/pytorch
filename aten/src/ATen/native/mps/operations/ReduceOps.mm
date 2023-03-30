@@ -148,10 +148,6 @@ void reduction_out_mps(
       func_name+": reduction dim must be in the range of input shape")
     }
   }
-  bool disableTypeInference = false;
-  if (input_t.dim() == 1) {
-    disableTypeInference = true;
-  }
 
   NSMutableArray<NSNumber*> *axes = nil;
   NSMutableArray<NSNumber*> *apparent_input_shape = nil;
@@ -178,7 +174,7 @@ void reduction_out_mps(
     NSString* ns_key = [[wrappedAxes valueForKey:@"description"] componentsJoinedByString:@","];
     string key = func_name                                                             + ":" +
                  string([ns_key UTF8String])                                           + ":" +
-                 getTensorsStringKey({input_t, output_t}, false, disableTypeInference) + ":" +
+                 getTensorsStringKey({input_t, output_t}, false)                       + ":" +
                  std::to_string(keepdim)                                               + ":" +
                  std::to_string(reduction_type)                                        + ":" +
                  dtype_str;
@@ -195,9 +191,7 @@ void reduction_out_mps(
           newCachedGraph = new CachedGraph(mpsGraph);
           auto inputScalarType = input_t.scalar_type();
 
-          MPSGraphTensor* inputTensor = disableTypeInference ?
-                mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type())) :
-                mpsGraphRankedPlaceHolder(mpsGraph, input_t);
+          MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, input_t);
           MPSGraphTensor* castInputTensor = inputTensor;
           MPSDataType inputCastType = MPSDataTypeInvalid;
           if (dtype.has_value() &&
@@ -296,7 +290,7 @@ void reduction_out_mps(
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    runMPSGraph(stream, cachedGraph->graph(), feeds, results, disableTypeInference);
+    runMPSGraph(stream, cachedGraph->graph(), feeds, results);
   }
 }
 

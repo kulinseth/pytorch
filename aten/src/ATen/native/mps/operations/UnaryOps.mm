@@ -25,10 +25,9 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
     output.copy_(self);
     return;
   }
-  bool disableTypeInference = true;
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
-    string key = op_name + getTensorsStringKey({self, output}, false, disableTypeInference);
+    string key = op_name + getTensorsStringKey({self, output}, false);
     auto cachedGraph = cache_->LookUpAs<MPSUnaryCachedGraph>(key);
 
     if(!cachedGraph) {
@@ -37,9 +36,7 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
         @autoreleasepool {
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new MPSUnaryCachedGraph(mpsGraph);
-          newCachedGraph->inputTensor_ = disableTypeInference ?
-                mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(self.scalar_type())) :
-                mpsGraphRankedPlaceHolder(mpsGraph, self);
+          newCachedGraph->inputTensor_ = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(self.scalar_type()));
           MPSGraphTensor* castTensor = newCachedGraph->inputTensor_;
           // Integer input must be cast to float if output is float
           if (isIntegralType(self.scalar_type(), true) && isFloatingType(output.scalar_type())) {
@@ -65,7 +62,7 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results, disableTypeInference);
+    runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
   }
 }
 

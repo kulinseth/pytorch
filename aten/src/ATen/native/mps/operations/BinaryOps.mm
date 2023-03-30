@@ -36,7 +36,6 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
 
   const bool is_self_scalar = self.dim() == 0;
   const bool is_other_scalar = other.dim() == 0;
-  bool disableTypeInference = false;
 
   auto new_size = at::infer_size(self.sizes(), other.sizes());
   if (!output_.sizes().equals(new_size)) {
@@ -46,10 +45,6 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
   // it's possible to receive empty tensors here
   if (self.numel() == 0 || other.numel() == 0) {
     return;
-  }
-
-  if (self.dim() == 1 || other.dim() == 1 || self.dim() >= 5 || other.dim() >= 5) {
-    disableTypeInference = true;
   }
 
   Tensor output;
@@ -100,8 +95,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
     string key = op_name + getTensorsStringKey({
       flattenTensors ? broadcastTensors[0] : self,
       flattenTensors ? broadcastTensors[1] : other,
-      output_},  /*short_dtype=*/false,
-      /*disable_type_inference=*/disableTypeInference);
+      output_},  /*short_dtype=*/false);
     BinaryOpCachedGraph* cachedGraph = static_cast<BinaryOpCachedGraph *>(cache_->LookUp(key));
 
     if(!cachedGraph) {
@@ -110,13 +104,8 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
         @autoreleasepool {
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new BinaryOpCachedGraph(mpsGraph);
-          if (disableTypeInference) {
-            newCachedGraph->primaryTensor   = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(inputDataType));
-            newCachedGraph->secondaryTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(otherDataType));
-          } else {
-            newCachedGraph->primaryTensor   = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(inputDataType), selfShape);
-            newCachedGraph->secondaryTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(otherDataType), otherShape);
-          }
+          newCachedGraph->primaryTensor   = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(inputDataType), selfShape);
+          newCachedGraph->secondaryTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(otherDataType), otherShape);
 
           MPSGraphTensor* primaryCastTensor   = newCachedGraph->primaryTensor;
           MPSGraphTensor* secondaryCastTensor = newCachedGraph->secondaryTensor;
@@ -188,7 +177,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    runMPSGraph(mpsStream, cachedGraph->graph(), feeds, results, disableTypeInference);
+    runMPSGraph(mpsStream, cachedGraph->graph(), feeds, results);
 
     if (needsCopyToOutput) {
       output_.copy_(output);

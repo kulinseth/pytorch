@@ -176,7 +176,7 @@ void MPSStream::copy_and_sync(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer, 
 }
 
 void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
-                                SyncType syncType, bool disableTypeInference) {
+                                SyncType syncType) {
   auto& profiler = getMPSProfiler();
   const bool isGraphProfilingEnabled = profiler.isGraphProfilingEnabled();
 
@@ -189,15 +189,7 @@ void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDicti
         profiler.beginProfileGPUInterval(mpsGraph);
       }
 
-      if (disableTypeInference) {
-        MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
-        [compilationDescriptor disableTypeInference];
-        _executionDescriptor.compilationDescriptor = compilationDescriptor;
-      } else {
-        // there's no enableTypeInference, so we just need to set it to nil to
-        // re-enable type inference
-        _executionDescriptor.compilationDescriptor = nil;
-      }
+      _executionDescriptor.compilationDescriptor = nil;
       // note: CommitAndContinue feature is enabled/disabled via "_executionDescriptor"
       [mpsGraph encodeToCommandBuffer:commandBuffer()
                                 feeds:feeds

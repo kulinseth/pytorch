@@ -7,8 +7,8 @@
 namespace at::native::mps {
 
 void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds,
-                 NSDictionary* results, bool disableTypeInference) {
-  mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE, disableTypeInference);
+                 NSDictionary* results) {
+  mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE);
 }
 
 MPSDataType getMPSDataType(ScalarType scalar_type) {
