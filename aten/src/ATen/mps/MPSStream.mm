@@ -122,6 +122,7 @@ void MPSStream::flush() {
     // if commitAndContinue is disabled (e.g., for Profiler), we keep the command
     // buffer so we could wait on it later, if required.
     if (!_enableCommitAndContinue) {
+      TORCH_INTERNAL_ASSERT(getMPSProfiler().isSignpostTracingEnabled());
       _prevCommandBuffer = _commandBuffer;
     } else {
       [_commandBuffer release];
