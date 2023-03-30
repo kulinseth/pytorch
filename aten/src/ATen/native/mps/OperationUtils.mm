@@ -8,7 +8,36 @@ namespace at::native::mps {
 
 void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds,
                  NSDictionary* results, bool disableTypeInference) {
-  mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE, disableTypeInference);
+  mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE);
+}
+
+// this should be merged into runMPSGraph() with new arg "disableTypeInference" for executables
+void runMPSGraphExecutable(MPSStream *mpsStream, MPSCachedGraph *cachedGraph, NSDictionary *feeds, NSDictionary *results, MPSGraphTensor* alphaTensor) {
+  @autoreleasepool {
+    MPSGraph *mpsGraph = cachedGraph->graph();
+    MPSGraphExecutable* executable = cachedGraph->getExecultable();
+    if (!executable) {
+      NSMutableDictionary* shapes = [[NSMutableDictionary new] autorelease];
+      for (MPSGraphTensor* graphTensor in feeds) {
+        MPSGraphTensorData* graphTensorData = [feeds objectForKey:graphTensor];
+        shapes[graphTensor] = [[[MPSGraphShapedType alloc] initWithShape:nil dataType:graphTensorData.dataType] autorelease];
+      }
+      if (alphaTensor) {
+        shapes[alphaTensor] = [[[MPSGraphShapedType alloc] initWithShape:@[@1] dataType:alphaTensor.dataType] autorelease];
+      }
+      MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
+      [compilationDescriptor disableTypeInference];
+
+      executable = [[mpsGraph compileWithDevice:nil
+                                          feeds:shapes
+                                  targetTensors:[results allKeys]
+                               targetOperations:nil
+                          compilationDescriptor:compilationDescriptor] retain];
+      // store the executable within the cachedGraph to reuse next time
+      cachedGraph->setExecultable(executable);
+    }
+    mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE, executable);
+  }
 }
 
 MPSDataType getMPSDataType(ScalarType scalar_type) {
