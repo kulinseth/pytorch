@@ -178,7 +178,7 @@ void MPSStream::copy_and_sync(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer, 
 void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
                                 SyncType syncType, bool disableTypeInference) {
   auto& profiler = getMPSProfiler();
-  const bool isGraphProfilingEnabled = profiler.isGraphProfilingEnabled();
+  const bool isGraphProfilingEnabled = profiler.isOperationProfilingEnabled();
 
   dispatch_sync(_serialQueue, ^() {
     @autoreleasepool {

@@ -446,7 +446,7 @@ MPSGraphCache* MPSGraphCache::_instance_cache = nullptr;
 
 void MPSGraphCache::profileCachedGraph(const CacheEntry& cacheEntry) const {
   auto& profiler = getMPSProfiler();
-  if (profiler.isGraphProfilingEnabled()) {
+  if (profiler.isOperationProfilingEnabled()) {
     std::string graphKey = cacheEntry.key_;
     // for interval-based signpost tracing, we begin the interval here to be able
     // to measure the time it takes to compile the graphs (if graph newly created),
