@@ -328,13 +328,13 @@ static bool try_copy_scalars_mps(at::Tensor& dst, const at::Tensor& src, bool no
   }
   void* src_ptr = src.storage().data();
   void* dst_ptr = dst.storage().data();
-  uint32_t retainCount = 0;
+  uint32_t src_retain_count = 0, dst_retain_count = 0;
 
   if (src.device().type() == at::kMPS) {
-    std::tie(src_ptr, retainCount) = allocator.getSharedBufferPtr(src_ptr);
+    std::tie(src_ptr, src_retain_count) = allocator.getSharedBufferPtr(src_ptr);
   }
   if (dst.device().type() == at::kMPS) {
-    std::tie(dst_ptr, retainCount) = allocator.getSharedBufferPtr(dst_ptr);
+    std::tie(dst_ptr, dst_retain_count) = allocator.getSharedBufferPtr(dst_ptr);
   }
   if (!src_ptr || !dst_ptr) {
     return false;
@@ -342,7 +342,7 @@ static bool try_copy_scalars_mps(at::Tensor& dst, const at::Tensor& src, bool no
   size_t src_offset = src.storage_offset() * src.itemsize();
   size_t dst_offset = dst.storage_offset() * dst.itemsize();
   size_t length = std::min(src.nbytes(), dst.nbytes());
-  bool needsSync = !non_blocking && retainCount > 1;
+  bool needsSync = !non_blocking && (src_retain_count > 1 || dst_retain_count > 1);
 
   if (needsSync) {
     // wait for any possible GPU operations to finish before reading from source MPS buffers
