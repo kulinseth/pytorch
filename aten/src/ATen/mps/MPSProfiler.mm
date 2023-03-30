@@ -8,12 +8,10 @@
 #define kMPSProfilerSubSystemStr    "PyTorchMPS"
 #define kMPSCategoryEventsStr       "Events"
 #define kMPSCategoryIntervalsStr    "Intervals"
-#define kIntSignpostRunGraphStr     "PyTorchGraphIntervals"
-#define kIntSignpostRunKernelStr    "PyTorchKernelIntervals"
+#define kIntSignpostRunOperationStr "PyTorchOperationIntervals"
 #define kIntSignpostBlitCopyStr     "PyTorchCopyIntervals"
 #define kIntSignpostCPUFallbacksStr "PyTorchCPUFallbackIntervals"
-#define kEvtSignpostRunGraphStr     "PyTorchGraphEvents"
-#define kEvtSignpostRunKernelStr    "PyTorchKernelEvents"
+#define kEvtSignpostRunOperationStr "PyTorchOperationEvents"
 #define kEvtSignpostBlitCopyStr     "PyTorchCopyEvents"
 #define kEvtSignpostCPUFallbacksStr "PyTorchCPUFallbacksEvents"
 #define kEVLogProfileInfoStr        "PYTORCH_MPS_LOG_PROFILE_INFO"
@@ -49,8 +47,7 @@ MPSProfiler::MPSProfiler(): m_os_log_events(nullptr), m_os_log_intervals(nullptr
   if (m_profile_options & (ProfileOptions::ALL_SIGNPOST_EVENTS |
                            ProfileOptions::ALL_SIGNPOST_INTERVALS)) {
     // enable all signposts types
-    m_signpost_types |= (SignpostTypes::RUN_MPSGRAPH |
-                         SignpostTypes::RUN_KERNEL |
+    m_signpost_types |= (SignpostTypes::RUN_OPERATION |
                          SignpostTypes::CPU_FALLBACK |
                          SignpostTypes::BLIT_COPY);
 
@@ -84,9 +81,9 @@ MPSProfiler::MPSProfiler(): m_os_log_events(nullptr), m_os_log_intervals(nullptr
   }
 
   if (m_log_options & LogOptions::ALL_STATS) {
-    m_log_options |= LogOptions::KERNEL_STATS |
+    m_log_options |= LogOptions::OPERATION_STATS |
                      LogOptions::COPY_STATS |
-                     LogOptions::CPU_FB_STATS;
+                     LogOptions::CPU_FALLBACK_STATS;
   }
   if (m_log_options & LogOptions::COPY_STATS) {
     m_copy_stat_list.emplace(CopyInfo::Kind::MPS_TO_MPS, std::make_unique<CopyStat>("MPS to MPS"));
@@ -95,7 +92,7 @@ MPSProfiler::MPSProfiler(): m_os_log_events(nullptr), m_os_log_intervals(nullptr
   }
 
   // used to capture sigint signal to log profiling stats
-  if (m_log_options & (LogOptions::KERNEL_STATS | LogOptions::COPY_STATS | LogOptions::CPU_FB_STATS)) {
+  if (m_log_options & (LogOptions::OPERATION_STATS | LogOptions::COPY_STATS | LogOptions::CPU_FALLBACK_STATS)) {
     currentSigint.sa_handler = &handleIntSignal;
     currentSigint.sa_flags = SA_RESTART;
     sigfillset(&currentSigint.sa_mask);
@@ -110,7 +107,7 @@ MPSProfiler::~MPSProfiler() {
   getDefaultMPSStream()->synchronize(SyncType::COMMIT_AND_WAIT);
   logProfilingStats();
 
-  m_kernel_info_list.clear();
+  m_op_info_list.clear();
   m_copy_info_list.clear();
   m_copy_stat_list.clear();
   m_cpu_fb_info_list.clear();
@@ -148,25 +145,25 @@ void MPSProfiler::beginProfileExecution(BaseInfo& info) {
 }
 
 uint64_t MPSProfiler::beginProfileKernel(const void* handle, const std::string& strKey, bool isGraph) {
-  // only do profiling if graph/kernel execution profiling or logging are enabled
-  if (!isGraphProfilingEnabled() && !isKernelProfilingEnabled()) {
+  // only do profiling if operation execution profiling or logging are enabled
+  if (!isOperationProfilingEnabled()) {
     return 0;
   }
-  if (m_kernel_info_list.count(uintptr_t(handle)) == 0) {
-    auto kernelInfo = std::make_unique<KernelInfo>(handle, isGraph,
+  if (m_op_info_list.count(uintptr_t(handle)) == 0) {
+    auto opInfo = std::make_unique<OperationInfo>(handle, isGraph,
                          isGraph ? ++m_graph_counter : ++m_kernel_counter, strKey);
-    m_kernel_info_list.emplace(kernelInfo->handle, std::move(kernelInfo));
+    m_op_info_list.emplace(opInfo->handle, std::move(opInfo));
   }
-  auto& kernelInfo = *m_kernel_info_list[uintptr_t(handle)];
-  kernelInfo.runCount++;
-  beginProfileExecution(kernelInfo);
+  auto& opInfo = *m_op_info_list[uintptr_t(handle)];
+  opInfo.runCount++;
+  beginProfileExecution(opInfo);
 
-  return kernelInfo.profileId;
+  return opInfo.profileId;
 }
 
 uint64_t MPSProfiler::beginProfileKernel(const void* handle, const std::string& kernelName, const TensorList& tensors) {
-  if (isKernelProfilingEnabled()) {
-    std::string profilerStrKey = KernelInfo::buildKernelString(kernelName, tensors);
+  if (isOperationProfilingEnabled()) {
+    std::string profilerStrKey = OperationInfo::buildKernelString(kernelName, tensors);
     return beginProfileKernel(handle, profilerStrKey, false);
   }
   return 0;
@@ -179,21 +176,21 @@ void MPSProfiler::beginProfileGPUInterval(const void* handle) {
        (m_profile_options & ProfileOptions::INCLUDE_SCHEDULE_INTERVAL)) {
     return;
   }
-  TORCH_INTERNAL_ASSERT_DEBUG_ONLY(m_kernel_info_list.count(uintptr_t(handle)), "Failed to get kernel information!");
-  auto& kernelInfo = *m_kernel_info_list[uintptr_t(handle)];
+  TORCH_INTERNAL_ASSERT_DEBUG_ONLY(m_op_info_list.count(uintptr_t(handle)), "Failed to get operation information!");
+  auto& opInfo = *m_op_info_list[uintptr_t(handle)];
   // this begins the interval when scheduling the execution is
   // completed already (i.e., scheduling excluded from interval)
-  addProfilerScheduledHandler(kernelInfo);
+  addProfilerScheduledHandler(opInfo);
 }
 
 void MPSProfiler::endProfileKernel(const void* handle, SyncType syncType) {
-  // only do profiling if graph/kernel execution profiling or logging are enabled
-  if (!isGraphProfilingEnabled() && !isKernelProfilingEnabled()) {
+  // only do profiling if operation execution profiling or logging are enabled
+  if (!isOperationProfilingEnabled()) {
     return;
   }
-  TORCH_INTERNAL_ASSERT_DEBUG_ONLY(m_kernel_info_list.count(uintptr_t(handle)), "Failed to get kernel information!");
-  auto& kernelInfo = *m_kernel_info_list[uintptr_t(handle)];
-  addProfilerCompletedHandler(kernelInfo, syncType);
+  TORCH_INTERNAL_ASSERT_DEBUG_ONLY(m_op_info_list.count(uintptr_t(handle)), "Failed to get operation information!");
+  auto& opInfo = *m_op_info_list[uintptr_t(handle)];
+  addProfilerCompletedHandler(opInfo, syncType);
 }
 
 uint64_t MPSProfiler::beginProfileCPUFallback(const std::string& opName, const TensorList& tensors) {
@@ -216,11 +213,11 @@ void MPSProfiler::endProfileCPUFallback(const std::string& opName) {
   std::clock_t endTime = std::clock();
   // CPU time in ms
   double cpuTime = 1000.0 * double(endTime - cpuFbInfo.startTime) / CLOCKS_PER_SEC;
-  cpuFbInfo.totalKernelTime = cpuFbInfo.totalKernelTime + cpuTime;
+  cpuFbInfo.totalSchedulingTime = cpuFbInfo.totalSchedulingTime + cpuTime;
 
   const std::string& infoStr = cpuFbInfo.toString(0, cpuTime);
   // logging the CPU Fallback info is enabled via the env-var defined in kEVLogProfileInfoStr
-  if (m_log_options & LogOptions::CPU_FB_INFO) {
+  if (m_log_options & LogOptions::CPU_FALLBACK_INFO) {
     fmt::print(stderr, "{}\n", infoStr);
   }
   if ((m_profile_options & ProfileOptions::USE_EVENTS)) {
@@ -305,29 +302,29 @@ void MPSProfiler::addProfilerCompletedHandler(BaseInfo& info, SyncType syncType)
   // NOTE: the following block isn't thread-safe
   [m_stream->commandBuffer() addCompletedHandler:^(id<MTLCommandBuffer> cb) {
     CFTimeInterval gpuTime = (cb.GPUEndTime - cb.GPUStartTime) * 1000.0;
-    CFTimeInterval kernelTime = (cb.kernelEndTime - cb.kernelStartTime) * 1000.0;
+    CFTimeInterval schedulingTime = (cb.kernelEndTime - cb.kernelStartTime) * 1000.0;
 
     if (info.type == BaseInfo::Type::COPY) {
       if (m_log_options & LogOptions::COPY_STATS) {
         auto& copyInfo = static_cast<CopyInfo&>(info);
         auto& copyStat = *m_copy_stat_list[copyInfo.kind];
         copyStat.totalGpuTime = copyStat.totalGpuTime + gpuTime;
-        copyStat.totalKernelTime = copyStat.totalKernelTime + kernelTime;
+        copyStat.totalSchedulingTime = copyStat.totalSchedulingTime + schedulingTime;
         if (copyInfo.length <= sizeof(int64_t)) {
           copyStat.scalarsGpuTime = copyStat.scalarsGpuTime + gpuTime;
         }
       }
     } else {
       info.totalGpuTime = info.totalGpuTime + gpuTime;
-      info.totalKernelTime = info.totalKernelTime + kernelTime;
+      info.totalSchedulingTime = info.totalSchedulingTime + schedulingTime;
     }
-    const std::string& infoStr = info.toString(gpuTime, kernelTime);
-    // logging the copy/kernel info is enabled via the env-var defined in kEVLogProfileInfoStr
+    const std::string& infoStr = info.toString(gpuTime, schedulingTime);
+    // logging the copy/operation info is enabled via the env-var defined in kEVLogProfileInfoStr
     // check if console-logging of copy info is enable
     if ((info.type == BaseInfo::Type::COPY && (m_log_options & LogOptions::COPY_INFO)) ||
         // or check if console-logging of kernel or graph info is enable
         ((info.type == BaseInfo::Type::KERNEL || info.type == BaseInfo::Type::GRAPH) &&
-         (m_log_options & LogOptions::KERNEL_INFO))) {
+         (m_log_options & LogOptions::OPERATION_INFO))) {
       fmt::print(stderr, "{}\n", infoStr);
     }
 
@@ -346,38 +343,38 @@ void MPSProfiler::addProfilerCompletedHandler(BaseInfo& info, SyncType syncType)
                         SyncType::COMMIT_AND_WAIT : syncType);
 }
 
-void MPSProfiler::logKernelProfilingStats(std::FILE* f) const {
-  if (m_kernel_info_list.empty()) {
+void MPSProfiler::logOperationsProfilingStats(std::FILE* f) const {
+  if (m_op_info_list.empty()) {
     // this is not an error, but to let the user know that the
     // LogOptions::KERNEL_STATS that they passed to EV is not yielding anything.
-    fmt::print(f, "There are no graphs or kernels logged for profiling\n");
+    fmt::print(f, "There are no MPS operations logged for profiling\n");
     return;
   }
-  // dump the kernels info into a vector to sort them
-  std::vector<KernelInfo*> kernelsList;
-  std::transform(m_kernel_info_list.begin(), m_kernel_info_list.end(),
-                 std::back_inserter(kernelsList),
-                 [](auto& kernelInfo){ return kernelInfo.second.get();} );
+  // dump the ops info into a vector to sort them
+  std::vector<OperationInfo*> opsList;
+  std::transform(m_op_info_list.begin(), m_op_info_list.end(),
+                 std::back_inserter(opsList),
+                 [](auto& opInfo){ return opInfo.second.get();} );
 
   // sort based on "Mean GPU time" in descending order
-  std::sort(kernelsList.begin(), kernelsList.end(),
-            [](const KernelInfo* a, const KernelInfo* b) {
+  std::sort(opsList.begin(), opsList.end(),
+            [](const OperationInfo* a, const OperationInfo* b) {
               return (a->totalGpuTime / double(a->runCount)) > (b->totalGpuTime / double(b->runCount));
             });
-  // print the table of kernel profiling stats
+  // print the table of operation profiling stats
   fmt::print(f, "\n{:-^200}\n{:^6}|{:^7}|{:^15}|{:^14}|{:^15}| {}\n{:-^200}\n",
-             fmt::format(" MPS Kernel Profiling: {} graphs, {} kernels ",
+             fmt::format(" MPS Operations Profiling: {} graphs, {} kernels ",
                          m_graph_counter, m_kernel_counter),
-             "ID", "#Runs",  "Mean KRNL(ms)", "Mean GPU(ms)", "Total GPU(ms)", "Kernel Name", "");
+             "ID", "#Runs",  "Mean KRNL(ms)", "Mean GPU(ms)", "Total GPU(ms)", "Operation Name", "");
 
-  for (const auto& kernelInfo : kernelsList) {
+  for (const auto& opInfo : opsList) {
     fmt::print(f, "{:^7}{:^8}{:^16}{:^15}{:^16} {}\n",
-               fmt::format("{}{}", kernelInfo->type == BaseInfo::Type::GRAPH ? "G": "K", kernelInfo->profileId),
-               kernelInfo->runCount,
-               fmt::format("{:.3f}", kernelInfo->totalKernelTime / double(kernelInfo->runCount)),
-               fmt::format("{:.3f}", kernelInfo->totalGpuTime / double(kernelInfo->runCount)),
-               fmt::format("{:.3f}", kernelInfo->totalGpuTime),
-               kernelInfo->strKey);
+               fmt::format("{}{}", opInfo->type == BaseInfo::Type::GRAPH ? "G": "K", opInfo->profileId),
+               opInfo->runCount,
+               fmt::format("{:.3f}", opInfo->totalSchedulingTime / double(opInfo->runCount)),
+               fmt::format("{:.3f}", opInfo->totalGpuTime / double(opInfo->runCount)),
+               fmt::format("{:.3f}", opInfo->totalGpuTime),
+               opInfo->strKey);
   }
 }
 
@@ -399,14 +396,14 @@ void MPSProfiler::logCPUFallbackProfilingStats(std::FILE* f) const {
                   auto cpuFbInfoPtr = cpuFbInfo.second.get();
                   totalRunCount += cpuFbInfoPtr->runCount;
                   totalCopyOverhead += cpuFbInfoPtr->totalCopyOverhead;
-                  totalCPUTime += cpuFbInfoPtr->totalKernelTime;
+                  totalCPUTime += cpuFbInfoPtr->totalSchedulingTime;
                   return cpuFbInfoPtr;
                  });
 
   // sort based on "Mean CPU time" in descending order
   std::sort(cpuFbList.begin(), cpuFbList.end(),
             [](const CpuFbInfo* a, const CpuFbInfo* b) {
-              return (a->totalKernelTime / double(a->runCount)) > (b->totalKernelTime / double(b->runCount));
+              return (a->totalSchedulingTime / double(a->runCount)) > (b->totalSchedulingTime / double(b->runCount));
             });
 
   // print the table of CPU Fallback profiling stats
@@ -419,8 +416,8 @@ void MPSProfiler::logCPUFallbackProfilingStats(std::FILE* f) const {
   for (const auto& cpuFbInfo : cpuFbList) {
     fmt::print(f, "{:^6}{:^8}{:^15}{:^16}{:^16} {}\n",
                cpuFbInfo->profileId, cpuFbInfo->runCount,
-               fmt::format("{:.3f}", cpuFbInfo->totalKernelTime / double(cpuFbInfo->runCount)),
-               fmt::format("{:.3f}", cpuFbInfo->totalKernelTime),
+               fmt::format("{:.3f}", cpuFbInfo->totalSchedulingTime / double(cpuFbInfo->runCount)),
+               fmt::format("{:.3f}", cpuFbInfo->totalSchedulingTime),
                getIMPSAllocator()->formatSize(cpuFbInfo->totalCopyOverhead),
                cpuFbInfo->opName);
   }
@@ -456,7 +453,7 @@ void MPSProfiler::logCopyProfilingStats(std::FILE* f) const {
       fmt::print(f, "{:^13}{:^11}{:^18}{:^17}{:^16}{:^11}{:^14}\n",
                 copyStat.kindStr, copyStat.totalCount,
                 getIMPSAllocator()->formatSize(copyStat.length),
-                fmt::format("{:.3f}", copyStat.totalKernelTime),
+                fmt::format("{:.3f}", copyStat.totalSchedulingTime),
                 fmt::format("{:.3f}", copyStat.totalGpuTime), copyStat.scalarsCount,
                 fmt::format("{:.2f} %", (1.0 - ((copyStat.totalGpuTime - copyStat.scalarsGpuTime) /
                             copyStat.totalGpuTime)) * 100.0));
@@ -469,11 +466,11 @@ void MPSProfiler::logProfilingStats() {
     return;
   }
   // logs kernel profiling stats when the process ends (if enabled).
-  if (m_log_options & LogOptions::KERNEL_STATS) {
-    logKernelProfilingStats(stderr);
+  if (m_log_options & LogOptions::OPERATION_STATS) {
+    logOperationsProfilingStats(stderr);
   }
   // logs CPU Fallback profiling stats when the process ends (if enabled).
-  if (m_log_options & LogOptions::CPU_FB_STATS) {
+  if (m_log_options & LogOptions::CPU_FALLBACK_STATS) {
     logCPUFallbackProfilingStats(stderr);
   }
   // logs copies profiling stats when the process ends (if enabled).
@@ -492,11 +489,8 @@ void MPSProfiler::emitSignpostEvent(SignpostTypes signpost_type, os_signpost_id_
 
   // need to use switch-case as the signpost names must be literal strings
   switch (signpost_type) {
-    case SignpostTypes::RUN_MPSGRAPH:
-      os_signpost_event_emit(m_os_log_events, signpost_id, kEvtSignpostRunGraphStr, "%s", msg);
-      break;
-    case SignpostTypes::RUN_KERNEL:
-      os_signpost_event_emit(m_os_log_events, signpost_id, kEvtSignpostRunKernelStr, "%s", msg);
+    case SignpostTypes::RUN_OPERATION:
+      os_signpost_event_emit(m_os_log_events, signpost_id, kEvtSignpostRunOperationStr, "%s", msg);
       break;
     case SignpostTypes::BLIT_COPY:
       os_signpost_event_emit(m_os_log_events, signpost_id, kEvtSignpostBlitCopyStr, "%s", msg);
@@ -518,11 +512,8 @@ void MPSProfiler::beginSignpostInterval(SignpostTypes signpost_type, os_signpost
   const char *msg = msg_str.c_str();
 
   switch (signpost_type) {
-    case SignpostTypes::RUN_MPSGRAPH:
-      os_signpost_interval_begin(m_os_log_intervals, signpost_id, kIntSignpostRunGraphStr, "%s", msg);
-      break;
-    case SignpostTypes::RUN_KERNEL:
-      os_signpost_interval_begin(m_os_log_intervals, signpost_id, kIntSignpostRunKernelStr, "%s", msg);
+    case SignpostTypes::RUN_OPERATION:
+      os_signpost_interval_begin(m_os_log_intervals, signpost_id, kIntSignpostRunOperationStr, "%s", msg);
       break;
     case SignpostTypes::BLIT_COPY:
       os_signpost_interval_begin(m_os_log_intervals, signpost_id, kIntSignpostBlitCopyStr, "%s", msg);
@@ -540,11 +531,8 @@ void MPSProfiler::endSignpostInterval(SignpostTypes signpost_type, os_signpost_i
     return;
   }
   switch (signpost_type) {
-    case SignpostTypes::RUN_MPSGRAPH:
-      os_signpost_interval_end(m_os_log_intervals, signpost_id, kIntSignpostRunGraphStr);
-      break;
-    case SignpostTypes::RUN_KERNEL:
-      os_signpost_interval_end(m_os_log_intervals, signpost_id, kIntSignpostRunKernelStr);
+    case SignpostTypes::RUN_OPERATION:
+      os_signpost_interval_end(m_os_log_intervals, signpost_id, kIntSignpostRunOperationStr);
       break;
     case SignpostTypes::BLIT_COPY:
       os_signpost_interval_end(m_os_log_intervals, signpost_id, kIntSignpostBlitCopyStr);
@@ -568,9 +556,8 @@ os_signpost_id_t MPSProfiler::generateSignpostId(os_signpost_type_t signpostType
 MPSProfiler::SignpostTypes MPSProfiler::getSignpostType(BaseInfo::Type infoType) {
   switch (infoType) {
     case BaseInfo::Type::GRAPH:
-      return SignpostTypes::RUN_MPSGRAPH;
     case BaseInfo::Type::KERNEL:
-      return SignpostTypes::RUN_KERNEL;
+      return SignpostTypes::RUN_OPERATION;
     case BaseInfo::Type::COPY:
       return SignpostTypes::BLIT_COPY;
     case BaseInfo::Type::CPU_FALLBACK:
