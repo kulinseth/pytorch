@@ -28,6 +28,7 @@ static const size_t kSmallHeap     = MB(8);    // "small" allocations are packed
 static const size_t kLargeHeap     = MB(32);   // "large" allocations may be packed in 32 MiB heaps
 static const size_t kXLargeHeapD   = MB(128);  // "extra large" allocations on Discrete devices may be packed in 128 MiB heaps
 static const size_t kXLargeHeapU   = MB(1024); // "extra large" allocations on Unified devices may be packed in 1 GiB heaps
+static const size_t kMaxScalarAlloc= (sizeof(int64_t)); // largest "scalar" allocation
 
 // buffer pools could be customized with a combination of usage flags
 enum UsageFlags : uint32_t {
@@ -53,6 +54,7 @@ struct HeapBlock;
 struct BufferBlock
 {
   id<MTLBuffer> buffer;
+  void* cpu_ptr; // stores the pointer to CPU mapping of a Shared MTLBuffer
   size_t size; // size after alignment
   size_t requested_size; // requested size (before alignment)
   // buffer shape is used for retrieving base of views in cached graphs
@@ -68,7 +70,7 @@ struct BufferBlock
 
   BufferBlock(size_t Size, size_t RequestedSize = 0, const id<MTLBuffer> Buffer = nullptr,
               HeapBlock* Heap = nullptr) :
-              buffer(Buffer), size(Size), requested_size(RequestedSize),
+              buffer(Buffer), cpu_ptr(nullptr), size(Size), requested_size(RequestedSize),
               in_use(false), heap(Heap), buf_id(++buffer_counter), gc_count(0), use_count(0) { }
 
   static bool Comparator(const BufferBlock* a, const BufferBlock* b) {
@@ -267,6 +269,9 @@ public:
   IntArrayRef getBufferShape(void* ptr);
   // allocate a buffer from a specialized pool to import CPU scalars into GPU
   id<MTLBuffer> allocScalarBufferWithValue(void* value, size_t size);
+  // returns a CPU-mapping of the input buffer and its retainCount,
+  // if only it has Shared storage-mode and allocated on MPSAllocator
+  std::pair<void*, uint32_t> getSharedBufferPtr(void* buffer);
   // this indicates how far (in Megabytes) the current total allocations are from the
   // low watermark limit which is used to detect if we're under memory pressure
   // This returns zero if we've reached the low watermark limit
@@ -358,8 +363,12 @@ private:
   void garbage_collect_cached_buffers(AllocParams& params);
 
   BufferPool& get_pool(size_t Size, uint32_t usage) {
-    if (usage & UsageFlags::SCALAR)
+    if (usage & UsageFlags::SCALAR) {
       return m_scalar_pool;
+    }
+    if (Size <= kMaxScalarAlloc && m_device.hasUnifiedMemory) {
+      return m_small_pool_shared;
+    }
     return Size <= kMaxSmallAlloc ? ((usage & UsageFlags::SHARED) ? m_small_pool_shared : m_small_pool_private) :
                                     ((usage & UsageFlags::SHARED) ? m_large_pool_shared : m_large_pool_private);
   }

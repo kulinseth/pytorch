@@ -62,7 +62,7 @@ void MPSStream::synchronize(SyncType syncType) {
       // typically in GPU to GPU copies we won't commit explicitly
       break;
     case SyncType::COMMIT:
-      flush();
+      commit();
       break;
     case SyncType::COMMIT_ADAPTIVE:
       // the adaptive commit only commits if we hit the low watermark memory threshold
@@ -90,11 +90,20 @@ void MPSStream::commit() {
 }
 
 void MPSStream::commitAndWait() {
-  assert(_commandBuffer);
-  [_commandBuffer commit];
-  [_commandBuffer waitUntilCompleted];
-  [_commandBuffer release];
-  _commandBuffer = nil;
+  if (_prevCommandBuffer) {
+    // the previous command buffer (if exists) has already been committed,
+    // so we just wait until it's completed and then dispose it.
+    [_prevCommandBuffer waitUntilCompleted];
+    [_prevCommandBuffer release];
+    _prevCommandBuffer = nil;
+  }
+
+  if (_commandBuffer) {
+    [_commandBuffer commit];
+    [_commandBuffer waitUntilCompleted];
+    [_commandBuffer release];
+    _commandBuffer = nil;
+  }
 }
 
 void MPSStream::commitAndContinue() {
@@ -113,7 +122,14 @@ void MPSStream::endKernelCoalescing() {
 void MPSStream::flush() {
   if (_commandBuffer) {
     [_commandBuffer commit];
-    [_commandBuffer release];
+    // if commitAndContinue is disabled (e.g., for Profiler), we keep the command
+    // buffer so we could wait on it later, if required.
+    if (!_enableCommitAndContinue) {
+      TORCH_INTERNAL_ASSERT(getMPSProfiler().isSignpostTracingEnabled());
+      _prevCommandBuffer = _commandBuffer;
+    } else {
+      [_commandBuffer release];
+    }
     _commandBuffer = nil;
   }
 }

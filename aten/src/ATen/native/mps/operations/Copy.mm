@@ -312,7 +312,43 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_, boo
   return dst_;
 }
 
-at::Tensor& mps_copy_(at::Tensor& dst, const at::Tensor& src, bool non_blocking) {
+// tries to copy scalar buffers if any of them are allocated on MPSAllocator
+// with Shared-storage mode on Unified devices (supports CPU <-> MPS copies only).
+static bool try_copy_scalars_mps(at::Tensor& dst, const at::Tensor& src, bool non_blocking)
+{
+  const auto& allocator = *getIMPSAllocator();
+  if (!allocator.isSharedStorageSupported()) {
+    return false;
+  }
+  void* src_ptr = src.storage().data();
+  void* dst_ptr = dst.storage().data();
+  uint32_t src_retain_count = 0, dst_retain_count = 0;
+
+  if (src.device().type() == at::kMPS) {
+    std::tie(src_ptr, src_retain_count) = allocator.getSharedBufferPtr(src_ptr);
+  }
+  if (dst.device().type() == at::kMPS) {
+    std::tie(dst_ptr, dst_retain_count) = allocator.getSharedBufferPtr(dst_ptr);
+  }
+  if (!src_ptr || !dst_ptr) {
+    return false;
+  }
+  size_t src_offset = src.storage_offset() * src.itemsize();
+  size_t dst_offset = dst.storage_offset() * dst.itemsize();
+  size_t length = std::min(src.nbytes(), dst.nbytes());
+  bool needsSync = !non_blocking && (src_retain_count > 1 || dst_retain_count > 1);
+
+  if (needsSync) {
+    // wait for any possible GPU operations to finish before reading from source MPS buffers
+    getDefaultMPSStream()->synchronize(SyncType::COMMIT_AND_WAIT);
+  }
+  memcpy((char*) dst_ptr + dst_offset, (char*) src_ptr + src_offset, length);
+
+  return true;
+}
+
+at::Tensor& mps_copy_(at::Tensor& dst, const at::Tensor& src, bool non_blocking)
+{
   TORCH_CHECK(dst.defined(), "dst is undefined");
   TORCH_CHECK(src.defined(), "src is undefined");
 
@@ -328,6 +364,17 @@ at::Tensor& mps_copy_(at::Tensor& dst, const at::Tensor& src, bool non_blocking)
     needs_broadcasting = true;
   }
 
+  // copying scalars from MPS to MPS is possible with try_copy_scalars_mps(), but it
+  // may require syncing with CPU. So it's better to use blit encoder without syncing.
+  if (src.device().type() == at::kMPS && dst.device().type() == at::kMPS) {
+    return copy_kernel_mps(dst, needs_broadcasting ? src.expand_as(dst) : src, non_blocking);
+  }
+  // for scalar tensors, try to copy with memcpy (if Unified memory)
+  if (src.dim() == 0 && src.dtype() == dst.dtype()) {
+    if (try_copy_scalars_mps(dst, src, non_blocking)) {
+      return dst;
+    }
+  }
   if (src.device().type() == at::kMPS && dst.device().type() == at::kCPU) {
     return copy_from_mps_(dst, needs_broadcasting ? src.expand_as(dst) : src, non_blocking);
   }
@@ -335,10 +382,9 @@ at::Tensor& mps_copy_(at::Tensor& dst, const at::Tensor& src, bool non_blocking)
     return copy_to_mps_(dst, needs_broadcasting ? src.expand_as(dst) : src, non_blocking);
   }
 
-  if (src.device().type() == at::kMPS && dst.device().type() == at::kMPS) {
-    return copy_kernel_mps(dst, needs_broadcasting ? src.expand_as(dst) : src, non_blocking);
-  }
-  TORCH_INTERNAL_ASSERT(src.device().type() == DeviceType::MPS, "mps_copy_ is implemented only for *->MPS; MPS->*");
+  TORCH_INTERNAL_ASSERT(
+      src.device().type() == DeviceType::MPS,
+      "mps_copy_ is implemented only for *->MPS; MPS->*");
   return dst;
 }
 } // namespace mps
