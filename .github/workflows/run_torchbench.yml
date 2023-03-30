@@ -86,7 +86,7 @@ jobs:
                   run \
                   --pytorch-path "${PWD}" \
                   --torchbench-path "${PWD}"/benchmark \
-                  --pr-num "$PR_NUM" \
+                  --pr-num "$PR_HEAD_SHA" \
                   --pr-base-sha "$PR_MERGE_BASE" \
                   --pr-head-sha "$PR_HEAD_SHA"
 
@@ -98,7 +98,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: TorchBench result
-          path: ~/.torchbench/bisection/pr${{ github.event.number }}
+          path: ~/.torchbench/bisection/pr${{ github.event.pull_request.head.sha }}
 
       - name: Clean up disk space
         if: always()
