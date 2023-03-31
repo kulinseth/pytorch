@@ -205,7 +205,6 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
             */
             MPSGraphTensor *varTensor = nil;
 
-            bool isFP16 = inputTensor.dataType == MPSDataTypeFloat16;
             if(train) {
               // Compute mean and variance of the current batch
               MPSGraphTensor* batchMeanTensor = [mpsGraph meanOfTensor:inputTensor
@@ -253,21 +252,18 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
                                                                          name:nil];
             }
             // Update saved mean and inverse std tensor
+            MPSDataType dataTypeForGraph = inputTensor.dataType == MPSDataTypeFloat16 ? MPSDataTypeFloat16 : MPSDataTypeFloat32;
             MPSGraphTensor *epsilonTensor = [mpsGraph constantWithScalar:(double)epsilon
                                                                    shape:@[@1]
-                                                                dataType:MPSDataTypeFloat32];
+                                                                dataType:dataTypeForGraph];
 
-            if(isFP16) {
-                //Need to upcast for MPSGraph
-                batchVarianceTensor = mps::castMPSTensor(mpsGraph, batchVarianceTensor, MPSDataTypeFloat32);
-            }
             MPSGraphTensor *varianceEps = [mpsGraph additionWithPrimaryTensor:batchVarianceTensor
                                                               secondaryTensor:epsilonTensor
                                                                          name:@"varianceEps"];
             MPSGraphTensor *sqrtVariance = [mpsGraph squareRootWithTensor:varianceEps
                                                                      name:@"sqrtVariance"];
             float primary = 1.0f;
-            MPSGraphTensor *primaryTensor = [mpsGraph constantWithScalar:primary dataType:MPSDataTypeFloat32];
+            MPSGraphTensor *primaryTensor = [mpsGraph constantWithScalar:primary dataType:dataTypeForGraph];
 
             scaledInverseSqrtVariance = [mpsGraph divisionWithPrimaryTensor:primaryTensor
                                                             secondaryTensor:sqrtVariance
@@ -293,11 +289,6 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out
                                                                 betaTensor:biasTensor
                                                                    epsilon:(float)epsilon
                                                                       name:nil];
-
-            if(isFP16) {
-                //Downcast output back to original data type
-                outputTensor = mps::castMPSTensor(mpsGraph, outputTensor, MPSDataTypeFloat16);
-            }
 
 
           // Reshape saved mean and var to fit output
