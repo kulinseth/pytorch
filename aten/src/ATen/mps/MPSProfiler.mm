@@ -120,7 +120,7 @@ MPSProfiler::~MPSProfiler() {
   }
 }
 
-void MPSProfiler::beginProfileExecution(BaseInfo& info) {
+void MPSProfiler::beginProfileExecution(BaseInfo& info, bool cpuExecution) {
   SignpostTypes signpostType = getSignpostType(info.type);
   if (!(m_signpost_types & signpostType)) {
     return;
@@ -132,9 +132,7 @@ void MPSProfiler::beginProfileExecution(BaseInfo& info) {
     info.intervalSignpostId = generateSignpostId(OS_SIGNPOST_INTERVAL_BEGIN);
     // if scheduling part is included, we begin the interval early in here,
     // otherwise we begin when the scheduledHandler callback is triggered.
-    if ((m_profile_options & ProfileOptions::INCLUDE_SCHEDULE_INTERVAL) ||
-        // for ops that run on CPU we begin the interval here
-        (info.type == BaseInfo::Type::CPU_FALLBACK)) {
+    if ((m_profile_options & ProfileOptions::INCLUDE_SCHEDULE_INTERVAL) || cpuExecution) {
       beginSignpostInterval(signpostType, info.intervalSignpostId, info.toString());
       info.completed = false;
     // for graphs, we add the scheduleHandler in beginProfileGPUInterval()
@@ -142,6 +140,35 @@ void MPSProfiler::beginProfileExecution(BaseInfo& info) {
       addProfilerScheduledHandler(info);
     }
   }
+}
+
+void MPSProfiler::endProfileExecution(BaseInfo& info, os_signpost_id_t event_signpost_id,
+                                      os_signpost_id_t interval_signpost_id,
+                                      double gpuTime, double schedulingTime) {
+
+  const SignpostTypes signpostType = getSignpostType(info.type);
+
+  if (info.type == BaseInfo::Type::COPY) {
+    updateCopyStats(static_cast<CopyInfo&>(info), gpuTime, schedulingTime);
+  } else {
+    info.totalGpuTime = info.totalGpuTime + gpuTime;
+    info.totalSchedulingTime = info.totalSchedulingTime + schedulingTime;
+  }
+  const std::string& infoStr = info.toString(gpuTime, schedulingTime);
+  // logging the operations, copies, cpu fallbacks info during the execution
+  // is enabled via the env-var defined in kEVLogProfileInfoStr
+  if (isProfileInfoLoggingEnabled(info.type)) {
+    fmt::print(stderr, "{}\n", infoStr);
+  }
+  // it is possible to use both interval and event based signposts at the same time
+  if ((m_profile_options & ProfileOptions::USE_EVENTS) && event_signpost_id) {
+    emitSignpostEvent(signpostType, event_signpost_id, infoStr);
+  }
+  // GPU time for signpost intervals is calculated based on its duration
+  if ((m_profile_options & ProfileOptions::USE_INTERVALS) && interval_signpost_id) {
+    endSignpostInterval(signpostType, interval_signpost_id);
+  }
+  info.completed = true;
 }
 
 uint64_t MPSProfiler::beginProfileKernel(const void* handle, const std::string& strKey, bool isGraph) {
@@ -202,7 +229,7 @@ uint64_t MPSProfiler::beginProfileCPUFallback(const std::string& opName, const T
   cpuFbInfo.runCount++;
   cpuFbInfo.startTime = std::clock();
   cpuFbInfo.updateCopyOverhead(tensors);
-  beginProfileExecution(cpuFbInfo);
+  beginProfileExecution(cpuFbInfo, true);
 
   return cpuFbInfo.profileId;
 }
@@ -213,43 +240,30 @@ void MPSProfiler::endProfileCPUFallback(const std::string& opName) {
   std::clock_t endTime = std::clock();
   // CPU time in ms
   double cpuTime = 1000.0 * double(endTime - cpuFbInfo.startTime) / CLOCKS_PER_SEC;
-  cpuFbInfo.totalSchedulingTime = cpuFbInfo.totalSchedulingTime + cpuTime;
-
-  const std::string& infoStr = cpuFbInfo.toString(0, cpuTime);
-  // logging the CPU Fallback info is enabled via the env-var defined in kEVLogProfileInfoStr
-  if (m_log_options & LogOptions::CPU_FALLBACK_INFO) {
-    fmt::print(stderr, "{}\n", infoStr);
-  }
-  if ((m_profile_options & ProfileOptions::USE_EVENTS)) {
-    emitSignpostEvent(SignpostTypes::CPU_FALLBACK, cpuFbInfo.eventSignpostId, cpuFbInfo.toString(0., cpuTime));
-  }
-  if ((m_profile_options & ProfileOptions::USE_INTERVALS)) {
-    endSignpostInterval(SignpostTypes::CPU_FALLBACK, cpuFbInfo.intervalSignpostId);
-  }
-  cpuFbInfo.completed = true;
+  endProfileExecution(cpuFbInfo, cpuFbInfo.eventSignpostId,
+                      cpuFbInfo.intervalSignpostId, 0, cpuTime);
 }
 
 uint64_t MPSProfiler::beginProfileCopy(const void* srcBuffer, const void* dstBuffer,
                                        const OptionalTensorRef srcTensor,
                                        const OptionalTensorRef dstTensor,
-                                       size_t length, bool isNonBlocking) {
+                                       size_t length, bool isNonBlocking, bool usesBlitter) {
   if (!isCopyProfilingEnabled()) {
     return 0;
   }
   const uint64_t profileId = ++m_copy_counter;
-  auto copyInfo = std::make_unique<CopyInfo>(dstBuffer, length, profileId, isNonBlocking);
+  auto copyInfo = std::make_unique<CopyInfo>(dstBuffer, length, profileId, isNonBlocking, usesBlitter);
   copyInfo->srcStrKey = CopyInfo::buildTensorString(srcBuffer, srcTensor);
   copyInfo->dstStrKey = CopyInfo::buildTensorString(dstBuffer, dstTensor);
   copyInfo->kind = CopyInfo::getCopyKind(srcBuffer, dstBuffer, srcTensor, dstTensor);
-
-  if (m_log_options & LogOptions::COPY_STATS) {
-    auto& copyStat = *m_copy_stat_list[copyInfo->kind];
-    copyStat.totalCount++;
-    copyStat.length += length;
-    copyStat.scalarsCount += length <= sizeof(int64_t) ? 1 : 0;
+  if (!usesBlitter) {
+    // for copies that don't use blitters, we measure CPU time
+    copyInfo->startTime = std::clock();
   }
-  beginProfileExecution(*copyInfo);
-
+  // don't generate signposts if the non-blocking copy is not using the blitter
+  if (usesBlitter || !isNonBlocking) {
+    beginProfileExecution(*copyInfo, !usesBlitter);
+  }
   // this should not happen since we erase the copy info after profiling/logging it.
   TORCH_INTERNAL_ASSERT_DEBUG_ONLY(m_copy_info_list.count(profileId) == 0);
   // the copy info isn't retained in the list, so we erase the completed ones
@@ -269,7 +283,12 @@ void MPSProfiler::endProfileCopy(uint64_t profileId, SyncType syncType) {
   // this is just an identifier, and not used to access memory
   TORCH_INTERNAL_ASSERT_DEBUG_ONLY(m_copy_info_list.count(profileId), "Failed to get copy information!");
   auto& copyInfo = *m_copy_info_list[profileId];
-  addProfilerCompletedHandler(copyInfo, syncType);
+  if (copyInfo.usesBlitter) {
+    addProfilerCompletedHandler(copyInfo, syncType);
+  } else {
+    double cpuTime = 1000.0 * double(std::clock() - copyInfo.startTime) / CLOCKS_PER_SEC;
+    endProfileExecution(copyInfo, copyInfo.eventSignpostId, copyInfo.intervalSignpostId, 0, cpuTime);
+  }
 }
 
 void MPSProfiler::addProfilerScheduledHandler(BaseInfo& info) {
@@ -285,8 +304,24 @@ void MPSProfiler::addProfilerScheduledHandler(BaseInfo& info) {
   }];
 }
 
+void MPSProfiler::updateCopyStats(const CopyInfo& copyInfo, double gpuTime, double schedulingTime) {
+  if (!(m_log_options & LogOptions::COPY_STATS)) {
+    return;
+  }
+  auto& copyStat = *m_copy_stat_list[copyInfo.kind];
+  copyStat.totalCount++;
+  copyStat.length += copyInfo.length;
+  copyStat.totalGpuTime = copyStat.totalGpuTime + gpuTime;
+  copyStat.totalSchedulingTime = copyStat.totalSchedulingTime + schedulingTime;
+  if (copyInfo.length <= sizeof(int64_t)) {
+    copyStat.scalarsCount++;
+    copyStat.scalarsGpuTime = copyStat.scalarsGpuTime + gpuTime;
+  }
+  copyStat.blockingCount += !copyInfo.isNonBlocking ? 1 : 0;
+  copyStat.memcpyCount += !copyInfo.usesBlitter ? 1 : 0;
+}
+
 void MPSProfiler::addProfilerCompletedHandler(BaseInfo& info, SyncType syncType) {
-  const SignpostTypes signpostType = getSignpostType(info.type);
   const os_signpost_id_t intervalSignpostId = info.intervalSignpostId;
   const os_signpost_id_t eventSignpostId = info.eventSignpostId;
 
@@ -304,39 +339,7 @@ void MPSProfiler::addProfilerCompletedHandler(BaseInfo& info, SyncType syncType)
     CFTimeInterval gpuTime = (cb.GPUEndTime - cb.GPUStartTime) * 1000.0;
     CFTimeInterval schedulingTime = (cb.kernelEndTime - cb.kernelStartTime) * 1000.0;
 
-    if (info.type == BaseInfo::Type::COPY) {
-      if (m_log_options & LogOptions::COPY_STATS) {
-        auto& copyInfo = static_cast<CopyInfo&>(info);
-        auto& copyStat = *m_copy_stat_list[copyInfo.kind];
-        copyStat.totalGpuTime = copyStat.totalGpuTime + gpuTime;
-        copyStat.totalSchedulingTime = copyStat.totalSchedulingTime + schedulingTime;
-        if (copyInfo.length <= sizeof(int64_t)) {
-          copyStat.scalarsGpuTime = copyStat.scalarsGpuTime + gpuTime;
-        }
-      }
-    } else {
-      info.totalGpuTime = info.totalGpuTime + gpuTime;
-      info.totalSchedulingTime = info.totalSchedulingTime + schedulingTime;
-    }
-    const std::string& infoStr = info.toString(gpuTime, schedulingTime);
-    // logging the copy/operation info is enabled via the env-var defined in kEVLogProfileInfoStr
-    // check if console-logging of copy info is enable
-    if ((info.type == BaseInfo::Type::COPY && (m_log_options & LogOptions::COPY_INFO)) ||
-        // or check if console-logging of kernel or graph info is enable
-        ((info.type == BaseInfo::Type::KERNEL || info.type == BaseInfo::Type::GRAPH) &&
-         (m_log_options & LogOptions::OPERATION_INFO))) {
-      fmt::print(stderr, "{}\n", infoStr);
-    }
-
-    // NOTE: it is possible to use both interval and event based signposts at the same time, if required
-    if ((m_profile_options & ProfileOptions::USE_EVENTS)) {
-      emitSignpostEvent(signpostType, eventSignpostId, infoStr);
-    }
-    // GPU time for signpost intervals is calculated based on its duration (which ends with completionHandler),
-    if ((m_profile_options & ProfileOptions::USE_INTERVALS)) {
-      endSignpostInterval(signpostType, intervalSignpostId);
-    }
-    info.completed = true;
+    endProfileExecution(info, eventSignpostId, intervalSignpostId, gpuTime, schedulingTime);
   }];
 
   m_stream->synchronize((m_profile_options & ProfileOptions::WAIT_UNTIL_COMPLETED) ?
@@ -442,21 +445,24 @@ void MPSProfiler::logCopyProfilingStats(std::FILE* f) const {
   }
 
   // print the table of copy profiling stats
-  fmt::print(f, "\n{:-^120}\n{:^12}|{:^10}|{:^17}|{:^16}|{:^15}|{:^10}|{:^13}\n{:-^120}\n",
+  fmt::print(f, "\n{:-^160}\n{:^12}|{:^10}|{:^17}|{:^16}|{:^15}|{:^9}|{:^13}|{:^10}|{:^8}\n{:-^160}\n",
              fmt::format(" MPS Copy Profiling: {} total copies ({}), {} scalar copies ",
                          totalCopiesCount, getIMPSAllocator()->formatSize(totalCopySize), totalScalarCopyCount),
-             "Kind", "Total#", "Total Size", "Total KRNL(ms)","Total GPU(ms)", "Scalars#", "Scalars GPU", "");
+             "Kind", "Total#", "Total Size", "Total KRNL(ms)","Total GPU(ms)", "Scalars", "Scalars GPU",
+             "Blocking", "memcpy", "");
 
   for (const auto& copyStatPair : m_copy_stat_list) {
     const auto& copyStat = *copyStatPair.second;
     if (copyStat.totalCount > 0) {
-      fmt::print(f, "{:^13}{:^11}{:^18}{:^17}{:^16}{:^11}{:^14}\n",
+      fmt::print(f, "{:^13}{:^11}{:^18}{:^17}{:^16}{:^10}{:^14}{:^11}{:^9}\n",
                 copyStat.kindStr, copyStat.totalCount,
                 getIMPSAllocator()->formatSize(copyStat.length),
                 fmt::format("{:.3f}", copyStat.totalSchedulingTime),
                 fmt::format("{:.3f}", copyStat.totalGpuTime), copyStat.scalarsCount,
-                fmt::format("{:.2f} %", (1.0 - ((copyStat.totalGpuTime - copyStat.scalarsGpuTime) /
-                            copyStat.totalGpuTime)) * 100.0));
+                fmt::format("{:.2f} %", copyStat.totalGpuTime > 0.0 ?
+                (1.0 - ((copyStat.totalGpuTime - copyStat.scalarsGpuTime) /
+                copyStat.totalGpuTime)) * 100.0 : 0.0),
+                copyStat.blockingCount, copyStat.memcpyCount);
     }
   }
 }
@@ -476,6 +482,20 @@ void MPSProfiler::logProfilingStats() {
   // logs copies profiling stats when the process ends (if enabled).
   if (m_log_options & LogOptions::COPY_STATS) {
     logCopyProfilingStats(stderr);
+  }
+}
+
+bool MPSProfiler::isProfileInfoLoggingEnabled(BaseInfo::Type infoType) {
+  switch (infoType) {
+    case BaseInfo::Type::GRAPH:
+    case BaseInfo::Type::KERNEL:
+      return (m_log_options & LogOptions::OPERATION_INFO);
+    case BaseInfo::Type::COPY:
+      return (m_log_options & LogOptions::COPY_INFO);
+    case BaseInfo::Type::CPU_FALLBACK:
+      return (m_log_options & LogOptions::CPU_FALLBACK_INFO);
+    default:
+      AT_ERROR("invalid profiling info type");
   }
 }
 
@@ -563,7 +583,7 @@ MPSProfiler::SignpostTypes MPSProfiler::getSignpostType(BaseInfo::Type infoType)
     case BaseInfo::Type::CPU_FALLBACK:
       return SignpostTypes::CPU_FALLBACK;
     default:
-      AT_ERROR("invalid signpost type");
+      AT_ERROR("invalid profiling info type");
   }
 }
 
