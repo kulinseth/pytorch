@@ -65,11 +65,7 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    if (disableTypeInference) {
-      runMPSGraphExecutable(getCurrentMPSStream(), cachedGraph, feeds, results);
-    } else {
-      runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
-    }
+    runMPSGraph(getCurrentMPSStream(), cachedGraph, feeds, results, disableTypeInference);
   }
 }
 

@@ -39,17 +39,16 @@ void runMPSGraph(
     MPSStream* mpsStream,
     MPSGraph* mpsGraph,
     NSDictionary* feeds,
-    NSDictionary* results,
-    bool disableTypeInference = false);
+    NSDictionary* results);
 
 struct MPSCachedGraph;
 
-void runMPSGraphExecutable(
+void runMPSGraph(
   MPSStream *mpsStream,
-  MPSCachedGraph* cachedraph,
+  MPSCachedGraph* cachedGraph,
   NSDictionary *feeds,
   NSDictionary *results,
-  MPSGraphTensor* alphaTensor = nil);
+  bool disableTypeInference = false);
 
 
 MPSDataType getMPSDataType(ScalarType scalar_type);

@@ -22,6 +22,11 @@ struct BinaryOpCachedGraph : public MPSCachedGraph
 typedef MPSGraphTensor* (^BinaryOpBlock)(BinaryOpCachedGraph*, MPSGraphTensor*, MPSGraphTensor*);
 #define BinaryOpFn(graph, primary, secondary) MPSGraphTensor* (mps::BinaryOpCachedGraph* graph, MPSGraphTensor* primary, MPSGraphTensor* secondary)
 
+static
+bool disableTypeInferenceBinary(const Tensor& self, const Tensor& other) {
+  return (self.dim() == 1 || other.dim() == 1 || self.dim() >= 5 || other.dim() >= 5);
+}
+
 // alpha is always 1.0 except when this function is called from add_sub_template()
 void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha,
                     const Tensor& output_, std::string op_name, BinaryOpBlock binaryBlock)
@@ -36,7 +41,6 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
 
   const bool is_self_scalar = self.dim() == 0;
   const bool is_other_scalar = other.dim() == 0;
-  bool disableTypeInference = false;
 
   auto new_size = at::infer_size(self.sizes(), other.sizes());
   if (!output_.sizes().equals(new_size)) {
@@ -48,10 +52,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
     return;
   }
 
-  if (self.dim() == 1 || other.dim() == 1 || self.dim() >= 5 || other.dim() >= 5) {
-    disableTypeInference = true;
-  }
-
+  bool disableTypeInference = disableTypeInferenceBinary(self, other);
   Tensor output;
   bool needsCopyToOutput = false;
 
@@ -188,11 +189,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    if (disableTypeInference) {
-      runMPSGraphExecutable(mpsStream, cachedGraph, feeds, results, cachedGraph->alphaTensor);
-    } else {
-      runMPSGraph(mpsStream, cachedGraph->graph(), feeds, results);
-    }
+    runMPSGraph(mpsStream, cachedGraph, feeds, results, disableTypeInference);
 
     if (needsCopyToOutput) {
       output_.copy_(output);
@@ -276,11 +273,7 @@ void add_sub_template(const Tensor& self, const Tensor& other, const Scalar& alp
     at::native::alpha_check(commonDtype, alpha);
   }
 
-  bool disableTypeInference = false;
-  if (self.dim() == 1 || other.dim() == 1 || self.dim() >= 5 || other.dim() >= 5) {
-    disableTypeInference = true;
-  }
-
+  bool disableTypeInference = disableTypeInferenceBinary(self, other);
   BinaryOpBlock add_sub_op_block = ^BinaryOpFn(cachedGraph, primaryCastTensor, secondaryCastTensor) {
     MPSGraph* mpsGraph = cachedGraph->graph();
     MPSGraphTensor* secondaryTensor = secondaryCastTensor;
