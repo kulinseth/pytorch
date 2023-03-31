@@ -32,7 +32,10 @@ MPSStream::~MPSStream() {
   [_commandQueue release];
   _commandQueue = nil;
   [_executionDescriptor release];
+  [_executableExecutionDescriptor release];
+
   _executionDescriptor = nil;
+  _executableExecutionDescriptor = nil;
 
   assert(_commandBuffer == nil);
 }
@@ -197,16 +200,10 @@ void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDicti
         for (MPSGraphTensor *tensor in [executable feedTensors]) {
           inputsArray[inputIndex++] = feeds[tensor];
         }
-        
+
         for (MPSGraphTensor *tensor in [executable targetTensors]) {
           resultsArray[ouputIndex++] = results[tensor];
         }
-
-        MPSGraphExecutableExecutionDescriptor *executionDescriptor =
-                        [[MPSGraphExecutableExecutionDescriptor new] autorelease];
-
-        executionDescriptor.completionHandler = ^(NSArray<MPSGraphTensorData *> * _Nonnull,
-                                                NSError * _Nullable) { };
 
         [executable encodeToCommandBuffer:commandBuffer()
                               inputsArray:inputsArray

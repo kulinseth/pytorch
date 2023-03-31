@@ -193,7 +193,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
     } else {
       runMPSGraph(mpsStream, cachedGraph->graph(), feeds, results);
     }
-    
+
     if (needsCopyToOutput) {
       output_.copy_(output);
     }
@@ -276,13 +276,19 @@ void add_sub_template(const Tensor& self, const Tensor& other, const Scalar& alp
     at::native::alpha_check(commonDtype, alpha);
   }
 
+  bool disableTypeInference = false;
+  if (self.dim() == 1 || other.dim() == 1 || self.dim() >= 5 || other.dim() >= 5) {
+    disableTypeInference = true;
+  }
+
   BinaryOpBlock add_sub_op_block = ^BinaryOpFn(cachedGraph, primaryCastTensor, secondaryCastTensor) {
     MPSGraph* mpsGraph = cachedGraph->graph();
     MPSGraphTensor* secondaryTensor = secondaryCastTensor;
 
     // if alpha is 1.0, then we don't bother adding another multiply to graph
     if (alpha_has_value) {
-      cachedGraph->alphaTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(other.scalar_type()), @[@1]);
+      cachedGraph->alphaTensor = disableTypeInference ? mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(other.scalar_type())) :
+                  mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(other.scalar_type()), @[@1]);
       secondaryTensor = [mpsGraph multiplicationWithPrimaryTensor:secondaryCastTensor
                                                   secondaryTensor:cachedGraph->alphaTensor
                                                              name:nil];

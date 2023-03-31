@@ -22,9 +22,6 @@ void runMPSGraphExecutable(MPSStream *mpsStream, MPSCachedGraph *cachedGraph, NS
         MPSGraphTensorData* graphTensorData = [feeds objectForKey:graphTensor];
         shapes[graphTensor] = [[[MPSGraphShapedType alloc] initWithShape:nil dataType:graphTensorData.dataType] autorelease];
       }
-      if (alphaTensor) {
-        shapes[alphaTensor] = [[[MPSGraphShapedType alloc] initWithShape:@[@1] dataType:alphaTensor.dataType] autorelease];
-      }
       MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
       [compilationDescriptor disableTypeInference];
 

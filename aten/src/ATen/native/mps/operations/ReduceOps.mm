@@ -172,7 +172,6 @@ void reduction_out_mps(
     return;
   }
 
-  auto stream = at::mps::getCurrentMPSStream();
   @autoreleasepool {
     std::string dtype_str = dtype.has_value() ? mps::getMPSTypeString(dtype.value()) : "";
     NSString* ns_key = [[wrappedAxes valueForKey:@"description"] componentsJoinedByString:@","];
