@@ -225,7 +225,7 @@ void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDicti
         profiler.endProfileKernel(mpsGraph, SyncType::COMMIT);
       } else {
         // if commitAndContinue is disabled, we need to always commit manually after encoding
-        synchronize(_enableCommitAndContinue == false ? SyncType::COMMIT : syncType);
+        synchronize(SyncType::COMMIT_AND_CONTINUE);
       }
     }
  });
