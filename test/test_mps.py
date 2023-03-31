@@ -6536,6 +6536,8 @@ class TestNLLLoss(TestCaseMPS):
         helper((2, 8, 4, 5), 0.1)
         helper((2, 8, 3, 5), 0.1)
         helper((2, 8, 3, 5), 0.2)
+        helper((3, 4, 5, 6, 2), 0.2)
+        helper((2), 0.2)
 
     # Test add
     def test_add_scalars(self):
