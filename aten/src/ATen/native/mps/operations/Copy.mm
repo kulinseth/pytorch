@@ -299,7 +299,7 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_, boo
   MPSStream* stream = getCurrentMPSStream();
   if (sameDataType) {
     uint64_t profile_id = getMPSProfiler().beginProfileCopy(sourceBuffer, destBuffer,
-                                  src, dst_, src.nbytes(), non_blocking);
+                                  src, dst_, src.nbytes(), true);
     // for GPU to GPU copies we only encode to stream's command buffer (no flushing)
     stream->copy(sourceBuffer, destBuffer, src.nbytes(), src_byte_offset, dst_byte_offset, profile_id);
   } else {
@@ -309,7 +309,7 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_, boo
        copy_cast_mps(tmp, src, tmpBuffer, sourceBuffer);
 
        uint64_t profile_id = getMPSProfiler().beginProfileCopy(tmpBuffer, destBuffer,
-                                         tmp, dst_, dst_.nbytes(), non_blocking);
+                                         tmp, dst_, dst_.nbytes(), true);
        stream->copy(tmpBuffer, destBuffer, dst_.nbytes(), 0, dst_byte_offset, profile_id);
     } else {
        copy_cast_mps(dst_, src, destBuffer, sourceBuffer);
@@ -344,11 +344,18 @@ static bool try_copy_scalars_mps(at::Tensor& dst, const at::Tensor& src, bool no
   size_t length = std::min(src.nbytes(), dst.nbytes());
   bool needsSync = !non_blocking && (src_retain_count > 1 || dst_retain_count > 1);
 
+  // this generates profile_id if only copy profiling is enabled
+  uint64_t profile_id = getMPSProfiler().beginProfileCopy(src_ptr, dst_ptr,
+                                         src, dst, length, needsSync, false);
   if (needsSync) {
     // wait for any possible GPU operations to finish before reading from source MPS buffers
     getDefaultMPSStream()->synchronize(SyncType::COMMIT_AND_WAIT);
   }
   memcpy((char*) dst_ptr + dst_offset, (char*) src_ptr + src_offset, length);
+
+  if (profile_id) {
+    getMPSProfiler().endProfileCopy(profile_id, SyncType::NONE);
+  }
 
   return true;
 }
