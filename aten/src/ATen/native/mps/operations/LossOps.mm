@@ -629,9 +629,20 @@ void nllnd_loss_forward_impl
                                                                             name:@"reductionSumTensor"];
                         if(reduction == Reduction::Mean)
                         {
+                            bool isFP16 = (mpsGraphReducedTensor.dataType == MPSDataTypeFloat16 || mpsGraphBatchSizeTensor.dataType == MPSDataTypeFloat16);
+                            if(isFP16) {
+                                //Need to upcast for MPSGraph
+                                mpsGraphBatchSizeTensor = castMPSTensor(mpsGraph, mpsGraphBatchSizeTensor, MPSDataTypeFloat32);
+                                mpsGraphReducedTensor = castMPSTensor(mpsGraph, mpsGraphReducedTensor, MPSDataTypeFloat32);
+                            }
+
                             mpsGraphReducedTensor = [mpsGraph divisionNoNaNWithPrimaryTensor:mpsGraphReducedTensor
                                                                              secondaryTensor:mpsGraphBatchSizeTensor
                                                                                         name:@"divisionTensor"];
+                            if(isFP16) {
+                                //Need to downcast back to FP16
+                                mpsGraphReducedTensor = castMPSTensor(mpsGraph, mpsGraphReducedTensor, MPSDataTypeFloat16);
+                            }
                         }
                     }
 
