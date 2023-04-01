@@ -208,26 +208,28 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out(const Tensor& self,
           */
           MPSGraphTensor* varTensor = nil;
 
-          if (train) {
-            // Compute mean and variance of the current batch
-            MPSGraphTensor* batchMeanTensor = [mpsGraph meanOfTensor:inputTensor axes:axes name:nil];
-            MPSGraphTensor* batchVarianceTensor = [mpsGraph varianceOfTensor:inputTensor axes:axes name:nil];
-            varTensor = batchVarianceTensor;
-            if (has_running_mean) {
-              // TODO: This is not the formula used in PyTorch, is this OK? Seems more robust
-              // float besselCorrectionTerm = float(N) / std::max(N - 1.0f, 1.0f);
-              float besselCorrectionTerm = float(N) / float(N - 1.0f);
-              MPSGraphTensor* besselConstantTensor = [mpsGraph constantWithScalar:(double)besselCorrectionTerm
-                                                                            shape:@[ @1 ]
-                                                                         dataType:input_mps_dtype];
-              MPSGraphTensor* unbiasedVarianceTensor = [mpsGraph multiplicationWithPrimaryTensor:batchVarianceTensor
-                                                                                 secondaryTensor:besselConstantTensor
-                                                                                            name:nil];
-              MPSGraphTensor* momentumTensor = [mpsGraph constantWithScalar:(double)momentum
-                                                                      shape:@[ @1 ]
-                                                                   dataType:input_mps_dtype];
-              MPSGraphTensor* oneMinusMomentum = [mpsGraph constantWithScalar:(double)(1.0 - momentum)
-                                                                        shape:@[ @1 ]
+            bool isFP16 = inputTensor.dataType == MPSDataTypeFloat16;
+            if(train) {
+              // Compute mean and variance of the current batch
+              MPSGraphTensor* batchMeanTensor = [mpsGraph meanOfTensor:inputTensor
+                                                                  axes:axes
+                                                                  name:nil];
+              MPSGraphTensor* batchVarianceTensor = [mpsGraph varianceOfTensor:inputTensor
+                                                                          axes:axes
+                                                                          name:nil];
+              varTensor = batchVarianceTensor;
+              if(has_running_mean) {
+                // TODO: This is not the formula used in PyTorch, is this OK? Seems more robust
+                // float besselCorrectionTerm = float(N) / std::max(N - 1.0f, 1.0f);
+                float besselCorrectionTerm = float(N) / float(N - 1.0f);
+                MPSGraphTensor* besselConstantTensor = [mpsGraph constantWithScalar:(double)besselCorrectionTerm
+                                                                              shape:@[@1]
+                                                                           dataType:input_mps_dtype];
+                MPSGraphTensor* unbiasedVarianceTensor = [mpsGraph multiplicationWithPrimaryTensor:batchVarianceTensor
+                                                                                   secondaryTensor:besselConstantTensor
+                                                                                              name:nil];
+                MPSGraphTensor* momentumTensor = [mpsGraph constantWithScalar:(double)momentum
+                                                                        shape:@[@1]
                                                                      dataType:input_mps_dtype];
               // Compute updated running mean
               MPSGraphTensor* scaledBatchMean = [mpsGraph multiplicationWithPrimaryTensor:batchMeanTensor
@@ -255,12 +257,21 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out(const Tensor& self,
                                                                    shape:@[ @1 ]
                                                                 dataType:input_mps_dtype];
 
-            MPSGraphTensor* varianceEps = [mpsGraph additionWithPrimaryTensor:batchVarianceTensor
+            if(isFP16) {
+                //Need to upcast for MPSGraph
+                batchVarianceTensor = mps::castMPSTensor(mpsGraph, batchVarianceTensor, MPSDataTypeFloat32);
+            }
+            MPSGraphTensor *varianceEps = [mpsGraph additionWithPrimaryTensor:batchVarianceTensor
                                                               secondaryTensor:epsilonTensor
                                                                          name:@"varianceEps"];
+            MPSGraphTensor *sqrtVariance = [mpsGraph squareRootWithTensor:varianceEps
+                                                                     name:@"sqrtVariance"];
+            float primary = 1.0f;
+            MPSGraphTensor *primaryTensor = [mpsGraph constantWithScalar:primary dataType:MPSDataTypeFloat32];
 
-            MPSGraphTensor* sqrtVariance = [mpsGraph squareRootWithTensor:varianceEps name:@"sqrtVariance"];
-            scaledInverseSqrtVariance = [mpsGraph reciprocalWithTensor:sqrtVariance name:nil];
+            scaledInverseSqrtVariance = [mpsGraph divisionWithPrimaryTensor:primaryTensor
+                                                            secondaryTensor:sqrtVariance
+                                                                       name:nil];
             // Update saved mean and inverse std tensor
             saveMeanTensor = batchMeanTensor;
             saveVarTensor = scaledInverseSqrtVariance;
@@ -279,6 +290,12 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out(const Tensor& self,
                                                                 betaTensor:biasTensor
                                                                    epsilon:(float)epsilon
                                                                       name:nil];
+
+            if(isFP16) {
+                //Downcast output back to original data type
+                outputTensor = mps::castMPSTensor(mpsGraph, outputTensor, MPSDataTypeFloat16);
+            }
+
 
           // Reshape saved mean and var to fit output
           saveMeanTensor = [mpsGraph reshapeTensor:saveMeanTensor withShape:@[ new_mean_shape[channelsDim] ] name:nil];
