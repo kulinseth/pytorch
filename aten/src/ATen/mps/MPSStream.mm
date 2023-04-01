@@ -20,6 +20,7 @@ MPSStream::MPSStream(Stream stream) : _stream(stream) {
   TORCH_CHECK(_stream.device_type() == DeviceType::MPS);
   _serialQueue = dispatch_queue_create("metal gpu stream", nullptr);
   _executionDescriptor = [MPSGraphExecutionDescriptor new];
+  _executableExecutionDescriptor = [MPSGraphExecutableExecutionDescriptor new];
   // disable commitAndContinue if Signpost tracing is enabled
   if (getMPSProfiler().isSignpostTracingEnabled()) {
     _enableCommitAndContinue = false;
@@ -31,7 +32,10 @@ MPSStream::~MPSStream() {
   [_commandQueue release];
   _commandQueue = nil;
   [_executionDescriptor release];
+  [_executableExecutionDescriptor release];
+
   _executionDescriptor = nil;
+  _executableExecutionDescriptor = nil;
 
   assert(_commandBuffer == nil);
 }
@@ -190,7 +194,7 @@ void MPSStream::copy_and_sync(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer, 
 }
 
 void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
-                                SyncType syncType, bool disableTypeInference) {
+                                SyncType syncType, MPSGraphExecutable* executable) {
   auto& profiler = getMPSProfiler();
   const bool isGraphProfilingEnabled = profiler.isOperationProfilingEnabled();
 
@@ -203,21 +207,30 @@ void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDicti
         profiler.beginProfileGPUInterval(mpsGraph);
       }
 
-      if (disableTypeInference) {
-        MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
-        [compilationDescriptor disableTypeInference];
-        _executionDescriptor.compilationDescriptor = compilationDescriptor;
+      if (executable) {
+        NSMutableArray *inputsArray  = [NSMutableArray arrayWithCapacity:[feeds count]];
+        NSMutableArray *resultsArray = [NSMutableArray arrayWithCapacity:[results count]];
+        NSUInteger inputIndex = 0, ouputIndex = 0;
+        for (MPSGraphTensor *tensor in [executable feedTensors]) {
+          inputsArray[inputIndex++] = feeds[tensor];
+        }
+
+        for (MPSGraphTensor *tensor in [executable targetTensors]) {
+          resultsArray[ouputIndex++] = results[tensor];
+        }
+
+        [executable encodeToCommandBuffer:commandBuffer()
+                              inputsArray:inputsArray
+                             resultsArray:resultsArray
+                      executionDescriptor:_executableExecutionDescriptor];
       } else {
-        // there's no enableTypeInference, so we just need to set it to nil to
-        // re-enable type inference
-        _executionDescriptor.compilationDescriptor = nil;
+        // note: CommitAndContinue feature is enabled/disabled via "_executionDescriptor"
+        [mpsGraph encodeToCommandBuffer:commandBuffer()
+                                  feeds:feeds
+                       targetOperations:nil
+                      resultsDictionary:results
+                    executionDescriptor:_executionDescriptor];
       }
-      // note: CommitAndContinue feature is enabled/disabled via "_executionDescriptor"
-      [mpsGraph encodeToCommandBuffer:commandBuffer()
-                                feeds:feeds
-                     targetOperations:nil
-                    resultsDictionary:results
-                  executionDescriptor:_executionDescriptor];
 
       // check if graph execution profiling is enabled
       if (isGraphProfilingEnabled) {
