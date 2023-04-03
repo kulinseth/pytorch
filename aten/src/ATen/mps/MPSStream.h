@@ -63,10 +63,7 @@ public:
 
   MPSCommandBuffer* commandBuffer();
   MTLComputeCommandEncoder_t commandEncoder();
-  void commit();
   void endKernelCoalescing();
-  void commitAndWait();
-  void commitAndContinue();
   void synchronize(SyncType syncType);
   void fill(id<MTLBuffer> buffer, uint8_t value, size_t length, size_t offset, SyncType syncType = SyncType::NONE);
   void copy(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer,
@@ -98,12 +95,19 @@ private:
   MTLComputeCommandEncoder_t _commandEncoder = nil;
   MPSGraphExecutionDescriptor *_executionDescriptor = nil;
   MPSGraphExecutableExecutionDescriptor *_executableExecutionDescriptor = nil;
-
   dispatch_queue_t _serialQueue = nullptr;
   // CommitAndContinue is enabled by default
   bool _enableCommitAndContinue = true;
+  // accumulated sizes of resources encoded on command buffer
+  size_t _commandBufferResourceSize = 0;
 
+  // use synchronize() to access any of these commit functions outside MPSStream
+  void commit();
+  void commitAndWait();
+  void commitAndContinue();
   void flush();
+
+  void updateCommandBufferResourceSize(NSArray<MPSGraphTensorData*> *feeds);
 };
 
 /**
