@@ -11,7 +11,6 @@
 namespace at {
 namespace mps {
 
-#define MB(x) (x * 1048576UL)
 // threshold to perform adaptive commit if the accumulated size
 // of resources encoded on the command buffer exceeds that.
 static const size_t kCmdBufAdaptiveCommitThreshold = MB(64);

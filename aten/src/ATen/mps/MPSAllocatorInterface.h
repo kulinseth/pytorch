@@ -6,6 +6,8 @@
 #include <c10/util/Registry.h>
 #include <ATen/core/ATen_fwd.h>
 
+#define MB(x) (x * 1048576UL)
+
 namespace at { namespace mps {
 
 // this is a public interface to access MPSAllocator.
