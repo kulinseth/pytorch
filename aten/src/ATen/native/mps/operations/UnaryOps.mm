@@ -25,7 +25,8 @@ void unary_op(const Tensor& self, const Tensor& output, std::string op_name, Una
     output.copy_(self);
     return;
   }
-  bool disableTypeInference = true;
+
+  bool disableTypeInference = (self.dim() == 1) ? true : false;
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
   @autoreleasepool {
     string key = op_name + getTensorsStringKey({self, output}, false, disableTypeInference);
