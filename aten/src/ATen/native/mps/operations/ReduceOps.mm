@@ -129,7 +129,7 @@ void set_axes_and_shapes(const IntArrayRef& input_shape,
 }
 
 void reduction_out_mps(
-  const Tensor& input_t,
+  const Tensor& input_t_,
   OptionalIntArrayRef opt_dim,
   bool keepdim,
   c10::optional<ScalarType> dtype,
@@ -137,17 +137,38 @@ void reduction_out_mps(
   MPSReductionType reduction_type,
   const std::string& func_name) {
   bool macOS13_3_plus = is_macos_13_or_newer(MacOSVersion::MACOS_VER_13_3_PLUS);
-  MPS_CHECK_INT64_OP_SUPPORTED(input_t, macOS13_3_plus, func_name);
-
-  auto input_shape = input_t.sizes();
+  MPS_CHECK_INT64_OP_SUPPORTED(input_t_, macOS13_3_plus, func_name);
+  Tensor input_t = input_t_;
+  bool canSqueezeLastDim = true;
+  IntArrayRef input_shape = input_t_.sizes();
   if (opt_dim.has_value()) {
     IntArrayRef dim = opt_dim.value();
     for (const auto dim_val : dim) {
       auto wrap_dim = maybe_wrap_dim(dim_val, input_shape.size());
-      TORCH_CHECK(wrap_dim < (input_shape.size() == 0 ? input_t.numel() : input_shape.size()),
+      if (wrap_dim >= 4) {
+        canSqueezeLastDim = false;
+      }
+      TORCH_CHECK(wrap_dim < (input_shape.size() == 0 ? input_t_.numel() : input_shape.size()),
       func_name+": reduction dim must be in the range of input shape")
     }
   }
+
+  if (input_shape.size() >= 5 && canSqueezeLastDim) {
+    for (int i = 4; i < input_shape.size(); i++) {
+      if (input_shape[i] != 1) {
+        canSqueezeLastDim = false;
+      }
+    }
+  } else {
+    canSqueezeLastDim = false;
+  }
+
+  MPSShape* mpsShape = getMPSShape(input_t);
+  if (canSqueezeLastDim) {
+    mpsShape = @[@(input_shape[0]), @(input_shape[1]), @(input_shape[2]), @(input_shape[3])];
+    input_shape = makeArrayRef(input_shape.begin(), input_shape.end() - (input_t_.dim() - 4));
+  }
+
   bool disableTypeInference = false;
   if (input_t.dim() == 1) {
     disableTypeInference = true;
@@ -158,8 +179,8 @@ void reduction_out_mps(
   NSMutableArray<NSNumber*> *apparent_output_shape = nil;
   NSMutableArray<NSNumber*> *output_shape = nil;
 
-  set_axes_and_shapes(input_t.sizes(), opt_dim, axes, apparent_input_shape, apparent_output_shape, output_shape);
-  NSArray<NSNumber*>* wrappedAxes = mps::getTensorAxes(input_t.sizes(), opt_dim);
+  set_axes_and_shapes(input_shape, opt_dim, axes, apparent_input_shape, apparent_output_shape, output_shape);
+  NSArray<NSNumber*>* wrappedAxes = mps::getTensorAxes(input_shape, opt_dim);
   auto cache_ = MPSGraphCache::getInstance();
 
   if (output_t.numel() == 0 || input_t.numel() == 0) {
@@ -184,7 +205,6 @@ void reduction_out_mps(
                  dtype_str;
     using CachedGraph = MPSUnaryCachedGraph;
     auto cachedGraph = cache_->LookUpAs<CachedGraph>(key);
-
     if (!cachedGraph) {
       cachedGraph = cache_->CreateCachedGraphAs<CachedGraph>(key, ^ MPSCachedGraph * () {
 
@@ -197,7 +217,7 @@ void reduction_out_mps(
 
           MPSGraphTensor* inputTensor = disableTypeInference ?
                 mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type())) :
-                mpsGraphRankedPlaceHolder(mpsGraph, input_t);
+                mpsGraphRankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type()), mpsShape);
           MPSGraphTensor* castInputTensor = inputTensor;
           MPSDataType inputCastType = MPSDataTypeInvalid;
           if (dtype.has_value() &&
@@ -286,7 +306,7 @@ void reduction_out_mps(
       });
     }
 
-    auto inputPlaceholder = Placeholder(cachedGraph->inputTensor_, input_t);
+    auto inputPlaceholder = Placeholder(cachedGraph->inputTensor_, input_t, mpsShape);
     auto outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output_t, apparent_output_shape);
     NSDictionary<MPSGraphTensor *, MPSGraphTensorData *> *feeds = @{
       inputPlaceholder.getMPSGraphTensor() : inputPlaceholder.getMPSGraphTensorData(),
