@@ -121,7 +121,7 @@ void set_axes_and_shapes(const Tensor& input_t,
   }
 }
 
-void reduction_out_mps(const Tensor& input_t,
+void reduction_out_mps(const Tensor& input_t_,
                        OptionalIntArrayRef opt_dim,
                        bool keepdim,
                        c10::optional<ScalarType> dtype,
@@ -129,17 +129,32 @@ void reduction_out_mps(const Tensor& input_t,
                        MPSReductionType reduction_type,
                        const std::string& func_name) {
   bool macOS13_3_plus = is_macos_13_or_newer(MacOSVersion::MACOS_VER_13_3_PLUS);
-  MPS_CHECK_INT64_OP_SUPPORTED(input_t, macOS13_3_plus, func_name);
-
-  auto input_shape = input_t.sizes();
+  MPS_CHECK_INT64_OP_SUPPORTED(input_t_, macOS13_3_plus, func_name);
+  Tensor input_t = input_t_;
+  bool canSqueezeLastDim = true;
+  IntArrayRef input_shape = input_t_.sizes();
   if (opt_dim.has_value()) {
     IntArrayRef dim = opt_dim.value();
     for (const auto dim_val : dim) {
       auto wrap_dim = maybe_wrap_dim(dim_val, input_shape.size());
+      if (wrap_dim == 4) {
+        canSqueezeLastDim = false;
+      }
       TORCH_CHECK(
-          wrap_dim < static_cast<decltype(wrap_dim)>(input_shape.size() == 0 ? input_t.numel() : input_shape.size()),
+          wrap_dim < static_cast<decltype(wrap_dim)>(input_shape.size() == 0 ?  input_t_.numel() : input_shape.size()),
           func_name + ": reduction dim must be in the range of input shape")
     }
+  }
+
+  bool doGather = true;
+  if (input_shape.size() == 5 && input_shape[4] == 1 && (!opt_dim.has_value() || (opt_dim.has_value() && canSqueezeLastDim))) {
+    // shape = @[@(input_shape[0]), @(input_shape[0]), @(input_shape[0]), @(input_shape[3])]
+    // input_shape = makeArrayRef(input_shape.begin(), input_shape.end() - 1);
+    if (input_t.is_contiguous()) {
+      doGather = false;
+    }
+    input_t = input_t_.squeeze(-1);
+    input_shape = input_t.sizes();
   }
 
   NSMutableArray<NSNumber*>* axes = nil;
@@ -168,6 +183,8 @@ void reduction_out_mps(const Tensor& input_t,
         dtype_str;
     using CachedGraph = MPSUnaryCachedGraph;
     auto cachedGraph = cache_->LookUpAs<CachedGraph>(key);
+    MPSShape* shape = getMPSShape(input_shape);
+    IntArrayRef squeezedShape;
 
     if (!cachedGraph) {
       cachedGraph = cache_->CreateCachedGraphAs<CachedGraph>(key, ^MPSCachedGraph*() {
@@ -248,7 +265,7 @@ void reduction_out_mps(const Tensor& input_t,
       });
     }
 
-    auto inputPlaceholder = Placeholder(cachedGraph->inputTensor_, input_t);
+    auto inputPlaceholder = Placeholder(cachedGraph->inputTensor_, input_t, nil, doGather);
     auto outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output_t, apparent_output_shape);
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
       inputPlaceholder.getMPSGraphTensor() : inputPlaceholder.getMPSGraphTensorData(),
