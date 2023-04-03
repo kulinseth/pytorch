@@ -129,7 +129,7 @@ void set_axes_and_shapes(const IntArrayRef& input_shape,
 }
 
 void reduction_out_mps(
-  const Tensor& input_t_,
+  const Tensor& input_t,
   OptionalIntArrayRef opt_dim,
   bool keepdim,
   c10::optional<ScalarType> dtype,
@@ -137,10 +137,9 @@ void reduction_out_mps(
   MPSReductionType reduction_type,
   const std::string& func_name) {
   bool macOS13_3_plus = is_macos_13_or_newer(MacOSVersion::MACOS_VER_13_3_PLUS);
-  MPS_CHECK_INT64_OP_SUPPORTED(input_t_, macOS13_3_plus, func_name);
-  Tensor input_t = input_t_;
+  MPS_CHECK_INT64_OP_SUPPORTED(input_t, macOS13_3_plus, func_name);
   bool canSqueezeLastDim = true;
-  IntArrayRef input_shape = input_t_.sizes();
+  IntArrayRef input_shape = input_t.sizes();
   if (opt_dim.has_value()) {
     IntArrayRef dim = opt_dim.value();
     for (const auto dim_val : dim) {
@@ -148,7 +147,7 @@ void reduction_out_mps(
       if (wrap_dim >= 4) {
         canSqueezeLastDim = false;
       }
-      TORCH_CHECK(wrap_dim < (input_shape.size() == 0 ? input_t_.numel() : input_shape.size()),
+      TORCH_CHECK(wrap_dim < (input_shape.size() == 0 ? input_t.numel() : input_shape.size()),
       func_name+": reduction dim must be in the range of input shape")
     }
   }
