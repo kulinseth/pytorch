@@ -153,7 +153,7 @@ void reduction_out_mps(
   }
 
   if (input_shape.size() >= 5 && canSqueezeLastDim) {
-    for (int i = 4; i < input_shape.size(); i++) {
+    for (const auto i: c10::irange(4, input_shape.size())) {
       if (input_shape[i] != 1) {
         canSqueezeLastDim = false;
       }
@@ -165,7 +165,7 @@ void reduction_out_mps(
   MPSShape* mpsShape = getMPSShape(input_t);
   if (canSqueezeLastDim) {
     mpsShape = @[@(input_shape[0]), @(input_shape[1]), @(input_shape[2]), @(input_shape[3])];
-    input_shape = makeArrayRef(input_shape.begin(), input_shape.end() - (input_t_.dim() - 4));
+    input_shape = makeArrayRef(input_shape.begin(), input_shape.end() - (input_t.dim() - 4));
   }
 
   bool disableTypeInference = false;
