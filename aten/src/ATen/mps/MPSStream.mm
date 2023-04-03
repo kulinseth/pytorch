@@ -12,6 +12,10 @@
 namespace at {
 namespace mps {
 
+// threshold to perform adaptive commit if the accumulated size
+// of resources encoded on the command buffer exceeds that.
+static const size_t kCmdBufAdaptiveCommitThreshold = MB(64);
+
 //-----------------------------------------------------------------
 //  MPSStream
 //-----------------------------------------------------------------
@@ -70,7 +74,8 @@ void MPSStream::synchronize(SyncType syncType) {
       break;
     case SyncType::COMMIT_ADAPTIVE:
       // the adaptive commit only commits if we hit the low watermark memory threshold
-      if (getIMPSAllocator()->getLowWatermarkValue() <= 1) {
+      if (getIMPSAllocator()->getLowWatermarkValue() <= 0 ||
+          _commandBufferResourceSize > kCmdBufAdaptiveCommitThreshold) {
         commit();
       }
       break;
@@ -91,6 +96,8 @@ void MPSStream::commit() {
   } else {
     flush();
   }
+  // reset the accumulated resource sizes for command buffer
+  _commandBufferResourceSize = 0;
 }
 
 void MPSStream::commitAndWait() {
@@ -107,6 +114,8 @@ void MPSStream::commitAndWait() {
     [_commandBuffer waitUntilCompleted];
     [_commandBuffer release];
     _commandBuffer = nil;
+    // reset the accumulated resource sizes for command buffer
+    _commandBufferResourceSize = 0;
   }
 }
 
@@ -233,16 +242,28 @@ void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDicti
                     executionDescriptor:_executionDescriptor];
       }
 
+      updateCommandBufferResourceSize([feeds allValues]);
+      // if commitAndContinue is disabled, we need to always commit manually after encoding
+      SyncType _syncType = _enableCommitAndContinue == false ? SyncType::COMMIT : syncType;
+
       // check if graph execution profiling is enabled
       if (isGraphProfilingEnabled) {
-        // with profiler enabled, we commit after adding the completedHandler
-        profiler.endProfileKernel(mpsGraph, SyncType::COMMIT);
+        // with profiler enabled, we commit after adding the completedHandler in MPSProfiler
+        profiler.endProfileKernel(mpsGraph, _syncType);
       } else {
-        // if commitAndContinue is disabled, we need to always commit manually after encoding
-        synchronize(_enableCommitAndContinue == false ? SyncType::COMMIT : syncType);
+        synchronize(_syncType);
       }
     }
  });
+}
+
+void MPSStream::updateCommandBufferResourceSize(NSArray<MPSGraphTensorData*> *feeds) {
+  if (_enableCommitAndContinue) {
+    for (MPSGraphTensorData* tensorData in feeds) {
+      size_t resource_size = tensorData.mpsndarray.resourceSize;
+      _commandBufferResourceSize += resource_size;
+    }
+  }
 }
 
 //-----------------------------------------------------------------
