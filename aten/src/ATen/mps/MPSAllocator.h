@@ -18,8 +18,6 @@ namespace at {
 namespace mps {
 namespace HeapAllocator {
 
-#define MB(x) round_page(x * 1048576UL)
-
 static const size_t kMaxSmallAlloc = MB(1);    // largest "small" allocation is 1 MiB
 static const size_t kMinLargeAlloc = MB(10);   // allocations between 1 and 10 MiB may use kLargeHeap
 static const size_t kRoundLarge    = MB(2);    // round up large allocations to 2 MiB
