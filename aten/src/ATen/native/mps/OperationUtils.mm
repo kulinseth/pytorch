@@ -223,7 +223,7 @@ std::string getArrayRefString(const IntArrayRef s) {
   return ss.str();
 }
 
-std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype, bool disable_type_inference) {
+std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype, bool exclude_shape) {
     std::string str;
     // The key format per tensor would look like ":Float32[1,1,1,10]:"
     for (const Tensor& tensor: tensors) {
@@ -234,8 +234,11 @@ std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype, boo
         if (tensor.dim() == 0) {
           str += "Scalar";
         } else {
-          const NSString* ns_shape_key = [[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","];
-          str += (disable_type_inference ? std::to_string(tensor.dim()) : std::string(ns_shape_key.UTF8String));
+          if (exclude_shape) {
+            str += std::to_string(tensor.dim());
+          } else {
+            str += std::string([[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","].UTF8String);
+          }
         }
         str += "]";
       } else {
