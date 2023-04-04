@@ -194,8 +194,7 @@ void handle_tensor_tensor_binary_op(const at::Tensor& self, const at::Tensor& ot
     [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
     [commandEncoder setBuffer:otherBuf offset:other.storage_offset()*other.itemsize() atIndex:3];
     dispatch1DJob(commandEncoder, cplState, length);
-
-    getMPSProfiler().endProfileKernel(cplState);
+    stream->commitAdaptive({self, other}, cplState);
   });
 }
 
@@ -228,8 +227,7 @@ void handle_tensor_scalar_binary_op(const at::Tensor& self, const at::Scalar& ot
     [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
     [commandEncoder setBytes:&sval length:sizeof(sval) atIndex:3];
     dispatch1DJob(commandEncoder, cplState, length);
-
-    getMPSProfiler().endProfileKernel(cplState);
+    stream->commitAdaptive({self}, cplState);
   });
 }
 
@@ -334,8 +332,7 @@ at::Tensor& bitwise_not_out_mps (const at::Tensor& self, at::Tensor& output_) {
     [commandEncoder setBuffer:outBuf offset:output.storage_offset()*output.itemsize() atIndex:1];
     [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
     dispatch1DJob(commandEncoder, cplState, length);
-
-    getMPSProfiler().endProfileKernel(cplState);
+    stream->commitAdaptive({self}, cplState);
   });
   if (needs_output_copy) {
       output_.copy_(output);
