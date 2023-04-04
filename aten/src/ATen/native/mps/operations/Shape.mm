@@ -332,9 +332,16 @@ TORCH_IMPL_FUNC(cat_out_mps)
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
 
   @autoreleasepool {
-    string key = "cat_out_mps:" + to_string(dimension) + getTensorsStringKey(input_tensors, /*short_dtype*/ true) +
-        ":" + (memory_format == MemoryFormat::ChannelsLast ? "NHWC" : "NCHW");
-
+    string key = "cat_out_mps:" + to_string(dimension) + ":" +
+                 (memory_format == MemoryFormat::ChannelsLast ? "NHWC" : "NCHW");
+    if (!all_same_dtype) {
+      key += getTensorsStringKey(input_tensors, true, all_same_sizes_and_stride);
+    } else {
+      key += ":" + getMPSTypeString(input_tensors[0].scalar_type(), true) + ":" + to_string(inputs.size());
+    }
+    for(auto idx : skipped_tensor_indices) {
+      key += "," + std::to_string(idx);
+    }
     CachedGraph* cachedGraph = cache_->LookUpAs<CachedGraph>(key);
     if (!cachedGraph) {
       cachedGraph = cache_->CreateCachedGraphAs<CachedGraph>(key, ^MPSCachedGraph*() {
@@ -354,8 +361,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
             if (tensor.scalar_type() == kBool) {
               scalar_type = MPSDataTypeInt8;
             }
-            newCachedGraph->inputTensors_[idx] =
-                mpsGraphRankedPlaceHolder(mpsGraph, scalar_type, getMPSShape(tensor, MemoryFormat::Contiguous));
+            newCachedGraph->inputTensors_[idx] = mpsGraphUnrankedPlaceHolder(mpsGraph, scalar_type);
             if (tensor.scalar_type() != out_dtype) {
               castInputTensors[idx] = [mpsGraph castTensor:newCachedGraph->inputTensors_[idx]
                                                     toType:getMPSDataType(out_dtype)
@@ -387,11 +393,8 @@ TORCH_IMPL_FUNC(cat_out_mps)
         if (tensor.scalar_type() == kBool) {
           scalar_type = MPSDataTypeInt8;
         }
-        inputPlaceholders.emplace_back(cachedGraph->inputTensors_[t_idx],
-                                       tensor,
-                                       getMPSShape(tensor, MemoryFormat::Contiguous),
-                                       /*gatherTensorData*/ true,
-                                       scalar_type);
+        inputPlaceholders.emplace_back(cachedGraph->inputTensors_[t_idx], tensor,
+                                       nullptr, true, scalar_type);
         t_idx++;
       }
       i++;
