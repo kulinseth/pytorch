@@ -24,6 +24,11 @@ struct BinaryOpCachedGraph : public MPSCachedGraph
 typedef MPSGraphTensor* (^BinaryOpBlock)(BinaryOpCachedGraph*, MPSGraphTensor*, MPSGraphTensor*);
 #define BinaryOpFn(graph, primary, secondary) MPSGraphTensor* (mps::BinaryOpCachedGraph* graph, MPSGraphTensor* primary, MPSGraphTensor* secondary)
 
+static
+bool disableTypeInferenceBinary(const Tensor& self, const Tensor& other) {
+  return (self.dim() == 1 || other.dim() == 1 || self.dim() >= 5 || other.dim() >= 5);
+}
+
 enum class BinaryKernelType {
   Scalar,
   RHS_Scalar,
@@ -605,7 +610,7 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
 
   const bool is_self_scalar = self.dim() == 0;
   const bool is_other_scalar = other.dim() == 0;
-  bool disableTypeInference = false;
+  bool disableTypeInference = disableTypeInferenceBinary(self, other);
 
   auto new_size = at::infer_size(self.sizes(), other.sizes());
   if (!output_.sizes().equals(new_size)) {
@@ -623,21 +628,21 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
     string kernel;
     if (op_name == "multiplication") {
       kernel = "mul";
-    } else if (op_name == "div_out_mps:"){
-      kernel = "div";
-    } else if (op_name == "add_out_mps:") {
-      kernel = "add";
-    } else if (op_name == "sub_out_mps:") {
-      kernel = "sub";
-    } else if (op_name == "lessThan") {
-      kernel = "less";
-    } else if (op_name == "greaterThan") {
-      kernel = "greater";
-    } else if (op_name == "greaterThanOrEqualTo") {
-      kernel = "greaterOrEqual";
-    } 
+    // } else if (op_name == "div_out_mps:"){
+    //   kernel = "div";
+    // } else if (op_name == "add_out_mps:") {
+    //   kernel = "add";
+    // } else if (op_name == "sub_out_mps:") {
+    //   kernel = "sub";
+    // } else if (op_name == "lessThan") {
+    //   kernel = "less";
+    // } else if (op_name == "greaterThan") {
+    //   kernel = "greater";
+    // } else if (op_name == "greaterThanOrEqualTo") {
+    //   kernel = "greaterOrEqual";
+    }
     else {
-      std::cout << op_name << std::endl;
+      // std::cout << op_name << std::endl;
     }
     if (!kernel.empty()) {
       // Tensor self_cpu = self.detach().clone().cpu();
@@ -652,10 +657,6 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
       // TORCH_CHECK(at::allclose(output_cpu, output_.cpu()));
       return;
     }
-  }
-
-  if (self.dim() == 1 || other.dim() == 1 || self.dim() >= 5 || other.dim() >= 5) {
-    disableTypeInference = true;
   }
 
   Tensor output;
@@ -878,13 +879,15 @@ void add_sub_template(const Tensor& self, const Tensor& other, const Scalar& alp
     at::native::alpha_check(commonDtype, alpha);
   }
 
+  bool disableTypeInference = disableTypeInferenceBinary(self, other);
   BinaryOpBlock add_sub_op_block = ^BinaryOpFn(cachedGraph, primaryCastTensor, secondaryCastTensor) {
     MPSGraph* mpsGraph = cachedGraph->graph();
     MPSGraphTensor* secondaryTensor = secondaryCastTensor;
 
     // if alpha is 1.0, then we don't bother adding another multiply to graph
     if (alpha_has_value) {
-      cachedGraph->alphaTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(other.scalar_type()), @[@1]);
+      cachedGraph->alphaTensor = disableTypeInference ? mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSScalarType(other.scalar_type())) :
+                  mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(other.scalar_type()), @[@1]);
       secondaryTensor = [mpsGraph multiplicationWithPrimaryTensor:secondaryCastTensor
                                                   secondaryTensor:cachedGraph->alphaTensor
                                                              name:nil];
