@@ -39,10 +39,10 @@ enum class BinaryKernelType {
 
 static char* BINARY_OP_TEMPLATE_TENSOR = R"METAL_BINARY(
 kernel void {3}_kernel(uint tid                  [[thread_position_in_grid]],
-                       const device {1}4 * input           [[buffer(0)]],
-                       const device {2}4 * other           [[buffer(1)]],
-                       device   {0}4 * output          [[buffer(2)]]) {{
-  output[tid] = ({0}4)input[tid] {4} ({0}4)other[tid];
+                       const device packed_{1}4 * input           [[buffer(0)]],
+                       const device packed_{2}4 * other           [[buffer(1)]],
+                       device {0}4 * output          [[buffer(2)]]) {{
+  output[tid] = ({5}4)input[tid] {4} ({5}4)other[tid];
 }}
 )METAL_BINARY";
 
@@ -78,16 +78,16 @@ kernel void {3}_kernel_strided(uint tid                  [[thread_position_in_gr
   const device {1}* input  = (const device {1}*)((const device uint8_t*)input_ + offsets.y);
   const device {2}* other  = (const device {2}*)((const device uint8_t*)other_ + offsets.z);
 
-  *output = ({0})*input {4} ({0})*other;
+  *output = ({5})*input {4} ({5})*other;
 }}
 )METAL_BINARY";
 
 static  char* BINARY_OP_TEMPLATE_RHS_SCALAR = R"METAL_BINARY(
 kernel void {3}_kernel_scalar_rhs(uint tid  [[thread_position_in_grid]],
-                              const device {1}4  * input           [[buffer(0)]],
+                              const device packed_{1}4  * input           [[buffer(0)]],
                               const device {2}   * other           [[buffer(1)]],
                               device   {0}4  * output          [[buffer(2)]]) {{
-  output[tid] = ({0}4)(input[tid]) {4} ({0})*other;
+  output[tid] = ({5}4)(input[tid]) {4} ({5})*other;
 }}
 )METAL_BINARY";
 
@@ -96,7 +96,7 @@ kernel void {3}_kernel_scalar(uint tid  [[thread_position_in_grid]],
                               const device {1}  * input           [[buffer(0)]],
                               const device {2}  * other           [[buffer(1)]],
                               device   {0}  * output          [[buffer(2)]]) {{
-  *output = ({0})*input {4} ({0})*other;
+  *output = ({5})*input {4} ({5})*other;
 }}
 )METAL_BINARY";
 
@@ -132,7 +132,7 @@ kernel void {3}_kernel_scalar_rhs_strided(uint tid       [[thread_position_in_gr
   device   {0}* output = (device   {0}*)((device uint8_t*)output_  + offsets.x);
   const device {1}* input  = (const device {1}*)((const device uint8_t*)input_ + offsets.y);
 
-  *output = ({0})*input {4} ({0})other;
+  *output = ({5})*input {4} ({5})other;
 }}
 )METAL_BINARY";
 
@@ -167,11 +167,12 @@ static id<MTLLibrary> compileBinaryOpsLibrary(id<MTLDevice> device,
                                                const std::string& t1,
                                                const std::string& t2,
                                                const std::string& t3,
+                                                const std::string& common_dtype, // common_dtype
                                                const std::string& op,
                                                const std::string& kernel_operator,
                                                BinaryKernelType binaryKernelType) {
   auto key = op + t1 + t2 + t3 + std::to_string(int(binaryKernelType));
-  // std::cout << "LIB KEY: " << key << std::endl;
+  std::cout << "LIB KEY: " << key << std::endl;
   // std::cout << key << std::endl;
   // std::cout << "LIB: " << key << std::endl;
   static std::unordered_map<std::string, id<MTLLibrary>> libMap;
@@ -205,7 +206,9 @@ static id<MTLLibrary> compileBinaryOpsLibrary(id<MTLDevice> device,
       assert(0);
   }
 
-  auto rc  = [device newLibraryWithSource:[NSString stringWithUTF8String:fmt::format(str, t1, t2, t3, op, kernel_operator).c_str()]
+  string mystr = fmt::format(str, t1, t2, t3, op, kernel_operator, common_dtype);
+  std::cout << mystr << std::endl;
+  auto rc  = [device newLibraryWithSource:[NSString stringWithUTF8String:mystr.c_str()]
                                   options:options
                                     error:&error];
  TORCH_CHECK(rc != nil && error == nil, "Failed to compile library: ", [[error localizedDescription] UTF8String]);
@@ -303,6 +306,10 @@ static void printBuffer(id<MTLBuffer> outBuf, std::string msg, ScalarType scalar
       std::cout << ((bool*)pDstBuf)[i] << ", ";
     else if (scalar_type == ScalarType::Half)
       std::cout << ((__fp16*)pDstBuf)[i] << ", ";
+    else if (scalar_type == ScalarType::Short)
+      std::cout << ((short*)pDstBuf)[i] << ", ";
+    else if (scalar_type == ScalarType::Byte)
+      std::cout << (uint32_t)(((uint8_t*)pDstBuf)[i]) << ", ";
     else
       assert(0);
   }
@@ -313,13 +320,14 @@ static id<MTLComputePipelineState> getBinaryPSO(id<MTLDevice> device,
                                                 const std::string& t1, // output
                                                 const std::string& t2, // input
                                                 const std::string& t3, // other
+                                                const std::string& common_dtype, // common_dtype
                                                 const std::string& fname,
                                                 const std::string& op,
                                                 const std::string& kernel_operator,
                                                 BinaryKernelType binaryKernelType) {
   auto key = t1 + t2 + t3 + fname;
   // std::cout << "LIB: " << key << std::endl;
-  // std::cout << "Func key: " << key << std::endl;
+  std::cout << "Func key: " << key << std::endl;
   // std::cout << "FUNC KEY: " << key << std::endl;
   // std::cout << "PSO: " << key << std::endl;
   static std::unordered_map<std::string, id<MTLComputePipelineState>> cplMap;
@@ -328,7 +336,7 @@ static id<MTLComputePipelineState> getBinaryPSO(id<MTLDevice> device,
      return it->second;
   }
   NSError *error = nil;
-  auto library = compileBinaryOpsLibrary(device, t1, t2, t3, op, kernel_operator, binaryKernelType);
+  auto library = compileBinaryOpsLibrary(device, t1, t2, t3, common_dtype, op, kernel_operator, binaryKernelType);
   id<MTLFunction> func = [library newFunctionWithName:[NSString stringWithUTF8String:fname.c_str()]];
   TORCH_CHECK(func != nil, "Can't get function ", fname);
   auto rc = [device newComputePipelineStateWithFunction:func error:&error];
@@ -348,19 +356,34 @@ void binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op, const s
   const Tensor& outputTensor = iter.tensor(0);
   inputTensor = iter.tensor(1);
   otherTensor = iter.tensor(2);
+  auto outputDataType = outputTensor.scalar_type();
+  auto inputDataType = inputTensor.scalar_type();
+  auto otherDataType = otherTensor.scalar_type();
+  ScalarType common_dtype = iter.common_dtype();
+  if (isIntegralType(common_dtype, true)) {
+    // integer inputs must be cast to float, if output is float
+    if (isFloatingType(outputDataType)) {
+      common_dtype = outputDataType;
+    // in boolean comparison ops with signed vs. unsigned integers, we always cast to the unsigned type
+    } else if (outputDataType == ScalarType::Bool &&
+              (inputDataType == ScalarType::Byte ||
+                otherDataType == ScalarType::Byte)) {
+      common_dtype = ScalarType::Byte;
+    }
+  }
 
-  // std::cout << iter.dtype() << std::endl;
-  // std::cout << "Input dtype: " << inputTensor.scalar_type() << std::endl;
-  // std::cout << "Other dtype: " << otherTensor.scalar_type() << std::endl;
-  // std::cout << "output dtype: " << outputTensor.scalar_type() << std::endl;
-  // std::cout << "COMMON TPYEEE: " << c10::promoteTypes(inputTensor.scalar_type(), otherTensor.scalar_type()) << std::endl;
-  // std::cout << "COMMON DTYPE:" << iter.common_dtype() << std::endl;
-  // std::cout << "ITER SCALAR(0): "<< iter.is_scalar(0) << " " << iter.is_cpu_scalar(0) << std::endl;
-  // std::cout << "ITER SCALAR(1): "<< iter.is_scalar(1) << " " << iter.is_cpu_scalar(1) << std::endl;
-  // std::cout << "ITER SCALAR(2): "<< iter.is_scalar(2) << " " << iter.is_cpu_scalar(2) << std::endl;
-  // std::cout << "Input Sizes:" << inputTensor.sizes() << " numel: " << inputTensor.numel() << " contg: " << inputTensor.is_contiguous() << "offset: " << inputTensor.storage_offset() << std::endl;
-  // std::cout << "Other Sizes:" << otherTensor.sizes() << " numel: " << otherTensor.numel() << " contg: " << otherTensor.is_contiguous() << "offset: " << otherTensor.storage_offset() << std::endl;
-  // std::cout << "Output Sizes:" << outputTensor.sizes() << " numel: " << outputTensor.numel() << " contg: " << outputTensor.is_contiguous() << "offset: " << outputTensor.storage_offset() << std::endl;
+  std::cout << iter.dtype() << std::endl;
+  std::cout << "Input dtype: " << inputTensor.scalar_type() << std::endl;
+  std::cout << "Other dtype: " << otherTensor.scalar_type() << std::endl;
+  std::cout << "output dtype: " << outputTensor.scalar_type() << std::endl;
+  std::cout << "COMMON TPYEEE: " << c10::promoteTypes(inputTensor.scalar_type(), otherTensor.scalar_type()) << std::endl;
+  std::cout << "COMMON DTYPE:" << iter.common_dtype() << std::endl;
+  std::cout << "ITER SCALAR(0): "<< iter.is_scalar(0) << " " << iter.is_cpu_scalar(0) << std::endl;
+  std::cout << "ITER SCALAR(1): "<< iter.is_scalar(1) << " " << iter.is_cpu_scalar(1) << std::endl;
+  std::cout << "ITER SCALAR(2): "<< iter.is_scalar(2) << " " << iter.is_cpu_scalar(2) << std::endl;
+  std::cout << "Input Sizes:" << inputTensor.sizes() << " numel: " << inputTensor.numel() << " contg: " << inputTensor.is_contiguous() << "offset: " << inputTensor.storage_offset() << std::endl;
+  std::cout << "Other Sizes:" << otherTensor.sizes() << " numel: " << otherTensor.numel() << " contg: " << otherTensor.is_contiguous() << "offset: " << otherTensor.storage_offset() << std::endl;
+  std::cout << "Output Sizes:" << outputTensor.sizes() << " numel: " << outputTensor.numel() << " contg: " << outputTensor.is_contiguous() << "offset: " << outputTensor.storage_offset() << std::endl;
 
   if (iter.tensor(1).numel() == 1 && iter.tensor(2).numel() == 1) {
     all_scalar = true;
@@ -392,12 +415,12 @@ void binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op, const s
   }
 
 
-  // std::cout << "Input Tensor:\n";
-  // std::cout << inputTensor.cpu() << std::endl;
-  // std::cout << "Other Tensor:\n";
-  // std::cout << otherTensor.cpu() << std::endl;
-  // std::cout << "Output Tensor:\n";
-  // std::cout << outputTensor.cpu() << std::endl;
+  std::cout << "Input Tensor:\n";
+  std::cout << inputTensor.cpu() << std::endl;
+  std::cout << "Other Tensor:\n";
+  std::cout << otherTensor.cpu() << std::endl;
+  std::cout << "Output Tensor:\n";
+  std::cout << outputTensor.cpu() << std::endl;
 
   MPSStream* mpsStream = getCurrentMPSStream();
   id<MTLDevice> device = MPSDevice::getInstance()->device();
@@ -516,7 +539,7 @@ void binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op, const s
       if (!allContiguous) {
         kernel += "_strided";
       }
-      // std::cout << kernel << std::endl;
+      std::cout << kernel << std::endl;
 
       if (allContiguous) {
         // Round up to next multiple of 4
@@ -528,14 +551,17 @@ void binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op, const s
                                                           getMetalScalarType(outputTensor),
                                                           getMetalScalarType(inputTensor),
                                                           getMetalScalarType(otherTensor),
+                                                          getMetalScalarType(common_dtype),
                                                           kernel,
                                                           op,
                                                           kernel_operator,
                                                           type);
       [computeEncoder setComputePipelineState:binaryPSO];
 
-      // printBuffer(inputBuffer, "inputBuffer", inputTensor.scalar_type(), inputTensor.element_size());
-      // printBuffer(otherBuffer, "otherBuffer", otherTensor.scalar_type(), otherTensor.element_size());
+      printBuffer(inputBuffer, "inputBuffer", inputTensor.scalar_type(), inputTensor.element_size());
+      printBuffer(otherBuffer, "otherBuffer", otherTensor.scalar_type(), otherTensor.element_size());
+      std::cout << "inputTensorStorage: " << inputTensorStorage << std::endl;
+      std::cout << "otherTensorStorage: " << otherTensorStorage << std::endl;
       [computeEncoder setBuffer:inputBuffer  offset:inputTensorStorage atIndex:0];
       [computeEncoder setBuffer:otherBuffer  offset:otherTensorStorage atIndex:1];
       [computeEncoder setBuffer:outputBuffer offset:outputTensor.storage_offset() * outputTensor.element_size() atIndex:2];
@@ -630,31 +656,56 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
       kernel = "mul";
     } else if (op_name == "div_out_mps:"){
       kernel = "div";
-    // } else if (op_name == "add_out_mps:") {
-    //   kernel = "add";
-    // } else if (op_name == "sub_out_mps:") {
-    //   kernel = "sub";
-    // } else if (op_name == "lessThan") {
-    //   kernel = "less";
-    // } else if (op_name == "greaterThan") {
-    //   kernel = "greater";
-    // } else if (op_name == "greaterThanOrEqualTo") {
-    //   kernel = "greaterOrEqual";
+    } else if (op_name == "add_out_mps:") {
+      kernel = "add";
+    } else if (op_name == "sub_out_mps:") {
+      kernel = "sub";
+    } else if (op_name == "lessThan") {
+      kernel = "less";
+    } else if (op_name == "greaterThan") {
+      kernel = "greater";
+    } else if (op_name == "greaterThanOrEqualTo") {
+      kernel = "greaterOrEqual";
     }
     else {
       // std::cout << op_name << std::endl;
     }
     if (!kernel.empty()) {
-      // Tensor self_cpu = self.detach().clone().cpu();
-      // Tensor other_cpu = other.detach().clone().cpu();
-      // Tensor output_cpu = output_.detach().clone().cpu();
+      Tensor self_cpu = self.detach().clone().cpu();
+      Tensor other_cpu = other.detach().clone().cpu();
+      Tensor output_cpu = output_.detach().clone().cpu();
       // at::mul_out(output_cpu, self_cpu, other_cpu);
 
+      bool knownKernel = true;
+      if (kernel == "mul") {
+        at::mul_out(output_cpu, self_cpu, other_cpu);
+      } else if (kernel == "div") {
+        at::div_out(output_cpu, self_cpu, other_cpu);
+      } else if (kernel == "div") {
+        at::div_out(output_cpu, self_cpu, other_cpu);
+      } else if (kernel == "add") {
+        at::add_out(output_cpu, self_cpu, other_cpu);
+      } else if (kernel == "sub") {
+        at::sub_out(output_cpu, self_cpu, other_cpu);
+      } else if (kernel == "less") {
+        at::lt_out(output_cpu, self_cpu, other_cpu);
+      } else if (kernel == "greater") {
+        at::gt_out(output_cpu, self_cpu, other_cpu);
+      } else if (kernel == "greaterOrEqual") {
+        at::ge_out(output_cpu, self_cpu, other_cpu);
+      } else {
+        knownKernel = false;
+      }
       binary_kernel_mps(self, other, output_, kernel);
-      // mpsStream->synchronize(SyncType::COMMIT_AND_WAIT);
-      // std::cout << "OUTPUT CPU: \n" << output_cpu << std::endl;
-      // std::cout << "OUTPUT MPS: \n" << output_.cpu() << std::endl;
-      // TORCH_CHECK(at::allclose(output_cpu, output_.cpu()));
+      mpsStream->synchronize(SyncType::COMMIT_AND_WAIT);
+      if (knownKernel && !at::allclose(output_cpu, output_.cpu())) {
+        std::cout << "OUTPUT CPU: \n" << output_cpu << std::endl;
+        std::cout << "OUTPUT MPS: \n" << output_.cpu() << std::endl;
+        std::cout << "\n\n\n\n";
+        std::cout << "NOT MATCHING!!!! " << kernel << std::endl;
+        std::cout << "\n\n\n\n";
+        TORCH_CHECK(false);
+      }
       return;
     }
   }
