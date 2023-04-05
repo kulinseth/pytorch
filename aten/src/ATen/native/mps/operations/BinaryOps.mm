@@ -39,10 +39,10 @@ enum class BinaryKernelType {
 
 static char* BINARY_OP_TEMPLATE_TENSOR = R"METAL_BINARY(
 kernel void {3}_kernel(uint tid                  [[thread_position_in_grid]],
-                       constant {1}4 * input           [[buffer(0)]],
-                       constant {2}4 * other           [[buffer(1)]],
+                       const device {1}4 * input           [[buffer(0)]],
+                       const device {2}4 * other           [[buffer(1)]],
                        device   {0}4 * output          [[buffer(2)]]) {{
-  output[tid] = input[tid] {4} other[tid];
+  output[tid] = ({0}4)input[tid] {4} ({0}4)other[tid];
 }}
 )METAL_BINARY";
 
@@ -64,8 +64,8 @@ static inline uint3 get_idx(
 }}
 
 kernel void {3}_kernel_strided(uint tid                  [[thread_position_in_grid]],
-                       constant void  * input_           [[buffer(0)]],
-                       constant void  * other_           [[buffer(1)]],
+                       const device void  * input_           [[buffer(0)]],
+                       const device void  * other_           [[buffer(1)]],
                        device   void  * output_          [[buffer(2)]],
 
                        constant uint  * iter_shape       [[buffer(3)]],
@@ -75,28 +75,28 @@ kernel void {3}_kernel_strided(uint tid                  [[thread_position_in_gr
   uint3 offsets = get_idx(tid, iter_shape, num_dimensions, strides);
 
   device   {0}* output = (device   {0}*)((device uint8_t*)output_  + offsets.x);
-  constant {1}* input  = (constant {1}*)((constant uint8_t*)input_ + offsets.y);
-  constant {2}* other  = (constant {2}*)((constant uint8_t*)other_ + offsets.z);
+  const device {1}* input  = (const device {1}*)((const device uint8_t*)input_ + offsets.y);
+  const device {2}* other  = (const device {2}*)((const device uint8_t*)other_ + offsets.z);
 
-  *output = *input {4} *other;
+  *output = ({0})*input {4} ({0})*other;
 }}
 )METAL_BINARY";
 
 static  char* BINARY_OP_TEMPLATE_RHS_SCALAR = R"METAL_BINARY(
 kernel void {3}_kernel_scalar_rhs(uint tid  [[thread_position_in_grid]],
-                              constant {1}4  * input           [[buffer(0)]],
-                              constant {2}   * other           [[buffer(1)]],
+                              const device {1}4  * input           [[buffer(0)]],
+                              const device {2}   * other           [[buffer(1)]],
                               device   {0}4  * output          [[buffer(2)]]) {{
-  output[tid] = (({0}4)(input[tid])) {4} (({0})*other);
+  output[tid] = ({0}4)(input[tid]) {4} ({0})*other;
 }}
 )METAL_BINARY";
 
 static  char* BINARY_OP_TEMPLATE_SCALAR = R"METAL_BINARY(
 kernel void {3}_kernel_scalar(uint tid  [[thread_position_in_grid]],
-                              constant {1}  * input           [[buffer(0)]],
-                              constant {2}  * other           [[buffer(1)]],
+                              const device {1}  * input           [[buffer(0)]],
+                              const device {2}  * other           [[buffer(1)]],
                               device   {0}  * output          [[buffer(2)]]) {{
-  *output = *input {4} *other;
+  *output = ({0})*input {4} ({0})*other;
 }}
 )METAL_BINARY";
 
@@ -119,8 +119,8 @@ static inline uint3 get_idx(
 
 
 kernel void {3}_kernel_scalar_rhs_strided(uint tid       [[thread_position_in_grid]],
-                       constant void  * input_           [[buffer(0)]],
-                       constant {2}   & other            [[buffer(1)]],
+                       const device void  * input_           [[buffer(0)]],
+                       const device {2}   & other            [[buffer(1)]],
                        device   void  * output_          [[buffer(2)]],
 
                        constant uint  * iter_shape       [[buffer(3)]],
@@ -130,38 +130,38 @@ kernel void {3}_kernel_scalar_rhs_strided(uint tid       [[thread_position_in_gr
   uint3 offsets = get_idx(tid, iter_shape, num_dimensions, strides);
 
   device   {0}* output = (device   {0}*)((device uint8_t*)output_  + offsets.x);
-  constant {1}* input  = (constant {1}*)((constant uint8_t*)input_ + offsets.y);
+  const device {1}* input  = (const device {1}*)((const device uint8_t*)input_ + offsets.y);
 
-  *output = *input {4} other;
+  *output = ({0})*input {4} ({0})other;
 }}
 )METAL_BINARY";
 
-const std::string& getMetalType(const c10::ScalarType& t) {
-  // Mapping from c10::ScalarType to integral type that can be used for bitwise ops
-  // As bitwise ops sign-agnostic map signed/unsigned char and boolean to the same type
-  static std::unordered_map<c10::ScalarType, std::string> scalar_to_metal_type = {
-    {c10::ScalarType::Float, "float"},
-    {c10::ScalarType::Half,  "half"},
-    {c10::ScalarType::Long,  "long"},
-    {c10::ScalarType::Int,   "int"},
-    {c10::ScalarType::Short, "short"},
-    {c10::ScalarType::Char,  "char"},
-    {c10::ScalarType::Byte,  "uchar"},
-    {c10::ScalarType::Bool,  "bool"},
-  };
+// const std::string& getMetalType(const c10::ScalarType& t) {
+//   // Mapping from c10::ScalarType to integral type that can be used for bitwise ops
+//   // As bitwise ops sign-agnostic map signed/unsigned char and boolean to the same type
+//   static std::unordered_map<c10::ScalarType, std::string> scalar_to_metal_type = {
+//     {c10::ScalarType::Float, "float"},
+//     {c10::ScalarType::Half,  "half"},
+//     {c10::ScalarType::Long,  "long"},
+//     {c10::ScalarType::Int,   "int"},
+//     {c10::ScalarType::Short, "short"},
+//     {c10::ScalarType::Char,  "char"},
+//     {c10::ScalarType::Byte,  "uchar"},
+//     {c10::ScalarType::Bool,  "bool"},
+//   };
 
-  auto it = scalar_to_metal_type.find(t);
-  TORCH_CHECK(it != scalar_to_metal_type.end(), "Unsupported type ", t);
-  return it->second;
-}
+//   auto it = scalar_to_metal_type.find(t);
+//   TORCH_CHECK(it != scalar_to_metal_type.end(), "Unsupported type ", t);
+//   return it->second;
+// }
 
-const std::string& getMetalType(const at::Tensor& t) {
-  return getMetalType(t.scalar_type());
-}
+// const std::string& getMetalType(const at::Tensor& t) {
+//   return getMetalType(t.scalar_type());
+// }
 
-const std::string& getMetalType(const c10::Scalar& s) {
-  return getMetalType(s.type());
-}
+// const std::string& getMetalType(const c10::Scalar& s) {
+//   return getMetalType(s.type());
+// }
 
 static id<MTLLibrary> compileBinaryOpsLibrary(id<MTLDevice> device,
                                                const std::string& t1,
@@ -525,9 +525,9 @@ void binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op, const s
       }
 
       id<MTLComputePipelineState> binaryPSO = mps::getBinaryPSO(device,
-                                                          mps::getMetalType(outputTensor),
-                                                          mps::getMetalType(inputTensor),
-                                                          mps::getMetalType(otherTensor),
+                                                          getMetalScalarType(outputTensor),
+                                                          getMetalScalarType(inputTensor),
+                                                          getMetalScalarType(otherTensor),
                                                           kernel,
                                                           op,
                                                           kernel_operator,
@@ -628,8 +628,8 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
     string kernel;
     if (op_name == "multiplication") {
       kernel = "mul";
-    // } else if (op_name == "div_out_mps:"){
-    //   kernel = "div";
+    } else if (op_name == "div_out_mps:"){
+      kernel = "div";
     // } else if (op_name == "add_out_mps:") {
     //   kernel = "add";
     // } else if (op_name == "sub_out_mps:") {
