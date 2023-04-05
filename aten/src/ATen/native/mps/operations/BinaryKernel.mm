@@ -172,7 +172,7 @@ void fmax_fmin_mps_impl(TensorIteratorBase& iter, const std::string max_min) {
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
-      mpsStream->commitAdaptive({input, other}, fmaxfminPSO);
+      mpsStream->commitAdaptive({input, other, out}, fmaxfminPSO);
     }
   });
 }
