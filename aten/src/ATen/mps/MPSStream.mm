@@ -73,7 +73,8 @@ void MPSStream::synchronize(SyncType syncType) {
       commit();
       break;
     case SyncType::COMMIT_ADAPTIVE:
-      // the adaptive commit only commits if we hit the low watermark memory threshold
+      // the adaptive commit only commits if we hit the low watermark memory threshold,
+      // or when the sizes attached to the active command buffer exceeds the threshold
       if (getIMPSAllocator()->getLowWatermarkValue() <= 0 ||
           _commandBufferResourceSize > kCmdBufAdaptiveCommitThreshold) {
         commit();
@@ -122,6 +123,20 @@ void MPSStream::commitAndWait() {
 void MPSStream::commitAndContinue() {
   assert(_commandBuffer);
   [_commandBuffer commitAndContinue];
+}
+
+void MPSStream::commitAdaptive(const TensorList& tensors, void* profilerHandle) {
+  if (_enableCommitAndContinue) {
+    for (const auto& tensor : tensors) {
+      _commandBufferResourceSize += tensor.nbytes();
+    }
+  }
+  auto& profiler = getMPSProfiler();
+  if (profiler.isOperationProfilingEnabled()) {
+    profiler.endProfileKernel(profilerHandle, SyncType::COMMIT_ADAPTIVE);
+  } else {
+    synchronize(SyncType::COMMIT_ADAPTIVE);
+  }
 }
 
 void MPSStream::endKernelCoalescing() {

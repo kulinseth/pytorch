@@ -227,8 +227,7 @@ void binary_mps_impl(TensorIteratorBase& iter, const std::string func_name) {
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
-
-      getMPSProfiler().endProfileKernel(fmaxfminPSO);
+      mpsStream->commitAdaptive({input, other, out}, fmaxfminPSO);
     }
   });
 }
