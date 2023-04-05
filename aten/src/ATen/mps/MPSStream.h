@@ -65,6 +65,7 @@ public:
   MTLComputeCommandEncoder_t commandEncoder();
   void endKernelCoalescing();
   void synchronize(SyncType syncType);
+  void commitAdaptive(const TensorList& tensors, void* profilerHandle);
   void fill(id<MTLBuffer> buffer, uint8_t value, size_t length, size_t offset, SyncType syncType = SyncType::NONE);
   void copy(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer,
             size_t length, size_t srcOffset, size_t dstOffset,
