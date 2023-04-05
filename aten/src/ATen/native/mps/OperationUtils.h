@@ -223,7 +223,7 @@ struct MPSGraphCache
   }
 
   MPSCachedGraph* LookUp(const std::string& key) const {
-
+    // std::cout << key << std::endl;
     __block MPSCachedGraph* cachedGraph = nullptr;
 
     MPSCacheKey hash = std::hash<std::string>{}(key);
