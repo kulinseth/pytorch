@@ -17,10 +17,10 @@ enum class BinaryKernelType {
 };
 
 static char* BINARY_OP_TEMPLATE_TENSOR = R"METAL_BINARY(
-kernel void {3}_kernel(uint tid                           [[thread_position_in_grid]],
+kernel void {3}_kernel(uint tid               [[thread_position_in_grid]],
                        constant {1} * input   [[buffer(0)]],
                        constant {2} * other   [[buffer(1)]],
-                       device       {0}        * output  [[buffer(2)]]) {{
+                       device   {0} * output  [[buffer(2)]]) {{
   output[tid] = ({5})input[tid] {4} ({5})other[tid];
 }}
 )METAL_BINARY";
@@ -28,8 +28,8 @@ kernel void {3}_kernel(uint tid                           [[thread_position_in_g
 static char* BINARY_OP_TEMPLATE_STRIDED_TENSOR = GET_IDX_TEMPLATE
 R"METAL_BINARY(
 kernel void {3}_kernel_strided(uint tid [[thread_position_in_grid]],
-                       constant void     * input_             [[buffer(0)]],
-                       constant void     * other_             [[buffer(1)]],
+                       constant void         * input_             [[buffer(0)]],
+                       constant void         * other_             [[buffer(1)]],
                        device void           * output_            [[buffer(2)]],
                        constant uint         * iter_shape         [[buffer(3)]],
                        constant uint         & num_dimensions     [[buffer(4)]],
@@ -48,7 +48,7 @@ static  char* BINARY_OP_TEMPLATE_LHS_SCALAR = R"METAL_BINARY(
 kernel void {3}_kernel_scalar_lhs(uint tid  [[thread_position_in_grid]],
                               constant {1}  & input   [[buffer(0)]],
                               constant {2}  * other   [[buffer(1)]],
-                              device {0}    * output  [[buffer(2)]]) {{
+                              device   {0}  * output  [[buffer(2)]]) {{
   output[tid] = ({5})input {4} ({5})other[tid];
 }}
 )METAL_BINARY";
@@ -56,8 +56,8 @@ kernel void {3}_kernel_scalar_lhs(uint tid  [[thread_position_in_grid]],
 static  char* BINARY_OP_TEMPLATE_RHS_SCALAR = R"METAL_BINARY(
 kernel void {3}_kernel_scalar_rhs(uint tid  [[thread_position_in_grid]],
                               constant {1}  * input   [[buffer(0)]],
-                              constant {2}          & other   [[buffer(1)]],
-                              device {0}               * output  [[buffer(2)]]) {{
+                              constant {2}  & other   [[buffer(1)]],
+                              device   {0}  * output  [[buffer(2)]]) {{
   output[tid] = ({5})input[tid] {4} ({5})other;
 }}
 )METAL_BINARY";
@@ -226,7 +226,7 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
     }
   }
 
-  // workaround for signed vs. unsigned comparison issue in MacOS 12
+  // workaround for bool issues (e.g. bool dtype: true + true in Metal would be 0, but the expected result is still 1 in PyTorch)
   if (outputDataType == kBool && (inputDataType == kByte || otherDataType == kByte)) {
     inputDataType = otherDataType = kByte;
   } else {
@@ -284,7 +284,7 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
     }
   } else if (scalar_pos) {
     if (allContiguous) {
-      type = scalar_pos == 1 ? BinaryKernelType::LHS_Scalar : BinaryKernelType::RHS_Scalar;  
+      type = scalar_pos == 1 ? BinaryKernelType::LHS_Scalar : BinaryKernelType::RHS_Scalar;
     } else {
       type = scalar_pos == 1 ? BinaryKernelType::Strided_LHS_Scalar : BinaryKernelType::Strided_RHS_Scalar;
     }
@@ -336,7 +336,7 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
       }
       if (scalar_pos) {
         kernel += "_scalar_";
-        if (scalar_pos == 1) { 
+        if (scalar_pos == 1) {
           kernel += "lhs";
         } else {
           kernel += "rhs";
@@ -345,12 +345,6 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
       if (!allContiguous) {
         kernel += "_strided";
       }
-
-      // if (allContiguous) {
-      //   // Round up to next multiple of 4
-      //   numThreads = (numThreads + (4 - numThreads % 4)) / 4;
-      //   gridSize = MTLSizeMake(numThreads, 1, 1);
-      // }
 
       id<MTLComputePipelineState> binaryPSO = mps::getBinaryPSO(device,
                                                           getMetalScalarType(outputDataType),
