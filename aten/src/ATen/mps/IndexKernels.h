@@ -3,7 +3,24 @@
 namespace at {
 namespace mps {
 
-static const char * indexing_metal_shaders = R"INDEX_METAL(
+#define GET_IDX_TEMPLATE                                     \
+"static inline uint3 get_idx(                              " \
+"  uint tid,                                               " \
+"  constant uint * iter_shape,                             " \
+"  const uint num_dimensions,                              " \
+"  constant packed_uint3 * strides) {{                     " \
+"  uint3 data_offsets = 0;                                 " \
+"  uint32_t idx = tid;                                     " \
+"  for (uint32_t dim = 0; dim < num_dimensions; dim++) {{  " \
+"      uint32_t remainder = idx % iter_shape[dim];         " \
+"      idx /= iter_shape[dim];                             " \
+"      data_offsets += remainder * strides[dim];           " \
+"  }}                                                      " \
+"  return data_offsets;                                    " \
+"}}"
+
+static const char * indexing_metal_shaders = GET_IDX_TEMPLATE
+R"INDEX_METAL(
 #include <metal_stdlib>
 #include <metal_atomic>
 
@@ -18,23 +35,7 @@ struct IndexAB {
 struct IndexAB {
     constant int64_t* indexArray;
 };
-
 #endif
-
-static inline uint3 get_idx(
-  uint tid,
-  constant uint * iter_shape,
-  const uint num_dimensions,
-  constant packed_uint3 * strides) {{
-  uint3 data_offsets = 0;
-  uint32_t idx = tid;
-  for (uint32_t dim = 0; dim < num_dimensions; dim++) {{
-      uint32_t remainder = idx % iter_shape[dim];
-      idx /= iter_shape[dim];
-      data_offsets += remainder * strides[dim];
-  }}
-  return data_offsets;
-}}
 
 template<typename T>
 kernel void index_select(
