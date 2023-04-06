@@ -63,7 +63,6 @@ std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype = tr
 std::string getArrayRefString(const IntArrayRef s);
 const std::string& getMetalScalarType(const Tensor& t);
 const std::string& getMetalScalarType(const c10::ScalarType& scalar_type);
-
 // use has_storage() on the returned tensor to determine if src actually is a view
 Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst);
 Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output);
@@ -226,7 +225,6 @@ struct MPSGraphCache
   }
 
   MPSCachedGraph* LookUp(const std::string& key) const {
-    // std::cout << key << std::endl;
     __block MPSCachedGraph* cachedGraph = nullptr;
 
     MPSCacheKey hash = std::hash<std::string>{}(key);

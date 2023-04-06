@@ -146,12 +146,12 @@ static id<MTLComputePipelineState> getBinaryPSO(id<MTLDevice> device,
   TORCH_CHECK(func != nil, "Can't get function ", fname);
   auto rc = [device newComputePipelineStateWithFunction:func error:&error];
   TORCH_CHECK(rc != nil && error == nil, "Failed to construct pipeline state: ", [[error localizedDescription] UTF8String]);
-  cplMap[key]  = rc;
+  cplMap[key] = rc;
   return rc;
 }
 
 static
-void binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op, const std::string& kernel_operator) {
+void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op, const std::string& kernel_operator) {
   Tensor inputTensor;
   Tensor otherTensor;
   BinaryKernelType type;
@@ -322,7 +322,7 @@ void binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op, const s
 }
 
 static
-void binary_kernel_mps(const Tensor& self, const Tensor& other, const Tensor& output, const std::string& op, const std::string& kernel_operator) {
+void dispatch_binary_kernel_mps(const Tensor& self, const Tensor& other, const Tensor& output, const std::string& op, const std::string& kernel_operator) {
   TensorIterator iter;
   if (op == "le" || op == "gt" || op == "ge") {
     iter = TensorIterator::comparison_op(const_cast<Tensor&>(output), self, other);
@@ -330,7 +330,7 @@ void binary_kernel_mps(const Tensor& self, const Tensor& other, const Tensor& ou
     iter = TensorIterator::borrowing_binary_op(output, self, other);
   }
 
-  binary_kernel_mps_(iter, op, kernel_operator);
+  dispatch_binary_kernel_mps_(iter, op, kernel_operator);
 }
 
 bool getBinaryKernelOperator(const std::string& op_name, std::pair<std::string, std::string>& kernel_operator) {
@@ -353,18 +353,22 @@ bool getBinaryKernelOperator(const std::string& op_name, std::pair<std::string, 
   return true;
 }
 
-bool dispatchNativeBinaryKernel(const Tensor& self, const Tensor& other, const Tensor& output_, const Scalar& alpha, const std::string& op_name) {
+bool dispatchNativeBinaryKernel(const Tensor& self,
+                          const Tensor& other,
+                          const Tensor& output,
+                          const Scalar& alpha,
+                          const std::string& op_name) {
   if (alpha.toFloat() == 1.0   &&
      (!self.is_contiguous()    ||
       !other.is_contiguous()   ||
-      !output_.is_contiguous() ||
-      output_.storage_offset() ||
+      !output.is_contiguous()  ||
+      output.storage_offset()  ||
       self.storage_offset()    ||
       other.storage_offset())) {
 
     std::pair<std::string, std::string> kernel_operator;
     if (getBinaryKernelOperator(op_name, kernel_operator)) {
-      binary_kernel_mps(self, other, output_, kernel_operator.first, kernel_operator.second);
+      dispatch_binary_kernel_mps(self, other, output, kernel_operator.first, kernel_operator.second);
       return true;
     }
   }
