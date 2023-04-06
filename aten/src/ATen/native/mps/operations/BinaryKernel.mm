@@ -198,7 +198,6 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
   BinaryKernelType type;
 
   int scalar_pos = 0;
-  int tensor_pos = 0;
   bool all_scalar = false;
   const Tensor& outputTensor = iter.tensor(0);
   inputTensor = iter.tensor(1);
@@ -243,10 +242,8 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
     all_scalar = true;
   } else if (iter.tensor(1).numel() == 1) {
     scalar_pos = 1;
-    tensor_pos = 2;
   } else if (iter.tensor(2).numel() == 1) {
     scalar_pos = 2;
-    tensor_pos = 1;
   }
 
   if (!scalar_pos && !all_scalar) {
@@ -389,7 +386,7 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
 static
 void dispatch_binary_kernel_mps(const Tensor& self, const Tensor& other, const Tensor& output, const std::string& op, const std::string& kernel_operator) {
   TensorIterator iter;
-  if (op == "lt" || op == "le" || op == "gt" || op == "ge" || op == "ne" || op == "logical_or" || op == "eq") {
+  if (op == "lt" || op == "le" || op == "gt" || op == "ge" || op == "ne" || op == "logical_or" || "logical_and" || op == "eq") {
     iter = TensorIterator::comparison_op(const_cast<Tensor&>(output), self, other);
   } else {
     iter = TensorIterator::borrowing_binary_op(output, self, other);
@@ -412,6 +409,7 @@ bool getBinaryKernelOperator(const std::string& op_name, std::pair<std::string, 
     {"greaterThanOrEqualTo",  {"ge",         ">="}},
     {"notEqual",              {"ne",         "!="}},
     {"logicalOR",             {"logical_or", "||"}},
+    {"logicalAND",             {"logical_and", "&&"}},
     {"equal",                 {"eq",         "=="}},
   };
 
