@@ -49,9 +49,8 @@ kernel void index_select(
     constant void     * inputData         [[buffer(4)]],
     device   void     * outputData        [[buffer(5)]],
     constant uint32_t & num_indices       [[buffer(6)]],
-
-    constant uint  * iter_shape       [[buffer(7)]],
-    constant uint & num_dimensions    [[buffer(8)]],
+    constant uint     * iter_shape        [[buffer(7)]],
+    constant uint     & num_dimensions    [[buffer(8)]],
     constant packed_uint3 * strides   [[buffer(9)]],
 
     uint thread_index [[thread_position_in_grid]]) {
@@ -126,29 +125,29 @@ kernel void index_put(
 template                                                        \
 [[host_name("index_" #INDEX_OP_TYPE "_" #DTYPE_SIZE)]]          \
 kernel void index_ ## INDEX_OP_TYPE<DTYPE>(                     \
-    constant IndexAB & indexAB           [[buffer(0)]],         \
-    constant void    * indexSizes        [[buffer(1)]],         \
-    constant void    * indexStrides      [[buffer(2)]],         \
-    constant void    * inputData         [[buffer(4)]],         \
-    device   void    * outputData        [[buffer(5)]],         \
-    constant uint32_t & num_indices      [[buffer(6)]],         \
-    constant uint  * iter_shape          [[buffer(7)]],         \
-    constant uint & num_dimensions       [[buffer(8)]],         \
-    constant packed_uint3 * strides      [[buffer(9)]],         \
+    constant IndexAB  & indexAB           [[buffer(0)]],        \
+    constant void     * indexSizes        [[buffer(1)]],        \
+    constant void     * indexStrides      [[buffer(2)]],        \
+    constant void     * inputData         [[buffer(4)]],        \
+    device   void     * outputData        [[buffer(5)]],        \
+    constant uint32_t & num_indices       [[buffer(6)]],        \
+    constant uint     * iter_shape        [[buffer(7)]],        \
+    constant uint     & num_dimensions    [[buffer(8)]],        \
+    constant packed_uint3 * strides       [[buffer(9)]],        \
     uint thread_index [[thread_position_in_grid]]);
 #else
 #define REGISTER_INDEX_OP(DTYPE_SIZE, DTYPE, INDEX_OP_TYPE)     \
 template                                                        \
 [[host_name("index_" #INDEX_OP_TYPE "_" #DTYPE_SIZE)]]          \
 kernel void index_ ## INDEX_OP_TYPE<DTYPE>(                     \
-    constant IndexAB * indexAB           [[buffer(0)]],         \
-    constant void    * indexSizes        [[buffer(1)]],         \
-    constant void    * indexStrides      [[buffer(2)]],         \
-    constant void    * inputData         [[buffer(4)]],         \
-    device   void    * outputData        [[buffer(5)]],         \
+    constant IndexAB  * indexAB          [[buffer(0)]],         \
+    constant void     * indexSizes       [[buffer(1)]],         \
+    constant void     * indexStrides     [[buffer(2)]],         \
+    constant void     * inputData        [[buffer(4)]],         \
+    device   void     * outputData       [[buffer(5)]],         \
     constant uint32_t & num_indices      [[buffer(6)]],         \
-    constant uint  * iter_shape          [[buffer(7)]],         \
-    constant uint & num_dimensions       [[buffer(8)]],         \
+    constant uint     * iter_shape       [[buffer(7)]],         \
+    constant uint     & num_dimensions   [[buffer(8)]],         \
     constant packed_uint3 * strides      [[buffer(9)]],         \
     uint thread_index [[thread_position_in_grid]]);
 #endif
