@@ -46,7 +46,6 @@ kernel void index_select(
 #endif
     constant void     * indexSizes        [[buffer(1)]],
     constant void     * indexStrides      [[buffer(2)]],
-    // constant uint3    * offsets           [[buffer(3)]],
     constant void     * inputData         [[buffer(4)]],
     device   void     * outputData        [[buffer(5)]],
     constant uint32_t & num_indices       [[buffer(6)]],
@@ -88,7 +87,6 @@ kernel void index_put(
 #endif
     constant void     * indexSizes        [[buffer(1)]],
     constant void     * indexStrides      [[buffer(2)]],
-    // constant uint3    * offsets           [[buffer(3)]],
     constant void     * inputData         [[buffer(4)]],
     device   void     * outputData        [[buffer(5)]],
     constant uint32_t & num_indices       [[buffer(6)]],
@@ -134,9 +132,9 @@ kernel void index_ ## INDEX_OP_TYPE<DTYPE>(                     \
     constant void    * inputData         [[buffer(4)]],         \
     device   void    * outputData        [[buffer(5)]],         \
     constant uint32_t & num_indices      [[buffer(6)]],         \
-    constant uint  * iter_shape       [[buffer(7)]],            \
-    constant uint & num_dimensions    [[buffer(8)]],            \
-    constant packed_uint3 * strides   [[buffer(9)]],           \
+    constant uint  * iter_shape          [[buffer(7)]],         \
+    constant uint & num_dimensions       [[buffer(8)]],         \
+    constant packed_uint3 * strides      [[buffer(9)]],         \
     uint thread_index [[thread_position_in_grid]]);
 #else
 #define REGISTER_INDEX_OP(DTYPE_SIZE, DTYPE, INDEX_OP_TYPE)     \
@@ -149,9 +147,9 @@ kernel void index_ ## INDEX_OP_TYPE<DTYPE>(                     \
     constant void    * inputData         [[buffer(4)]],         \
     device   void    * outputData        [[buffer(5)]],         \
     constant uint32_t & num_indices      [[buffer(6)]],         \
-    constant uint  * iter_shape       [[buffer(7)]],            \
-    constant uint & num_dimensions    [[buffer(8)]],            \
-    constant packed_uint3 * strides   [[buffer(9)]],           \
+    constant uint  * iter_shape          [[buffer(7)]],         \
+    constant uint & num_dimensions       [[buffer(8)]],         \
+    constant packed_uint3 * strides      [[buffer(9)]],         \
     uint thread_index [[thread_position_in_grid]]);
 #endif
 
@@ -183,26 +181,20 @@ kernel void kernel_index_offsets(constant packed_uint3 * strides         [[buffe
 template<typename T, typename E>
 kernel void index_put_accumulate_native_dtypes(
 #if __METAL_VERSION__ >= 300
-    constant IndexAB  * indexAB     [[buffer(0)]],
+    constant IndexAB  * indexAB        [[buffer(0)]],
 #else
-    constant IndexAB  & indexAB     [[buffer(0)]],
+    constant IndexAB  & indexAB        [[buffer(0)]],
 #endif
-    constant void    * indexSizes   [[buffer(1)]],
-    constant void    * indexStrides [[buffer(2)]],
-    // constant uint3   * offsets      [[buffer(3)]],
-    constant void    * inputData    [[buffer(4)]],
-    device void      * outputData   [[buffer(5)]],
-    constant uint32_t& num_indices  [[buffer(6)]],
-
-    constant uint  * iter_shape       [[buffer(7)]],
-    constant uint & num_dimensions    [[buffer(8)]],
-    constant packed_uint3 * strides   [[buffer(9)]],
-
-
+    constant void     * indexSizes     [[buffer(1)]],
+    constant void     * indexStrides   [[buffer(2)]],
+    constant void     * inputData      [[buffer(4)]],
+    device void       * outputData     [[buffer(5)]],
+    constant uint32_t & num_indices    [[buffer(6)]],
+    constant uint     * iter_shape     [[buffer(7)]],
+    constant uint     & num_dimensions [[buffer(8)]],
+    constant packed_uint3 * strides    [[buffer(9)]],
     uint thread_index [[thread_position_in_grid]]) {
-
     uint3 offsets = get_idx(thread_index, iter_shape, num_dimensions, strides);
-
     constant int64_t * index_sizes   = (constant int64_t *)indexSizes;
     constant int64_t * index_strides = (constant int64_t *)indexStrides;
     int64_t offset = 0;
@@ -236,24 +228,20 @@ __attribute__((__always_inline__)) void atomic_fetch_add_relaxed(device void * a
 template<typename T>
 kernel void atomic_index_put_accumulate(
 #if __METAL_VERSION__ >= 300
-    constant IndexAB * indexAB           [[buffer(0)]],
+    constant IndexAB  * indexAB           [[buffer(0)]],
 #else
-    constant IndexAB & indexAB           [[buffer(0)]],
+    constant IndexAB  & indexAB           [[buffer(0)]],
 #endif
-    constant void    * indexSizes        [[buffer(1)]],
-    constant void    * indexStrides      [[buffer(2)]],
-    // constant uint3   * offsets           [[buffer(3)]],
-    constant void    * inputData         [[buffer(4)]],
-    device   void    * outputData        [[buffer(5)]],
-    constant uint32_t& num_indices       [[buffer(6)]],
-
-    constant uint  * iter_shape       [[buffer(7)]],
-    constant uint & num_dimensions    [[buffer(8)]],
-    constant packed_uint3 * strides   [[buffer(9)]],
-
+    constant void     * indexSizes        [[buffer(1)]],
+    constant void     * indexStrides      [[buffer(2)]],
+    constant void     * inputData         [[buffer(4)]],
+    device   void     * outputData        [[buffer(5)]],
+    constant uint32_t & num_indices       [[buffer(6)]],
+    constant uint     * iter_shape        [[buffer(7)]],
+    constant uint     & num_dimensions    [[buffer(8)]],
+    constant packed_uint3 * strides       [[buffer(9)]],
     uint thread_index [[thread_position_in_grid]]) {
     uint3 offsets = get_idx(thread_index, iter_shape, num_dimensions, strides);
-
     constant int64_t * index_sizes   = (constant int64_t *)indexSizes;
     constant int64_t * index_strides = (constant int64_t *)indexStrides;
     int64_t offset = 0;
@@ -284,37 +272,30 @@ kernel void atomic_index_put_accumulate<float>(
 #endif
     constant void    * indexSizes   [[buffer(1)]],
     constant void    * indexStrides [[buffer(2)]],
-    // constant uint3   * offsets      [[buffer(3)]],
     constant void    * inputData    [[buffer(4)]],
     device   void    * outputData   [[buffer(5)]],
     constant uint32_t& num_indices  [[buffer(6)]],
-
-    constant uint  * iter_shape       [[buffer(7)]],
-    constant uint & num_dimensions    [[buffer(8)]],
-    constant packed_uint3 * strides   [[buffer(9)]],
-
-
+    constant uint  * iter_shape     [[buffer(7)]],
+    constant uint & num_dimensions  [[buffer(8)]],
+    constant packed_uint3 * strides [[buffer(9)]],
     uint thread_index [[thread_position_in_grid]]);
 
 template
 [[host_name("index_put_accumulate_32bit_int")]]
 kernel void index_put_accumulate_native_dtypes<atomic_int, int>(
 #if __METAL_VERSION__ >= 300
-    constant IndexAB  * indexAB     [[buffer(0)]],
+    constant IndexAB  * indexAB       [[buffer(0)]],
 #else
-    constant IndexAB  & indexAB     [[buffer(0)]],
+    constant IndexAB  & indexAB       [[buffer(0)]],
 #endif
-    constant void    * indexSizes   [[buffer(1)]],
-    constant void    * indexStrides [[buffer(2)]],
-    // constant uint3   * offsets      [[buffer(3)]],
-    constant void    * inputData    [[buffer(4)]],
-    device   void    * outputData   [[buffer(5)]],
-    constant uint32_t& num_indices [[buffer(6)]],
-
-    constant uint  * iter_shape       [[buffer(7)]],
-    constant uint & num_dimensions    [[buffer(8)]],
+    constant void    * indexSizes     [[buffer(1)]],
+    constant void    * indexStrides   [[buffer(2)]],
+    constant void    * inputData      [[buffer(4)]],
+    device   void    * outputData     [[buffer(5)]],
+    constant uint32_t& num_indices    [[buffer(6)]],
+    constant uint    * iter_shape     [[buffer(7)]],
+    constant uint    & num_dimensions [[buffer(8)]],
     constant packed_uint3 * strides   [[buffer(9)]],
-
     uint thread_index [[thread_position_in_grid]]);
 )INDEX_METAL";
 
