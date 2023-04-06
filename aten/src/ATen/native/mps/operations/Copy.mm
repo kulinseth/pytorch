@@ -343,7 +343,10 @@ static bool try_copy_scalars_mps(at::Tensor& dst, const at::Tensor& src, bool no
                                          src, dst, length, needsSync, false);
   if (needsSync) {
     // wait for any possible GPU operations to finish before reading from source MPS buffers
-    getDefaultMPSStream()->synchronize(SyncType::COMMIT_AND_WAIT);
+    auto stream = getDefaultMPSStream();
+    dispatch_sync(stream->queue(), ^() {
+      stream->synchronize(SyncType::COMMIT_AND_WAIT);
+    });
   }
   memcpy((char*) dst_ptr + dst_offset, (char*) src_ptr + src_offset, length);
 
