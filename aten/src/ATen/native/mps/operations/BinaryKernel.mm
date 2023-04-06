@@ -64,18 +64,18 @@ kernel void {3}_kernel_scalar_rhs(uint tid  [[thread_position_in_grid]],
 
 static  char* BINARY_OP_TEMPLATE_SCALAR = R"METAL_BINARY(
 kernel void {3}_kernel_scalar(uint tid  [[thread_position_in_grid]],
-                              constant {1}  * input           [[buffer(0)]],
-                              constant {2}  * other           [[buffer(1)]],
-                              device {0}        * output          [[buffer(2)]]) {{
-  *output = ({5})*input {4} ({5})*other;
+                              constant {1}  & input           [[buffer(0)]],
+                              constant {2}  & other           [[buffer(1)]],
+                              device   {0}  & output          [[buffer(2)]]) {{
+  output = ({5})input {4} ({5})other;
 }}
 )METAL_BINARY";
 
 static  char* BINARY_OP_TEMPLATE_STRIDED_RHS_SCALAR = GET_IDX_TEMPLATE
 R"METAL_BINARY(
 kernel void {3}_kernel_scalar_rhs_strided(uint tid               [[thread_position_in_grid]],
-                       constant void     * input_            [[buffer(0)]],
-                       constant {2}      & other             [[buffer(1)]],
+                       constant void         * input_            [[buffer(0)]],
+                       constant {2}          & other             [[buffer(1)]],
                        device void           * output_           [[buffer(2)]],
                        constant uint         * iter_shape        [[buffer(3)]],
                        constant uint         & num_dimensions    [[buffer(4)]],
@@ -92,8 +92,8 @@ kernel void {3}_kernel_scalar_rhs_strided(uint tid               [[thread_positi
 static  char* BINARY_OP_TEMPLATE_STRIDED_LHS_SCALAR = GET_IDX_TEMPLATE
 R"METAL_BINARY(
 kernel void {3}_kernel_scalar_lhs_strided(uint tid               [[thread_position_in_grid]],
-                       constant {1}     & input            [[buffer(0)]],
-                       constant void      * other_             [[buffer(1)]],
+                       constant {1}          & input             [[buffer(0)]],
+                       constant void         * other_            [[buffer(1)]],
                        device void           * output_           [[buffer(2)]],
                        constant uint         * iter_shape        [[buffer(3)]],
                        constant uint         & num_dimensions    [[buffer(4)]],
@@ -230,10 +230,10 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
   if (outputDataType == kBool && (inputDataType == kByte || otherDataType == kByte)) {
     inputDataType = otherDataType = kByte;
   } else {
-    if (inputDataType == kBool || inputDataType == kByte) {
+    if (inputDataType == kBool) {
       inputDataType = kChar;
     }
-    if (otherDataType == kBool || otherDataType == kByte) {
+    if (otherDataType == kBool) {
       otherDataType = kChar;
     }
   }
@@ -390,6 +390,11 @@ void dispatch_binary_kernel_mps(const Tensor& self, const Tensor& other, const T
 }
 
 bool getBinaryKernelOperator(const std::string& op_name, std::pair<std::string, std::string>& kernel_operator) {
+  static bool macOS13_0_plus = is_macos_13_or_newer(MacOSVersion::MACOS_VER_13_0_PLUS);
+  if (!macOS13_0_plus) {
+    return false;
+  }
+
   static std::unordered_map<std::string, std::pair<std::string, std::string>> opToKernelOperator = {
     {"multiplication",        {"mul", "*" }},
     {"div_out_mps:",          {"div", "/" }},
@@ -397,19 +402,18 @@ bool getBinaryKernelOperator(const std::string& op_name, std::pair<std::string, 
     {"sub_out_mps:",          {"sub", "-" }},
 
     // comparison ops
-    {"lessThan",              {"lt",         "<" }},
-    {"lessThanOrEqualTo",     {"le",         "<="}},
-    {"greaterThan",           {"gt",         ">" }},
-    {"greaterThanOrEqualTo",  {"ge",         ">="}},
-    {"notEqual",              {"ne",         "!="}},
-    {"logicalOR",             {"logical_or", "||"}},
-    {"logicalAND",             {"logical_and", "&&"}},
-    {"equal",                 {"eq",         "=="}},
+    {"lessThan",              {"lt",          "<" }},
+    {"lessThanOrEqualTo",     {"le",          "<="}},
+    {"greaterThan",           {"gt",          ">" }},
+    {"greaterThanOrEqualTo",  {"ge",          ">="}},
+    {"notEqual",              {"ne",          "!="}},
+    {"logicalOR",             {"logical_or",  "||"}},
+    {"logicalAND",            {"logical_and", "&&"}},
+    {"equal",                 {"eq",          "=="}},
   };
 
   auto it = opToKernelOperator.find(op_name);
   if (it == opToKernelOperator.end()) {
-    // std::cout << op_name << std::endl;
     return false;
   }
 
