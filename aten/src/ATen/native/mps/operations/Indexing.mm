@@ -124,10 +124,9 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
       [computeEncoder setBuffer:outputBuffer offset:outputTensor.storage_offset() * outputTensor.element_size() atIndex:5];
       [computeEncoder setBytes:&num_indices length:sizeof(uint32_t) atIndex:6];
 
-      [computeEncoder setBytes:strides.data() length:sizeof(uint32_t) * nDim * nOffsets atIndex:9];
       [computeEncoder setBytes:iterShapeData.data() length:sizeof(uint32_t) * iterShape.size() atIndex:7];
       [computeEncoder setBytes:&nDim length:sizeof(uint32_t) atIndex:8];
-
+      [computeEncoder setBytes:strides.data() length:sizeof(uint32_t) * nDim * nOffsets atIndex:9];
 
       NSUInteger tgSize = indexSelectPSO.maxTotalThreadsPerThreadgroup;
       if (tgSize > numThreads) {
