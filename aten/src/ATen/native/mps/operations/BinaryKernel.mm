@@ -94,8 +94,14 @@ static id<MTLLibrary> compileBinaryOpsLibrary(id<MTLDevice> device,
   }
   NSError *error = nil;
   MTLCompileOptions *options = [[MTLCompileOptions new] autorelease];
-  [options setLanguageVersion: MTLLanguageVersion3_0];
-  [options setFastMathEnabled: NO];
+  MTLLanguageVersion languageVersion = MTLLanguageVersion2_2;
+#if defined(__MAC_13_0)
+  if (is_macos_13_or_newer(MacOSVersion::MACOS_VER_13_0_PLUS)) {
+    languageVersion = MTLLanguageVersion3_0;
+  }
+#endif
+
+  [options setLanguageVersion: languageVersion];
   char *str = nil;
   switch (binaryKernelType){
     case BinaryKernelType::Scalar:
