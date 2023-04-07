@@ -1,5 +1,7 @@
 //  Copyright © 2022 Apple Inc.
 
+#pragma once
+
 #include <ATen/ATen.h>
 #include <ATen/Tensor.h>
 #include <ATen/Utils.h>
@@ -15,13 +17,14 @@ namespace at {
 namespace native {
 namespace mps {
 
+static
 std::string getBitSizeString(ScalarType scalar_type) {
   size_t scalarBitSize = c10::elementSize(scalar_type) * 8;
   TORCH_CHECK(scalarBitSize <= 64, "Unsupported data type: ", getMPSTypeString(scalar_type));
   return std::to_string(scalarBitSize) + "bit";
-
 }
 
+static
 std::string getIndexFunctionName(ScalarType scalar_type, bool index_select, bool accumulate) {
   std::string indexFunction = index_select ? "index_select_" :
                       (accumulate && (scalar_type != kBool)) ? "index_put_accumulate_" : "index_put_";
