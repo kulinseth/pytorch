@@ -355,6 +355,7 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
                                                           op,
                                                           kernel_operator,
                                                           type);
+      getMPSProfiler().beginProfileKernel(binaryPSO, kernel, {inputTensor, otherTensor, outputTensor});
       [computeEncoder setComputePipelineState:binaryPSO];
       [computeEncoder setBuffer:inputBuffer  offset:inputTensorStorage atIndex:0];
       [computeEncoder setBuffer:otherBuffer  offset:otherTensorStorage atIndex:1];
@@ -373,6 +374,7 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
+      mpsStream->commitAdaptive({inputTensor, otherTensor, outputTensor}, binaryPSO);
     }
   });
 }
