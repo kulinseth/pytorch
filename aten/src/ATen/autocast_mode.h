@@ -27,6 +27,7 @@ TORCH_API void set_autocast_hpu_dtype(at::ScalarType dtype);
 TORCH_API bool is_mps_enabled();
 TORCH_API void set_mps_enabled(bool enabled);
 TORCH_API at::ScalarType get_autocast_mps_dtype();
+TORCH_API at::ScalarType get_autocast_privateuseone_dtype();
 TORCH_API void set_autocast_mps_dtype(at::ScalarType dtype);
 TORCH_API bool is_autocast_cache_enabled();
 TORCH_API void set_autocast_cache_enabled(bool enabled);
