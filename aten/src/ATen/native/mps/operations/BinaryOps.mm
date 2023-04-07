@@ -4,6 +4,10 @@
 #include <ATen/Tensor.h>
 #include <ATen/Utils.h>
 #include <ATen/mps/MPSStream.h>
+#include <ATen/native/mps/OperationUtils.h>
+#include <ATen/native/mps/operations/BinaryKernel.h>
+#include <torch/library.h>
+#include <c10/util/Optional.h>
 #include <ATen/native/BinaryOps.h>
 #include <ATen/native/mps/OperationUtils.h>
 #include <c10/util/Optional.h>
@@ -47,6 +51,7 @@ void binaryOpTensor(const Tensor& self,
 
   const bool is_self_scalar = self.dim() == 0;
   const bool is_other_scalar = other.dim() == 0;
+  bool disableTypeInference = disableTypeInferenceBinary(self, other);
 
   auto new_size = at::infer_size(self.sizes(), other.sizes());
   if (!output_.sizes().equals(new_size)) {
@@ -58,7 +63,11 @@ void binaryOpTensor(const Tensor& self,
     return;
   }
 
-  bool disableTypeInference = disableTypeInferenceBinary(self, other);
+  // Use strided kernels instead of gather-scatter if the tensors are non-contiguous
+  if (dispatchNativeBinaryKernel(self, other, output_, alpha, op_name)) {
+    return;
+  }
+
   Tensor output;
   bool needsCopyToOutput = false;
 

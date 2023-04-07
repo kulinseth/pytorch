@@ -730,28 +730,11 @@ static std::string getGatherScatterFunctionName(ScalarType scalarType, int64_t d
   return kernelName + "_kernel_" + std::to_string(dim == 0 ? 1 : dim);
 }
 
-const std::string& getGatherScatterScalarType(const Tensor& t) {
-  auto scalar_type = t.scalar_type();
-  static std::unordered_map<c10::ScalarType, std::string> scalarToMetalType = {
-      {c10::ScalarType::Float, "float"},
-      {c10::ScalarType::Half, "half"},
-      {c10::ScalarType::Long, "long"},
-      {c10::ScalarType::Int, "int"},
-      {c10::ScalarType::Short, "short"},
-      {c10::ScalarType::Char, "char"},
-      {c10::ScalarType::Byte, "uchar"},
-      {c10::ScalarType::Bool, "bool"},
-  };
-
-  auto it = scalarToMetalType.find(scalar_type);
-  TORCH_CHECK(it != scalarToMetalType.end(), "Unsupported type byte size: ", scalar_type);
-  return it->second;
-}
-
-static id<MTLLibrary> compileGatherScatterOpsLibrary(id<MTLDevice> device,
-                                                     const std::string& dtypeSrc,
-                                                     const std::string& dtypeDst,
-                                                     bool needsScatter) {
+static
+id<MTLLibrary> compileGatherScatterOpsLibrary(id<MTLDevice> device,
+                                              const std::string& dtypeSrc,
+                                              const std::string& dtypeDst,
+                                              bool needsScatter) {
   auto key = std::to_string(needsScatter) + dtypeSrc + dtypeDst;
   static std::unordered_map<std::string, id<MTLLibrary>> _libCache;
   auto it = _libCache.find(key);
@@ -825,8 +808,8 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst) {
     std::string functionName = getGatherScatterFunctionName(output.scalar_type(), output.dim(), /*needsScatter=*/false);
     id<MTLComputePipelineState> gatherPSO = getPipelineState(MPSDevice::getInstance()->device(),
                                                              functionName,
-                                                             getGatherScatterScalarType(src),
-                                                             getGatherScatterScalarType(output),
+                                                             getMetalScalarType(src),
+                                                             getMetalScalarType(output),
                                                              /*needsScatter=*/false);
 
     // this function call is a no-op if MPS Profiler is not enabled
@@ -891,8 +874,8 @@ Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output) {
       std::string functionName = getGatherScatterFunctionName(output.scalar_type(), output.dim(), /*needsScatter=*/true);
       id<MTLComputePipelineState> scatterPSO = getPipelineState(MPSDevice::getInstance()->device(),
                                                                 functionName,
-                                                                getGatherScatterScalarType(src),
-                                                                getGatherScatterScalarType(output),
+                                                                getMetalScalarType(src),
+                                                                getMetalScalarType(output),
                                                                 /*needsScatter=*/true);
 
       getMPSProfiler().beginProfileKernel(scatterPSO, functionName, {src, output});

@@ -9,6 +9,7 @@
 #include <c10/util/Exception.h>
 #include <c10/core/Stream.h>
 #include <ATen/mps/MPSDevice.h>
+#include <ATen/core/Tensor.h>
 
 #ifdef __OBJC__
 #include <Foundation/Foundation.h>
