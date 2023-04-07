@@ -224,15 +224,10 @@ std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype, boo
         }
         str += "]";
       } else {
-        const NSString* ns_shape_key = [[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","];
-        str += std::string(ns_shape_key.UTF8String);
+        str += "Undefined";
       }
-      str += "]";
-    } else {
-      str += "Undefined";
     }
-  }
-  return str;
+    return str;
 }
 
 MPSShape* getMPSShape(const Tensor& t, c10::MemoryFormat memory_format) {
