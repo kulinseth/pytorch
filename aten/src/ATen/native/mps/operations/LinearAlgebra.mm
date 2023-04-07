@@ -610,7 +610,7 @@ Tensor& linalg_solve_triangular_mps_impl(const Tensor& A,
                   rightHandSideMatrix:rightHandSideMatrix
                        solutionMatrix:solutionMatrix];
       }
-      mpsStream->commit();
+      getMPSProfiler().endProfileKernel(filter);
     }
   });
   return out;
