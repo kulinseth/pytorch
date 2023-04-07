@@ -231,6 +231,9 @@ std::tuple<Tensor&, Tensor&, Tensor&> batch_norm_mps_out(const Tensor& self,
                 MPSGraphTensor* momentumTensor = [mpsGraph constantWithScalar:(double)momentum
                                                                         shape:@[@1]
                                                                      dataType:input_mps_dtype];
+                MPSGraphTensor* oneMinusMomentum = [mpsGraph constantWithScalar:(double)(1.0 - momentum)
+                                                                        shape:@[ @1 ]
+                                                                     dataType:input_mps_dtype];
               // Compute updated running mean
               MPSGraphTensor* scaledBatchMean = [mpsGraph multiplicationWithPrimaryTensor:batchMeanTensor
                                                                           secondaryTensor:momentumTensor
