@@ -262,7 +262,7 @@ void MPSHeapAllocatorImpl::free_buffer(BufferBlock* buffer_block) {
   m_current_allocated_memory -= buffer_block->size;
 }
 
-BufferBlock* MPSHeapAllocatorImpl::get_allocated_buffer_block(void* ptr) {
+BufferBlock* MPSHeapAllocatorImpl::get_allocated_buffer_block(const void* ptr) {
   auto it = m_allocated_buffers.find(ptr);
   if (it == m_allocated_buffers.end()) {
     return nullptr;
@@ -462,7 +462,7 @@ id<MTLBuffer> MPSHeapAllocatorImpl::malloc(size_t size, uint32_t usage) {
   return buffer_block ? buffer_block->buffer : nullptr;
 }
 
-bool MPSHeapAllocatorImpl::isSharedBuffer(void* ptr) {
+bool MPSHeapAllocatorImpl::isSharedBuffer(const void* ptr) {
   std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
   BufferBlock *buffer_block = get_allocated_buffer_block(ptr);
@@ -488,7 +488,7 @@ id<MTLBuffer> MPSHeapAllocatorImpl::allocScalarBufferWithValue(void* value, size
   return buffer_block->buffer;
 }
 
-std::pair<void*, uint32_t> MPSHeapAllocatorImpl::getSharedBufferPtr(void* buffer) {
+std::pair<void*, uint32_t> MPSHeapAllocatorImpl::getSharedBufferPtr(const void* buffer) {
   std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
   BufferBlock* buffer_block = get_allocated_buffer_block(buffer);
@@ -502,7 +502,7 @@ std::pair<void*, uint32_t> MPSHeapAllocatorImpl::getSharedBufferPtr(void* buffer
   return {buffer_block->cpu_ptr, buffer_block->retainCount()};
 }
 
-ssize_t MPSHeapAllocatorImpl::getUnalignedBufferSize(void* ptr) {
+ssize_t MPSHeapAllocatorImpl::getUnalignedBufferSize(const void* ptr) {
   std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
   BufferBlock *buffer_block = get_allocated_buffer_block(ptr);
@@ -513,7 +513,7 @@ ssize_t MPSHeapAllocatorImpl::getUnalignedBufferSize(void* ptr) {
   return -1;
 }
 
-void MPSHeapAllocatorImpl::setBufferShape(void* ptr, const IntArrayRef& shape) {
+void MPSHeapAllocatorImpl::setBufferShape(const void* ptr, const IntArrayRef& shape) {
   std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
   BufferBlock *buffer_block = get_allocated_buffer_block(ptr);
@@ -524,7 +524,7 @@ void MPSHeapAllocatorImpl::setBufferShape(void* ptr, const IntArrayRef& shape) {
   buffer_block->shape = shape.vec();
 }
 
-IntArrayRef MPSHeapAllocatorImpl::getBufferShape(void* ptr) {
+IntArrayRef MPSHeapAllocatorImpl::getBufferShape(const void* ptr) {
   std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
   BufferBlock *buffer_block = get_allocated_buffer_block(ptr);
@@ -626,21 +626,51 @@ public:
   std::pair<void*, uint32_t> getSharedBufferPtr(void* buffer) const override {
     return _getAllocImpl().getSharedBufferPtr(buffer);
   }
-  bool isSharedBuffer(void* ptr) const override { return _getAllocImpl().isSharedBuffer(ptr); }
-  bool isSharedStorageSupported() const override { return m_has_unified_memory; }
-  void emptyCache() const override { _getAllocImpl().emptyCache(); }
-  ssize_t getUnalignedBufferSize(void* ptr) const override { return _getAllocImpl().getUnalignedBufferSize(ptr); }
-  IntArrayRef getBufferShape(void* ptr) const override { return _getAllocImpl().getBufferShape(ptr); }
-  void setBufferShape(void* ptr, const IntArrayRef& shape) const override { _getAllocImpl().setBufferShape(ptr, shape); }
-  std::string formatSize(size_t size) const override {return _getAllocImpl().format_size(size); };
-  size_t getTotalAllocatedMemory() const override { return _getAllocImpl().getTotalAllocatedMemory(); }
-  size_t getCurrentAllocatedMemory() const override { return _getAllocImpl().getCurrentAllocatedMemory(); }
-  size_t getDriverAllocatedMemory() const override { return _getAllocImpl().getDriverAllocatedMemory(); }
-  ssize_t getLowWatermarkValue() const override { return _getAllocImpl().getLowWatermarkValue(); }
-  size_t getLowWatermarkLimit() const override { return _getAllocImpl().getLowWatermarkLimit(); }
-  size_t getHighWatermarkLimit() const override { return _getAllocImpl().getHighWatermarkLimit(); }
-  void setLowWatermarkRatio(double ratio) const override { _getAllocImpl().setLowWatermarkRatio(ratio); }
-  void setHighWatermarkRatio(double ratio) const override { _getAllocImpl().setHighWatermarkRatio(ratio); }
+  bool isSharedBuffer(const void* ptr) const override {
+    return _getAllocImpl().isSharedBuffer(ptr);
+  }
+  bool isSharedStorageSupported() const override {
+    return m_has_unified_memory;
+  }
+  void emptyCache() const override {
+    _getAllocImpl().emptyCache();
+  }
+  ssize_t getUnalignedBufferSize(const void* ptr) const override {
+    return _getAllocImpl().getUnalignedBufferSize(ptr);
+  }
+  IntArrayRef getBufferShape(const void* ptr) const override {
+    return _getAllocImpl().getBufferShape(ptr);
+  }
+  void setBufferShape(const void* ptr, const IntArrayRef& shape) const override {
+    _getAllocImpl().setBufferShape(ptr, shape);
+  }
+  std::string formatSize(size_t size) const override {
+    return _getAllocImpl().format_size(size); 
+  }
+  size_t getTotalAllocatedMemory() const override {
+    return _getAllocImpl().getTotalAllocatedMemory();
+  }
+  size_t getCurrentAllocatedMemory() const override {
+    return _getAllocImpl().getCurrentAllocatedMemory();
+  }
+  size_t getDriverAllocatedMemory() const override {
+    return _getAllocImpl().getDriverAllocatedMemory();
+  }
+  ssize_t getLowWatermarkValue() const override {
+    return _getAllocImpl().getLowWatermarkValue();
+  }
+  size_t getLowWatermarkLimit() const override {
+    return _getAllocImpl().getLowWatermarkLimit();
+  }
+  size_t getHighWatermarkLimit() const override {
+    return _getAllocImpl().getHighWatermarkLimit();
+  }
+  void setLowWatermarkRatio(double ratio) const override {
+    _getAllocImpl().setLowWatermarkRatio(ratio);
+  }
+  void setHighWatermarkRatio(double ratio) const override {
+    _getAllocImpl().setHighWatermarkRatio(ratio);
+  }
 
 private:
   bool m_has_unified_memory;
