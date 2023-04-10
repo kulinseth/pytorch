@@ -346,7 +346,7 @@ static bool try_copy_scalars_mps(at::Tensor& dst, const at::Tensor& src, bool no
 
   // this generates profile_id if only copy profiling is enabled
   uint64_t profile_id = getMPSProfiler().beginProfileCopy(src_ptr, dst_ptr,
-                                         src, dst, length, needsSync, false);
+                                         src, dst, length, !needsSync, false);
   if (needsSync) {
     // wait for any possible GPU operations to finish before reading from source MPS buffers
     auto stream = getDefaultMPSStream();
