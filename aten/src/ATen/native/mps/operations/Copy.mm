@@ -320,8 +320,10 @@ static bool try_copy_scalars_mps(at::Tensor& dst, const at::Tensor& src, bool no
   if (!allocator.isSharedStorageSupported()) {
     return false;
   }
-  void* src_ptr = src.storage().data();
-  void* dst_ptr = dst.storage().data();
+  // getSharedBufferPtr does not accept const arguments, this cannot be changed
+  // This cast should be safe because the pointers are not modified
+  void* src_ptr = (void*)src.storage().data();
+  void* dst_ptr = (void*)dst.storage().data();
   uint32_t src_retain_count = 0, dst_retain_count = 0;
 
   if (src.device().type() == at::kMPS) {
