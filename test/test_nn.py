@@ -20,6 +20,9 @@ import torch
 # TODO: remove this global setting
 # NN tests use double as the default dtype
 torch.set_default_dtype(torch.double)
+if torch.has_mps:
+    # Double is not supported for many mps ops
+    torch.set_default_dtype(torch.float32)
 
 from torch import inf, nan
 import torch.autograd.forward_ad as fwAD
