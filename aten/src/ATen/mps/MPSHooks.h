@@ -4,6 +4,7 @@
 
 #include <ATen/detail/MPSHooksInterface.h>
 #include <ATen/Generator.h>
+//#include <ATen/mps/MPSStream.h>
 #include <c10/util/Optional.h>
 
 namespace at { namespace mps {
@@ -21,6 +22,10 @@ struct MPSHooks : public at::MPSHooksInterface {
   size_t getCurrentAllocatedMemory() const override;
   size_t getDriverAllocatedMemory() const override;
   void setMemoryFraction(double ratio) const override;
+  int getDevice() const override;
+  void setDevice(int d) const override;
+  //MPSStream getCurrentMPSStream() const override;
+  //MPSStream getDefaultMPSStream() const override;
 };
 
 }} // at::mps

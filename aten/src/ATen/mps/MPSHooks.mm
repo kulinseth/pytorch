@@ -4,6 +4,7 @@
 #include <ATen/mps/MPSDevice.h>
 #include <ATen/mps/MPSGeneratorImpl.h>
 #include <ATen/mps/MPSAllocatorInterface.h>
+#include <ATen/mps/MPSStream.h>
 
 namespace at {
 namespace mps {
@@ -57,6 +58,22 @@ size_t MPSHooks::getDriverAllocatedMemory() const {
 
 void MPSHooks::setMemoryFraction(double ratio) const {
   at::mps::getIMPSAllocator()->setHighWatermarkRatio(ratio);
+}
+
+int MPSHooks::getDevice() const {
+  return at::mps::current_device();
+}
+
+void MPSHooks::setDevice(int d) const {
+  at::mps::set_device(d);
+}
+
+MPSStream MPSHooks::getCurrentMPSStream() const {
+  return &(*at::mps::getCurrentMPSStream());
+}
+
+MPSStream* MPSHooks::getDefaultMPSStream() const {
+  return &(*at::mps::getDefaultMPSStream());
 }
 
 using at::MPSHooksRegistry;

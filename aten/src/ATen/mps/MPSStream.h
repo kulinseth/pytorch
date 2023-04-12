@@ -77,8 +77,10 @@ public:
   c10::DeviceIndex device_index() const { return _stream.device_index(); }
 
   MTLCommandQueue_t stream() const { return _commandQueue; };
+  DeviceType device_type() const { return DeviceType::MPS; }
 
   MTLDevice_t device() const { return [_commandQueue device];}
+  //StreamId stream_id() const { return _stream.id(); }
 
   /// Explicit conversion to Stream.
   Stream unwrap() const { return _stream; }

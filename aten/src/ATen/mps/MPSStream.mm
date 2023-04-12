@@ -30,7 +30,7 @@ MPSStream::~MPSStream() {
   assert(_commandBuffer == nil);
 }
 
-MPSCommandBuffer* MPSStream::commandBuffer() {
+MPSCommandBuffer* MPSStream::_commandBuffer() {
   if (!_commandBuffer) {
     _commandBuffer = [MPSCommandBuffer commandBufferFromCommandQueue:_commandQueue].retain;
   }

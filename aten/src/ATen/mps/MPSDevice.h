@@ -62,6 +62,18 @@ class TORCH_API MPSDevice {
     return _mtl_device;
   }
   /**
+   * Returns the single device.
+   */
+  int current_device() {
+    return _current_device;
+  }
+
+  /**
+   * Sets the device.
+   */
+  void set_device(int d);
+
+  /**
    * Returns whether running on Ventura or newer
    */
   bool isMacOS13Plus(MacOSVersion version) const;
@@ -73,6 +85,7 @@ class TORCH_API MPSDevice {
  private:
   static MPSDevice* _device;
   MTLDevice_t _mtl_device;
+  int _current_device;
   MTLLibrary_t _mtl_indexing_library;
   MPSDevice();
 };
@@ -80,6 +93,8 @@ class TORCH_API MPSDevice {
 TORCH_API bool is_available();
 TORCH_API bool is_macos_13_or_newer(MacOSVersion version = MacOSVersion::MACOS_VER_13_0_PLUS);
 TORCH_API void device_synchronize();
+TORCH_API int current_device();
+TORCH_API void set_device(int d);
 TORCH_API at::Allocator* GetMPSAllocator(bool useSharedAllocator = false);
 
 } // namespace mps

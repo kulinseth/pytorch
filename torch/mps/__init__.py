@@ -2,10 +2,14 @@ r"""
 This package enables an interface for accessing MPS backend in python
 """
 import torch
+from typing import Any, List, Optional, Tuple, Union, cast
+from ._utils import _get_device_index, _dummy_type
 from .. import Tensor
+from .. import device as _device
 
 _is_in_bad_fork = getattr(torch._C, "_mps_is_in_bad_fork", lambda: False)
 _default_mps_generator: torch._C.Generator = None  # type: ignore[assignment]
+_device_t = Union[_device, str, int, None]
 
 # local helper function (not public or exported)
 def _get_default_mps_generator() -> torch._C.Generator:
@@ -98,7 +102,39 @@ def driver_allocated_memory() -> int:
     """
     return torch._C._mps_driverAllocatedMemory()
 
+def is_available() -> bool:
+    r"""Returns a bool indicating if MPS is currently available."""
+    return torch.backends.mps.is_available()
+
+def current_device() -> int:
+    r"""Returns the index of a currently selected device."""
+    return torch._C._mps_getDevice()
+
+def set_device(device: _device_t) -> None:
+    r"""Sets the current device.
+
+    Args:
+        device (torch.device or int): selected device. This function is a no-op
+            if this argument is negative.
+    """
+    device = _get_device_index(device)
+    if device >= 0:
+        torch._C._mps_setDevice(device)
+
+def current_stream(device: Optional[_device_t] = None) -> Stream:
+    r"""Returns the currently selected :class:`Stream` for a given device.
+
+    Args:
+        device (torch.device or int, optional): selected device. Returns
+            the currently selected :class:`Stream` for the current device.
+    """
+    streamdata = torch._C._mps_getCurrentStream(
+        _get_device_index(device, optional=True))
+    return Stream(stream_id=streamdata[0], device_index=streamdata[1], device_type=streamdata[2])
+
+
 __all__ = [
     'get_rng_state', 'manual_seed', 'seed', 'set_rng_state', 'synchronize',
     'empty_cache', 'set_per_process_memory_fraction', 'current_allocated_memory',
-    'driver_allocated_memory']
+    'driver_allocated_memory', 'is_available', 'current_device', 'set_device',
+    'current_stream']

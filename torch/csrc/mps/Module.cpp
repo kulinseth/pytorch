@@ -4,12 +4,12 @@
 #include <torch/csrc/THP.h>
 #include <torch/csrc/python_headers.h>
 #include <torch/csrc/utils/python_numbers.h>
+#include <ATen/mps/MPSHooks.h>
 
 // pthread.h is included for tracking bad forks
 #ifndef WIN32
 #include <pthread.h>
 #endif
-
 namespace torch {
 namespace mps {
 
@@ -116,6 +116,84 @@ static PyObject* MPSModule_driverAllocatedMemory(
   END_HANDLE_TH_ERRORS
 }
 
+static PyObject* MPSModule_getDevice(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  return THPUtils_packInt32(at::detail::getMPSHooks().getDevice());
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_setDevice(
+    PyObject* _unused,
+    PyObject* args) {
+  HANDLE_TH_ERRORS
+  THPUtils_assert(
+      THPUtils_checkLong(args), "invalid argument to for setDevice");
+  at::detail::getMPSHooks().setDevice(THPUtils_unpackInt(args));
+  END_HANDLE_TH_ERRORS
+  Py_RETURN_NONE;
+}
+
+PyObject* MPSModule_getCurrentStream(
+    PyObject* /* unused */,
+    PyObject* device_index) {
+  HANDLE_TH_ERRORS
+  THPUtils_assert(
+      THPUtils_checkLong(device_index), "invalid argument to getCurrentStream");
+  int64_t device = THPUtils_unpackLong(device_index);
+  TORCH_CHECK( device == 0, "Stream not supported on this device");
+  auto stream = at::mps::getCurrentMPSStream();
+  PyObject* output_tuple = PyTuple_New(3);
+  PyTuple_SetItem(
+      output_tuple, 0, THPUtils_packInt64(static_cast<int64_t>(stream->id())));
+  PyTuple_SetItem(
+      output_tuple,
+      1,
+      THPUtils_packInt64(static_cast<int64_t>(stream->device_index())));
+  PyTuple_SetItem(
+      output_tuple,
+      2,
+      THPUtils_packInt64(static_cast<int64_t>(stream->device_type())));
+  return output_tuple;
+  END_HANDLE_TH_ERRORS
+}
+
+PyObject* MPSModule_getCurrentRawStream(
+    PyObject* /* unused */,
+    PyObject* device_index) {
+  HANDLE_TH_ERRORS
+  THPUtils_assert(
+      THPUtils_checkLong(device_index), "invalid argument to getCurrentStream");
+  int64_t device = THPUtils_unpackLong(device_index);
+  TORCH_CHECK( device == 0, "Stream not supported on this device");
+  return PyLong_FromVoidPtr(at::mps::getCurrentMPSStream().stream());
+  END_HANDLE_TH_ERRORS
+}
+
+PyObject* MPSModule_getDefaultStream(
+    PyObject* /* unused */,
+    PyObject* device_index) {
+  HANDLE_TH_ERRORS
+  THPUtils_assert(
+      THPUtils_checkLong(device_index), "invalid argument to getDefaultStream");
+  int64_t device = THPUtils_unpackLong(device_index);
+  TORCH_CHECK( device == 0, "Stream not supported on this device");
+  auto stream = at::mps::getDefaultMPSStream();
+  PyObject* output_tuple = PyTuple_New(3);
+  PyTuple_SetItem(
+      output_tuple, 0, THPUtils_packInt64(static_cast<int64_t>(stream->id())));
+  PyTuple_SetItem(
+      output_tuple,
+      1,
+      THPUtils_packInt64(static_cast<int64_t>(stream->device_index())));
+  PyTuple_SetItem(
+      output_tuple,
+      2,
+      THPUtils_packInt64(static_cast<int64_t>(stream->device_type())));
+  return output_tuple;
+  END_HANDLE_TH_ERRORS
+}
+
+
 // NOLINTNEXTLINE(modernize-avoid-c-arrays,
 // cppcoreguidelines-avoid-non-const-global-variables,
 // cppcoreguidelines-avoid-c-arrays)
@@ -123,24 +201,24 @@ static struct PyMethodDef _MPSModule_methods[] = {
     {"_mps_synchronize", MPSModule_synchronize, METH_NOARGS, nullptr},
     {"_mps_is_in_bad_fork", MPSModule_isInBadFork, METH_NOARGS, nullptr},
     {"_mps_is_available", MPSModule_isAvailable, METH_NOARGS, nullptr},
-    {"_mps_is_on_macos_13_or_newer",
-     MPSModule_isMacOS13orNewer,
-     METH_O,
+    {"_mps_is_on_macos_13_or_newer", MPSModule_isMacOS13orNewer, METH_O,
      nullptr},
-    {"_mps_get_default_generator",
-     MPSModule_getDefaultMPSGenerator,
-     METH_NOARGS,
-     nullptr},
+    {"_mps_get_default_generator", MPSModule_getDefaultMPSGenerator,
+     METH_NOARGS, nullptr},
     {"_mps_emptyCache", MPSModule_emptyCache, METH_NOARGS, nullptr},
     {"_mps_setMemoryFraction", MPSModule_setMemoryFraction, METH_O, nullptr},
-    {"_mps_currentAllocatedMemory",
-     MPSModule_currentAllocatedMemory,
-     METH_NOARGS,
+    {"_mps_currentAllocatedMemory", MPSModule_currentAllocatedMemory,
+     METH_NOARGS, nullptr},
+    {"_mps_driverAllocatedMemory", MPSModule_driverAllocatedMemory, METH_NOARGS,
      nullptr},
-    {"_mps_driverAllocatedMemory",
-     MPSModule_driverAllocatedMemory,
-     METH_NOARGS,
-     nullptr},
+    {"_mps_getDevice", MPSModule_getDevice, METH_NOARGS, nullptr},
+    {"_mps_setDevice", MPSModule_setDevice, METH_O, nullptr},
+    {"_mps_getCurrentRawStream", MPSModule_getCurrentRawStream,
+     METH_O, nullptr},
+    {"_mps_getCurrentStream", MPSModule_getCurrentStream,
+     METH_O, nullptr},
+    {"_mps_getDefaultStream", MPSModule_getDefaultStream,
+     METH_O, nullptr},
     {nullptr}};
 
 PyMethodDef* python_functions() {

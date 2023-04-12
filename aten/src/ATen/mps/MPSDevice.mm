@@ -79,10 +79,12 @@ MPSDevice::MPSDevice() : _mtl_device(nil), _mtl_indexing_library(nil) {
   }
 
   NSArray* devices = [MTLCopyAllDevices() autorelease];
+  _current_device = 0;
   for (unsigned long i = 0; i < [devices count]; i++) {
     id<MTLDevice> device = devices[i];
     if (![device isLowPower]) { // exclude Intel GPUs
       _mtl_device = [device retain];
+      _current_device = i;
       break;
     }
   }
@@ -117,6 +119,17 @@ bool MPSDevice::isMacOS13Plus(MacOSVersion version) const {
   }
 }
 
+void MPSDevice::set_device(int d) {
+  NSArray* devices = [MTLCopyAllDevices() autorelease];
+  int device_count = [devices count];
+  TORCH_CHECK(d >= 0 && d < device_count, "Device index is beyond range");
+  id<MTLDevice> device = devices[d];
+  if (![device isLowPower]) {
+    _mtl_device = [device retain];
+  }
+  TORCH_INTERNAL_ASSERT_DEBUG_ONLY(_mtl_device);
+}
+
 at::Allocator* GetMPSAllocator(bool useSharedAllocator) {
   return getIMPSAllocator(useSharedAllocator);
 }
@@ -131,6 +144,14 @@ bool is_macos_13_or_newer(MacOSVersion version) {
 
 void device_synchronize() {
   getDefaultMPSStream()->synchronize(SyncType::COMMIT_AND_WAIT);
+}
+
+int current_device() {
+  return MPSDevice::getInstance()->current_device();
+}
+
+void set_device(int d) {
+  MPSDevice::getInstance()->set_device(d);
 }
 
 } // namespace mps
