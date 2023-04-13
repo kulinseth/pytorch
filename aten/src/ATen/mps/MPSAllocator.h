@@ -24,7 +24,7 @@ static const size_t kRoundLarge    = MB(2);    // round up large allocations to 
 static const size_t kSmallHeap     = MB(8);    // "small" allocations are packed in 8 MiB heaps
 static const size_t kLargeHeap     = MB(32);   // "large" allocations may be packed in 32 MiB heaps
 static const size_t kXLargeHeapD   = MB(128);  // "extra large" allocations on Discrete devices may be packed in 128 MiB heaps
-static const size_t kXLargeHeapU   = MB(1024); // "extra large" allocations on Unified devices may be packed in 1 GiB heaps
+static const size_t kXLargeHeapU   = MB(4096); // "extra large" allocations on Unified devices may be packed in 1 GiB heaps
 static const size_t kMaxScalarAlloc= (sizeof(int64_t)); // largest "scalar" allocation
 
 // buffer pools could be customized with a combination of usage flags
