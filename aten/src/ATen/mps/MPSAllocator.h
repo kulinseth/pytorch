@@ -60,15 +60,18 @@ struct BufferBlock
   HeapBlock* heap;
   id_t buf_id;
   // counter to candidate least recently used buffers for garbage collection
-  uint32_t gc_count;
-  uint32_t use_count;
+  uint32_t gc_count = 0;
+  uint32_t use_count = 0;
   // counter to assign unique ids to buffer blocks
   static uint64_t buffer_counter;
+
+  c10::optional<MPSEvent> event = c10::nullopt;
+  bool gpu_sync_completed = false;
 
   BufferBlock(size_t Size, size_t RequestedSize = 0, const id<MTLBuffer> Buffer = nullptr,
               HeapBlock* Heap = nullptr) :
               buffer(Buffer), cpu_ptr(nullptr), size(Size), requested_size(RequestedSize),
-              in_use(false), heap(Heap), buf_id(++buffer_counter), gc_count(0), use_count(0) { }
+              in_use(false), heap(Heap), buf_id(Buffer ? ++buffer_counter : 0) { }
 
   static bool Comparator(const BufferBlock* a, const BufferBlock* b) {
     return (a->size != b->size) ? a->size < b->size : (uintptr_t)a->buffer < (uintptr_t)b->buffer;
@@ -114,7 +117,7 @@ struct HeapBlock
 
   HeapBlock(size_t Size, const id<MTLHeap> Heap = nullptr, BufferPool *Pool = nullptr) :
             heap(Heap), size({.total = Size, .available = Size}), pool(Pool),
-            n_buffers(0), heap_id(++heap_counter), is_split(true) { }
+            n_buffers(0), heap_id(Heap ? ++heap_counter : 0), is_split(true) { }
 
   static MTLResourceOptions getOptions(uint32_t usage) {
     // TODO: check the caching performance of write-combined mode
@@ -264,11 +267,16 @@ public:
   void setBufferShape(void* ptr, const IntArrayRef& shape);
   // retrieve the shape of a base tensor from a view tensor
   IntArrayRef getBufferShape(void* ptr);
+  // get the unique buffer ID
+  id_t getBufferId(void* ptr);
   // allocate a buffer from a specialized pool to import CPU scalars into GPU
   id<MTLBuffer> allocScalarBufferWithValue(void* value, size_t size);
   // returns a CPU-mapping of the input buffer and its retainCount,
   // if only it has Shared storage-mode and allocated on MPSAllocator
-  std::pair<void*, uint32_t> getSharedBufferPtr(void* buffer);
+  std::pair<void*, uint32_t> getSharedBufferPtr(void* buffer, bool waitForEvent);
+  // records events for a list of MTLBuffer
+  // (list is used to lock the mutex once)
+  void recordEvent(c10::ArrayRef<void*> buffers);
   // this indicates how far (in Megabytes) the current total allocations are from the
   // low watermark limit which is used to detect if we're under memory pressure
   // This returns zero if we've reached the low watermark limit
@@ -343,6 +351,10 @@ private:
   uint32_t m_debug_verbosity;
   // default MPS stream
   MPSStream* m_stream;
+
+  std::mutex m_gpu_sync_mutex{};
+  std::condition_variable m_gpu_sync_cv{};
+
 
   void init_allocator();
   HeapBlock* get_free_heap(AllocParams& params);

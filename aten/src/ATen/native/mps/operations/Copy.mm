@@ -331,10 +331,10 @@ static bool try_copy_scalars_mps(at::Tensor& dst, const at::Tensor& src, bool no
   uint32_t src_retain_count = 0, dst_retain_count = 0;
 
   if (src.device().type() == at::kMPS) {
-    std::tie(src_ptr, src_retain_count) = allocator.getSharedBufferPtr(src_ptr);
+    std::tie(src_ptr, src_retain_count) = allocator.getSharedBufferPtr(src_ptr, true);
   }
   if (dst.device().type() == at::kMPS) {
-    std::tie(dst_ptr, dst_retain_count) = allocator.getSharedBufferPtr(dst_ptr);
+    std::tie(dst_ptr, dst_retain_count) = allocator.getSharedBufferPtr(dst_ptr, true);
   }
   if (!src_ptr || !dst_ptr) {
     return false;

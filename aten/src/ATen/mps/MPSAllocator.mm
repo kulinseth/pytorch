@@ -107,6 +107,10 @@ bool MPSHeapAllocatorImpl::alloc_buffer(AllocParams& params) {
   pool.allocated_size += params.size();
   pool.n_buffers++;
 
+  if (pool.usage & UsageFlags::SHARED) {
+    params.buffer_block->event.emplace(/*needsListener*/ true);
+  }
+
   if ((m_debug_verbosity & DebugVerbosity::ALLOCATIONS) &&
     (!(m_debug_verbosity & DebugVerbosity::LARGE_ONLY) || !(pool.usage & UsageFlags::SMALL))) {
     std::cerr << "Allocated "
@@ -171,6 +175,7 @@ bool MPSHeapAllocatorImpl::get_free_buffer(AllocParams& params) {
     return false; // this will make allocator to allocate a new buffer
   }
   pool.buffers.erase(params.buffer_block);
+  params.buffer_block->requested_size = params.requested_size;
   params.buffer_block->gc_count = 0;
   pool.available_size -= params.buffer_block->size;
 
@@ -255,9 +260,9 @@ void MPSHeapAllocatorImpl::free_buffer(BufferBlock* buffer_block) {
   TORCH_INTERNAL_ASSERT(pool.buffers.insert(buffer_block).second);
   pool.available_size += buffer_block->size;
   buffer_block->shape.clear(); // reset shape
-  buffer_block->in_use = false;
   TORCH_INTERNAL_ASSERT_DEBUG_ONLY(m_current_allocated_memory >= buffer_block->size);
   m_current_allocated_memory -= buffer_block->size;
+  buffer_block->in_use = false;
 }
 
 BufferBlock* MPSHeapAllocatorImpl::get_allocated_buffer_block(void* ptr) {
@@ -486,18 +491,63 @@ id<MTLBuffer> MPSHeapAllocatorImpl::allocScalarBufferWithValue(void* value, size
   return buffer_block->buffer;
 }
 
-std::pair<void*, uint32_t> MPSHeapAllocatorImpl::getSharedBufferPtr(void* buffer) {
+std::pair<void*, uint32_t> MPSHeapAllocatorImpl::getSharedBufferPtr(void* buffer, bool waitForEvent) {
+  BufferBlock* buffer_block = nullptr;
+  uint32_t retainCount = 0;
+  {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+
+    buffer_block = get_allocated_buffer_block(buffer);
+    // return if buffer was not allocated on MPSAllocator or isn't a Shared buffer
+    if (!buffer_block || !(buffer_block->heap->pool->usage & UsageFlags::SHARED)) {
+      return {nullptr, 0};
+    }
+    if (!buffer_block->cpu_ptr) {
+      buffer_block->cpu_ptr = [buffer_block->buffer contents];
+    }
+    retainCount = buffer_block->retainCount();
+  }
+
+  if (waitForEvent && buffer_block->event && retainCount > 1) {
+    int scheduledNotify = buffer_block->event->notifyEvent(false, true,
+                                  ^(id<MTLSharedEvent> sharedEvent, uint64_t value) {
+                                    std::lock_guard<std::mutex> lock(m_gpu_sync_mutex);
+                                    buffer_block->gpu_sync_completed = true;
+                                    m_gpu_sync_cv.notify_all();
+                                  });
+
+    if (scheduledNotify) {
+      if (scheduledNotify == 2) {
+        std::unique_lock<std::mutex> lock(m_gpu_sync_mutex);
+        m_gpu_sync_cv.wait(lock, [&buffer_block]{ return buffer_block->gpu_sync_completed; });
+      }
+      buffer_block->gpu_sync_completed = false;
+      retainCount = buffer_block->retainCount();
+    }
+  }
+
+  return {buffer_block->cpu_ptr, retainCount};
+}
+
+void MPSHeapAllocatorImpl::recordEvent(c10::ArrayRef<void*> buffers) {
   std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
-  BufferBlock* buffer_block = get_allocated_buffer_block(buffer);
-  // return if buffer was not allocated on MPSAllocator or isn't a Shared buffer
-  if (!buffer_block || !(buffer_block->heap->pool->usage & UsageFlags::SHARED)) {
-    return {nullptr, 0};
+  for (const auto& buffer : buffers) {
+    BufferBlock* buffer_block = get_allocated_buffer_block(buffer);
+    // return if buffer was not allocated on MPSAllocator or isn't a Shared buffer
+    if (buffer_block && (buffer_block->heap->pool->usage & UsageFlags::SHARED)) {
+      m_mutex.unlock();
+      buffer_block->event->recordEvent(false, true);
+      m_mutex.lock();
+    }
   }
-  if (!buffer_block->cpu_ptr) {
-    buffer_block->cpu_ptr = [buffer_block->buffer contents];
-  }
-  return {buffer_block->cpu_ptr, buffer_block->retainCount()};
+}
+
+id_t MPSHeapAllocatorImpl::getBufferId(void* ptr) {
+  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+
+  BufferBlock* buffer_block = get_allocated_buffer_block(ptr);
+  return buffer_block ? buffer_block->buf_id : 0;
 }
 
 ssize_t MPSHeapAllocatorImpl::getUnalignedBufferSize(void* ptr) {
@@ -621,13 +671,14 @@ public:
     id<MTLBuffer> buf = _getAllocImpl().allocScalarBufferWithValue(value, size);
     return { buf, buf, &Delete, at::Device(at::DeviceType::MPS, 0)};
   }
-  std::pair<void*, uint32_t> getSharedBufferPtr(void* buffer) const override {
-    return _getAllocImpl().getSharedBufferPtr(buffer);
+  std::pair<void*, uint32_t> getSharedBufferPtr(void* buffer, bool waitForEvent) const override {
+    return _getAllocImpl().getSharedBufferPtr(buffer, waitForEvent);
   }
   bool isSharedBuffer(void* ptr) const override { return _getAllocImpl().isSharedBuffer(ptr); }
   bool isSharedStorageSupported() const override { return m_has_unified_memory; }
   void emptyCache() const override { _getAllocImpl().emptyCache(); }
   ssize_t getUnalignedBufferSize(void* ptr) const override { return _getAllocImpl().getUnalignedBufferSize(ptr); }
+  id_t getBufferId(void* ptr) const override { return _getAllocImpl().getBufferId(ptr); };
   IntArrayRef getBufferShape(void* ptr) const override { return _getAllocImpl().getBufferShape(ptr); }
   void setBufferShape(void* ptr, const IntArrayRef& shape) const override { _getAllocImpl().setBufferShape(ptr, shape); }
   std::string formatSize(size_t size) const override {return _getAllocImpl().format_size(size); };
@@ -639,6 +690,7 @@ public:
   size_t getHighWatermarkLimit() const override { return _getAllocImpl().getHighWatermarkLimit(); }
   void setLowWatermarkRatio(double ratio) const override { _getAllocImpl().setLowWatermarkRatio(ratio); }
   void setHighWatermarkRatio(double ratio) const override { _getAllocImpl().setHighWatermarkRatio(ratio); }
+  void recordEvent(c10::ArrayRef<void*> buffers) const override { _getAllocImpl().recordEvent(buffers); }
 
 private:
   bool m_has_unified_memory;

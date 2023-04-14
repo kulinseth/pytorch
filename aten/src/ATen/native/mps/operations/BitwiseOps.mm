@@ -1,5 +1,6 @@
 #include <ATen/mps/MPSStream.h>
 #include <ATen/mps/MPSProfiler.h>
+#include <ATen/native/mps/operations/Scalar.h>
 #include <ATen/native/Resize.h>
 #include <fmt/format.h>
 #include <torch/library.h>
@@ -194,7 +195,7 @@ void handle_tensor_tensor_binary_op(const at::Tensor& self, const at::Tensor& ot
     [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
     [commandEncoder setBuffer:otherBuf offset:other.storage_offset()*other.itemsize() atIndex:3];
     dispatch1DJob(commandEncoder, cplState, length);
-    stream->commitAdaptive({self, other, output}, cplState);
+    stream->commitAdaptive({self, other}, output, cplState);
   });
 }
 
@@ -227,7 +228,7 @@ void handle_tensor_scalar_binary_op(const at::Tensor& self, const at::Scalar& ot
     [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
     [commandEncoder setBytes:&sval length:sizeof(sval) atIndex:3];
     dispatch1DJob(commandEncoder, cplState, length);
-    stream->commitAdaptive({self, output}, cplState);
+    stream->commitAdaptive(self, output, cplState);
   });
 }
 
@@ -246,6 +247,10 @@ at::Tensor& _bitwise_op_out_mps (const at::Tensor& self, const at::Tensor& other
     needs_output_copy = true;
   }
   if (is_other_scalar && is_self_scalar) {
+    if (at::native::mps::scalar_ops_mps(op_name, self, other, output,
+                              at::native::mps::ScalarOpCategories::BITWISE_OPS)) {
+      return output_;
+    }
     if (op_name == "and") {
       output.fill_(c10::Scalar(self.item<int64_t>() & other.item<int64_t>()));
     } else if (op_name == "or") {
@@ -332,7 +337,7 @@ at::Tensor& bitwise_not_out_mps (const at::Tensor& self, at::Tensor& output_) {
     [commandEncoder setBuffer:outBuf offset:output.storage_offset()*output.itemsize() atIndex:1];
     [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
     dispatch1DJob(commandEncoder, cplState, length);
-    stream->commitAdaptive({self, output}, cplState);
+    stream->commitAdaptive(self, output, cplState);
   });
   if (needs_output_copy) {
       output_.copy_(output);

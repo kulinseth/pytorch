@@ -363,8 +363,9 @@ Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src, MPSS
                                                       shape:mpsShape
                                                    dataType:mpsDataType] autorelease];
   }
-
   TORCH_INTERNAL_ASSERT(_value);
+  getDefaultMPSStream()->addActiveResource(_value, srcBuf);
+
   _placeholder = mpsGraphTensor;
 }
 

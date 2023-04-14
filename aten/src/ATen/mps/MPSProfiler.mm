@@ -121,6 +121,10 @@ MPSProfiler::~MPSProfiler() {
 }
 
 void MPSProfiler::beginProfileExecution(BaseInfo& info, bool cpuExecution) {
+  if (isProfileInfoLoggingEnabled(info.type)) {
+    fmt::print(stderr, "{}\n", info.toString());
+  }
+
   SignpostTypes signpostType = getSignpostType(info.type);
   if (!(m_signpost_types & signpostType)) {
     return;
@@ -157,9 +161,9 @@ void MPSProfiler::endProfileExecution(BaseInfo& info, os_signpost_id_t event_sig
   const std::string& infoStr = info.toString(gpuTime, schedulingTime);
   // logging the operations, copies, cpu fallbacks info during the execution
   // is enabled via the env-var defined in kEVLogProfileInfoStr
-  if (isProfileInfoLoggingEnabled(info.type)) {
+  /*if (isProfileInfoLoggingEnabled(info.type)) {
     fmt::print(stderr, "{}\n", infoStr);
-  }
+  }*/
   // it is possible to use both interval and event based signposts at the same time
   if ((m_profile_options & ProfileOptions::USE_EVENTS) && event_signpost_id) {
     emitSignpostEvent(signpostType, event_signpost_id, infoStr);
@@ -182,6 +186,7 @@ uint64_t MPSProfiler::beginProfileKernel(const void* handle, const std::string& 
     m_op_info_list.emplace(opInfo->handle, std::move(opInfo));
   }
   auto& opInfo = *m_op_info_list[uintptr_t(handle)];
+  opInfo.strKey.assign(strKey);
   opInfo.runCount++;
   beginProfileExecution(opInfo);
 
@@ -222,12 +227,13 @@ void MPSProfiler::endProfileKernel(const void* handle, SyncType syncType) {
 
 uint64_t MPSProfiler::beginProfileCPUFallback(const std::string& opName, const TensorList& tensors) {
   if (m_cpu_fb_info_list.count(opName) == 0) {
-    auto cpuFbInfo = std::make_unique<CpuFbInfo>(opName, ++m_cpu_fb_counter);
+    auto cpuFbInfo = std::make_unique<CpuFbInfo>(++m_cpu_fb_counter, opName);
     m_cpu_fb_info_list.emplace(opName, std::move(cpuFbInfo));
   }
   auto& cpuFbInfo = *m_cpu_fb_info_list[opName];
   cpuFbInfo.runCount++;
   cpuFbInfo.startTime = std::clock();
+  cpuFbInfo.strKey = OperationInfo::buildKernelString(opName, tensors);
   cpuFbInfo.updateCopyOverhead(tensors);
   beginProfileExecution(cpuFbInfo, true);
 
@@ -261,9 +267,9 @@ uint64_t MPSProfiler::beginProfileCopy(const void* srcBuffer, const void* dstBuf
     copyInfo->startTime = std::clock();
   }
   // don't generate signposts if the non-blocking copy is not using the blitter
-  if (usesBlitter || !isNonBlocking) {
+  //if (usesBlitter || !isNonBlocking) {
     beginProfileExecution(*copyInfo, !usesBlitter);
-  }
+ // }
   // this should not happen since we erase the copy info after profiling/logging it.
   TORCH_INTERNAL_ASSERT_DEBUG_ONLY(m_copy_info_list.count(profileId) == 0);
   // the copy info isn't retained in the list, so we erase the completed ones
