@@ -67,14 +67,6 @@ struct TORCH_API MPSHooksInterface {
   virtual void setDevice(int) const {
     AT_ERROR("Cannot execute setDevice() without MPS backend.");
   }
-
-  virtual MPSStream getCurrentMPSStream() const {
-    AT_ERROR("Cannot execute getCurrentMPSStream() without MPS backend.");
-  }
-
-  virtual MPSStream getDefaultMPSStream() const {
-    AT_ERROR("Cannot execute getDefaultMPSStream() without MPS backend.");
-  }
 };
 
 struct TORCH_API MPSHooksArgs {};
