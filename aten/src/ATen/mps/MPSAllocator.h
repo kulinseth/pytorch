@@ -51,24 +51,28 @@ struct HeapBlock;
 struct BufferBlock
 {
   id<MTLBuffer> buffer;
-  void* cpu_ptr; // stores the pointer to CPU mapping of a Shared MTLBuffer
+  void* cpu_ptr = nullptr; // stores the pointer to CPU mapping of a Shared MTLBuffer
   size_t size; // size after alignment
   size_t requested_size; // requested size (before alignment)
   // buffer shape is used for retrieving base of views in cached graphs
   std::vector<int64_t> shape;
-  bool in_use;
+  bool in_use = false;
   HeapBlock* heap;
   id_t buf_id;
   // counter to candidate least recently used buffers for garbage collection
-  uint32_t gc_count;
-  uint32_t use_count;
+  uint32_t gc_count = 0;
+  uint32_t use_count = 0;
   // counter to assign unique ids to buffer blocks
   static uint64_t buffer_counter;
+  // Metal events used to sync GPU/CPU operations on the shared-storage buffers
+  c10::optional<MPSEvent> event = c10::nullopt;
+  // CondVar predicate used to sync GPU/CPU operations on the shared-storage buffers
+  bool gpu_sync_completed = false;
 
   BufferBlock(size_t Size, size_t RequestedSize = 0, const id<MTLBuffer> Buffer = nullptr,
               HeapBlock* Heap = nullptr) :
-              buffer(Buffer), cpu_ptr(nullptr), size(Size), requested_size(RequestedSize),
-              in_use(false), heap(Heap), buf_id(++buffer_counter), gc_count(0), use_count(0) { }
+              buffer(Buffer), size(Size), requested_size(RequestedSize),
+              heap(Heap), buf_id(Buffer ? ++buffer_counter : 0) { }
 
   static bool Comparator(const BufferBlock* a, const BufferBlock* b) {
     return (a->size != b->size) ? a->size < b->size : (uintptr_t)a->buffer < (uintptr_t)b->buffer;
@@ -114,7 +118,7 @@ struct HeapBlock
 
   HeapBlock(size_t Size, const id<MTLHeap> Heap = nullptr, BufferPool *Pool = nullptr) :
             heap(Heap), size({.total = Size, .available = Size}), pool(Pool),
-            n_buffers(0), heap_id(++heap_counter), is_split(true) { }
+            n_buffers(0), heap_id(Heap ? ++heap_counter : 0), is_split(true) { }
 
   static MTLResourceOptions getOptions(uint32_t usage) {
     // TODO: check the caching performance of write-combined mode
@@ -264,11 +268,20 @@ public:
   void setBufferShape(void* ptr, const IntArrayRef& shape);
   // retrieve the shape of a base tensor from a view tensor
   IntArrayRef getBufferShape(void* ptr);
+  // get the unique ID of the buffer
+  id_t getBufferId(void* ptr);
   // allocate a buffer from a specialized pool to import CPU scalars into GPU
   id<MTLBuffer> allocScalarBufferWithValue(void* value, size_t size);
   // returns a CPU-mapping of the input buffer and its retainCount,
   // if only it has Shared storage-mode and allocated on MPSAllocator
   std::pair<void*, uint32_t> getSharedBufferPtr(void* buffer);
+  // records events for a list of MTLBuffers (list is used to lock the mutex once)
+  // returns true if records any event (given if passed buffers exist and are shared-storage)
+  bool recordEvents(c10::ArrayRef<void*> buffers);
+  // waits for the event to signal the completion of GPU execution
+  // on the passed shared buffers (list is used to lock the mutex once)
+  // returns true if actually waited on any event
+  bool waitForEvents(c10::ArrayRef<void*> buffers);
   // this indicates how far (in Megabytes) the current total allocations are from the
   // low watermark limit which is used to detect if we're under memory pressure
   // This returns zero if we've reached the low watermark limit
@@ -343,6 +356,10 @@ private:
   uint32_t m_debug_verbosity;
   // default MPS stream
   MPSStream* m_stream;
+  // used to sync the Shared buffers with CPU
+  std::mutex m_gpu_sync_mutex{};
+  std::condition_variable m_gpu_sync_cv{};
+
 
   void init_allocator();
   HeapBlock* get_free_heap(AllocParams& params);

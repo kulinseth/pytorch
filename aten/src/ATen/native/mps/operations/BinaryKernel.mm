@@ -374,7 +374,7 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
-      mpsStream->commitAdaptive({inputTensor, otherTensor, outputTensor}, binaryPSO);
+      mpsStream->commitAdaptive({inputTensor, otherTensor}, outputTensor, binaryPSO);
     }
   });
 }
@@ -382,7 +382,7 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
 static
 void dispatch_binary_kernel_mps(const Tensor& self, const Tensor& other, const Tensor& output, const std::string& op, const std::string& kernel_operator) {
   TensorIterator iter;
-  if (op == "lt" || op == "le" || op == "gt" || op == "ge" || op == "ne" || op == "logical_or" || "logical_and" || op == "eq") {
+  if (op == "lt" || op == "le" || op == "gt" || op == "ge" || op == "ne" || op == "logical_or" || op == "logical_and" || op == "eq") {
     iter = TensorIterator::comparison_op(const_cast<Tensor&>(output), self, other);
   } else {
     iter = TensorIterator::borrowing_binary_op(output, self, other);
@@ -606,7 +606,7 @@ void fmax_fmin_mps_impl(TensorIteratorBase& iter, const std::string max_min) {
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
-      mpsStream->commitAdaptive({input, other, out}, fmaxfminPSO);
+      mpsStream->commitAdaptive({input, other}, out, fmaxfminPSO);
     }
   });
 }
