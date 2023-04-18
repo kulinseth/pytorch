@@ -2797,22 +2797,24 @@ class TestMPS(TestCaseMPS):
             with self.subTest(dtype=dtype, noncontiguous=noncontiguous, dim=dim):
                 helper(dtype, noncontiguous, dim)
 
-    def test_cumsum_all_dtypes(self):
-        def helper(dtype):
-            t = torch.tensor([1, 1, 1, 1], device="mps", dtype=dtype)
-            t_cpu = torch.tensor([1, 1, 1, 1], device="cpu")
+    def test_cumulative_ops_all_dtypes(self):
+        def helper(op, dtype):
+            t = torch.tensor([1, 2, 3, 4], device="mps", dtype=dtype)
+            t_cpu = torch.tensor([1, 2, 3, 4], device="cpu")
 
-            a = t.cumsum(0, dtype=dtype)
-            a_cpu = t_cpu.cumsum(0, dtype=dtype)
+            a = op(t, 0, dtype=dtype)
+            a_cpu = op(t_cpu, 0, dtype=dtype)
 
             self.assertEqual(a.cpu(), a_cpu)
-        [helper(dtype) for dtype in [torch.int8, torch.int16, torch.int32, torch.float32]]
 
-        try:
-            helper(torch.int64)
-        except Exception as e:
-            e_string = str(e)
-            self.assertEqual(e_string, "MPS does not support cumsum op with int64 input. Support has been added in macOS 13.3")
+        for op in [torch.cumsum, torch.cumprod]:
+            [helper(op, dtype) for dtype in [torch.int8, torch.int16, torch.int32, torch.float32]]
+
+            try:
+                helper(op, torch.int64)
+            except Exception as e:
+                e_string = str(e)
+                self.assertEqual(e_string, "MPS does not support cumsum op with int64 input. Support has been added in macOS 13.3")
 
     def test_gelu_tanh(self):
         def helper(shape):
