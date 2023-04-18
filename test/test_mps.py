@@ -2807,14 +2807,16 @@ class TestMPS(TestCaseMPS):
 
             self.assertEqual(a.cpu(), a_cpu)
 
-        for op in [torch.cumsum, torch.cumprod]:
+        for op_and_name in [[torch.cumsum, "cumsum_out"], [torch.cumprod, "cumprod_out"]]:
+            op = op_and_name[0]
+            name = op_and_name[1]
             [helper(op, dtype) for dtype in [torch.int8, torch.int16, torch.int32, torch.float32]]
 
             try:
                 helper(op, torch.int64)
             except Exception as e:
                 e_string = str(e)
-                self.assertEqual(e_string, "MPS does not support cumsum op with int64 input. Support has been added in macOS 13.3")
+                self.assertEqual(e_string, f"MPS does not support {name} op with int64 input. Support has been added in macOS 13.3")
 
     def test_gelu_tanh(self):
         def helper(shape):
