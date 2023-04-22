@@ -168,11 +168,6 @@ void reduction_out_mps(
     input_shape = makeArrayRef(input_shape.begin(), input_shape.end() - (input_t.dim() - 4));
   }
 
-  bool disableTypeInference = false;
-  if (input_t.dim() == 1) {
-    disableTypeInference = true;
-  }
-
   NSMutableArray<NSNumber*> *axes = nil;
   NSMutableArray<NSNumber*> *apparent_input_shape = nil;
   NSMutableArray<NSNumber*> *apparent_output_shape = nil;
@@ -197,7 +192,7 @@ void reduction_out_mps(
     NSString* ns_key = [[wrappedAxes valueForKey:@"description"] componentsJoinedByString:@","];
     string key = func_name                                                             + ":" +
                  string([ns_key UTF8String])                                           + ":" +
-                 getTensorsStringKey({input_t, output_t}, false, disableTypeInference) + ":" +
+                 getTensorsStringKey({input_t, output_t})                              + ":" +
                  std::to_string(keepdim)                                               + ":" +
                  std::to_string(reduction_type)                                        + ":" +
                  dtype_str;
@@ -213,9 +208,7 @@ void reduction_out_mps(
           newCachedGraph = new CachedGraph(mpsGraph);
           auto inputScalarType = input_t.scalar_type();
 
-          MPSGraphTensor* inputTensor = disableTypeInference ?
-                mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type())) :
-                mpsGraphRankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type()), mpsShape);
+          MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type()), mpsShape);
           MPSGraphTensor* castInputTensor = inputTensor;
           MPSDataType inputCastType = MPSDataTypeInvalid;
           if (dtype.has_value() &&
@@ -314,7 +307,7 @@ void reduction_out_mps(
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    runMPSGraph(getCurrentMPSStream(), cachedGraph, feeds, results, disableTypeInference);
+    runMPSGraph(getCurrentMPSStream(), cachedGraph, feeds, results);
   }
 }
 
