@@ -23,9 +23,12 @@ static const size_t kMinLargeAlloc = MB(10);   // allocations between 1 and 10 M
 static const size_t kRoundLarge    = MB(2);    // round up large allocations to 2 MiB
 static const size_t kSmallHeap     = MB(8);    // "small" allocations are packed in 8 MiB heaps
 static const size_t kLargeHeap     = MB(32);   // "large" allocations may be packed in 32 MiB heaps
-static const size_t kXLargeHeapD   = MB(128);  // "extra large" allocations on Discrete devices may be packed in 128 MiB heaps
-static const size_t kXLargeHeapU   = MB(4096); // "extra large" allocations on Unified devices may be packed in 1 GiB heaps
 static const size_t kMaxScalarAlloc= (sizeof(int64_t)); // largest "scalar" allocation
+// "extra large" allocations may be packed in heap sizes of
+// (recommendedMaxWorkingSetSize / kXLargeHeapDivisor)
+// Considering recommendedMaxWorkingSetSize is typically 75% of total system memory,
+// then the ratio (1/12) yields 12 GB heap size on 192 GB system, 8 GB on 128 GB system and so on.
+static const size_t kXLargeHeapDivisor = 12;
 
 // buffer pools could be customized with a combination of usage flags
 enum UsageFlags : uint32_t {
@@ -51,24 +54,28 @@ struct HeapBlock;
 struct BufferBlock
 {
   id<MTLBuffer> buffer;
-  void* cpu_ptr; // stores the pointer to CPU mapping of a Shared MTLBuffer
+  void* cpu_ptr = nullptr; // stores the pointer to CPU mapping of a Shared MTLBuffer
   size_t size; // size after alignment
   size_t requested_size; // requested size (before alignment)
   // buffer shape is used for retrieving base of views in cached graphs
   std::vector<int64_t> shape;
-  bool in_use;
+  bool in_use = false;
   HeapBlock* heap;
   id_t buf_id;
   // counter to candidate least recently used buffers for garbage collection
-  uint32_t gc_count;
-  uint32_t use_count;
+  uint32_t gc_count = 0;
+  uint32_t use_count = 0;
   // counter to assign unique ids to buffer blocks
   static uint64_t buffer_counter;
+  // Metal events used to sync GPU/CPU operations on the shared-storage buffers
+  c10::optional<MPSEvent> event = c10::nullopt;
+  // CondVar predicate used to sync GPU/CPU operations on the shared-storage buffers
+  bool gpu_sync_completed = false;
 
   BufferBlock(size_t Size, size_t RequestedSize = 0, const id<MTLBuffer> Buffer = nullptr,
               HeapBlock* Heap = nullptr) :
-              buffer(Buffer), cpu_ptr(nullptr), size(Size), requested_size(RequestedSize),
-              in_use(false), heap(Heap), buf_id(++buffer_counter), gc_count(0), use_count(0) { }
+              buffer(Buffer), size(Size), requested_size(RequestedSize),
+              heap(Heap), buf_id(Buffer ? ++buffer_counter : 0) { }
 
   static bool Comparator(const BufferBlock* a, const BufferBlock* b) {
     return (a->size != b->size) ? a->size < b->size : (uintptr_t)a->buffer < (uintptr_t)b->buffer;
@@ -86,7 +93,7 @@ struct AllocParams
 {
   AllocParams(size_t Alloc_Size, size_t Requested_Size, BufferPool* Pool) :
               search_key(Alloc_Size), pool(Pool), buffer_block(nullptr),
-              requested_size(Requested_Size), has_memory_pressure(false) { }
+              requested_size(Requested_Size) { }
   size_t size() const { return search_key.size; }
 
   BufferBlock search_key;
@@ -95,9 +102,9 @@ struct AllocParams
   size_t requested_size;
   // true if we exceed the low watermark limit. In this case
   // we apply strategies to relieve the pressure before allocation.
-  bool has_memory_pressure;
+  bool has_memory_pressure = false;
   // true if we're allocating on a unified memory device
-  bool has_unified_memory;
+  bool has_unified_memory = true;
 };
 
 struct HeapBlock
@@ -114,7 +121,7 @@ struct HeapBlock
 
   HeapBlock(size_t Size, const id<MTLHeap> Heap = nullptr, BufferPool *Pool = nullptr) :
             heap(Heap), size({.total = Size, .available = Size}), pool(Pool),
-            n_buffers(0), heap_id(++heap_counter), is_split(true) { }
+            n_buffers(0), heap_id(Heap ? ++heap_counter : 0), is_split(true) { }
 
   static MTLResourceOptions getOptions(uint32_t usage) {
     // TODO: check the caching performance of write-combined mode
@@ -136,15 +143,16 @@ struct HeapBlock
     HeapBlock *heapBlock = nullptr;
     bool is_split = true;
     const size_t size = params.size();
+    // see comments for kXLargeHeapDivisor
+    const size_t extra_large_heap_size = device.recommendedMaxWorkingSetSize / kXLargeHeapDivisor;
     MTLHeapDescriptor *d = [MTLHeapDescriptor new];
     if (d) {
-      const size_t kXLargeHeap = params.has_unified_memory ? kXLargeHeapU : kXLargeHeapD;
       if (size <= kMaxSmallAlloc) {
         d.size = kSmallHeap;
       } else if (size < kMinLargeAlloc) {
         d.size = kLargeHeap;
-      } else if (size < kXLargeHeap / 2 && !params.has_memory_pressure) {
-        d.size = kXLargeHeap;
+      } else if (size < extra_large_heap_size / 2 && !params.has_memory_pressure) {
+        d.size = extra_large_heap_size;
       } else {
         d.size = kRoundLarge * ((size + kRoundLarge - 1) / kRoundLarge);
         is_split = false;
@@ -210,18 +218,18 @@ typedef bool (*HeapComparison)(const HeapBlock*, const HeapBlock*);
 struct BufferPool
 {
   BufferPool(const id<MTLDevice> Device, uint32_t Usage) :
-             device(Device), usage(Usage), n_buffers(0), allocated_size(0), available_size(0),
+             device(Device), usage(Usage),
              heaps(HeapBlock::Comparator), buffers(BufferBlock::Comparator) { }
 
   const id<MTLDevice> device;
   // usage flags to customize the pool for various purposes (see UsageFlags enum)
   const uint32_t usage;
   // total number of buffers in the pool
-  uint32_t n_buffers;
+  uint32_t n_buffers = 0;
   // total allocations size on this pool
-  size_t allocated_size;
+  size_t allocated_size = 0;
   // total memory available in the pool
-  size_t available_size;
+  size_t available_size = 0;
   // list of heaps ordered by their "available" (not total) memory size
   std::set<HeapBlock*, HeapComparison> heaps;
   // list of only "available" buffers in the pool (i.e., buffers not in-use)
@@ -264,11 +272,20 @@ public:
   void setBufferShape(void* ptr, const IntArrayRef& shape);
   // retrieve the shape of a base tensor from a view tensor
   IntArrayRef getBufferShape(void* ptr);
+  // get the unique ID of the buffer
+  id_t getBufferId(void* ptr);
   // allocate a buffer from a specialized pool to import CPU scalars into GPU
   id<MTLBuffer> allocScalarBufferWithValue(void* value, size_t size);
   // returns a CPU-mapping of the input buffer and its retainCount,
   // if only it has Shared storage-mode and allocated on MPSAllocator
   std::pair<void*, uint32_t> getSharedBufferPtr(void* buffer);
+  // records events for a list of MTLBuffers (list is used to lock the mutex once)
+  // returns true if records any event (given if passed buffers exist and are shared-storage)
+  bool recordEvents(c10::ArrayRef<void*> buffers);
+  // waits for the event to signal the completion of GPU execution
+  // on the passed shared buffers (list is used to lock the mutex once)
+  // returns true if actually waited on any event
+  bool waitForEvents(c10::ArrayRef<void*> buffers);
   // this indicates how far (in Megabytes) the current total allocations are from the
   // low watermark limit which is used to detect if we're under memory pressure
   // This returns zero if we've reached the low watermark limit
@@ -303,7 +320,7 @@ private:
   constexpr static double default_high_watermark_upper_bound = 2.0;
   // (see m_low_watermark_ratio for description)
   // on unified memory, we could allocate beyond the recommendedMaxWorkingSetSize
-  constexpr static double default_low_watermark_ratio_unified  = 1.4;
+  constexpr static double default_low_watermark_ratio_unified  = 1.2;
   constexpr static double default_low_watermark_ratio_discrete = 1.0;
 
   const id<MTLDevice> m_device;
@@ -343,6 +360,10 @@ private:
   uint32_t m_debug_verbosity;
   // default MPS stream
   MPSStream* m_stream;
+  // used to sync the Shared buffers with CPU
+  std::mutex m_gpu_sync_mutex{};
+  std::condition_variable m_gpu_sync_cv{};
+
 
   void init_allocator();
   HeapBlock* get_free_heap(AllocParams& params);
@@ -376,6 +397,7 @@ private:
     return BufferBlock::alignUp(sizeAlign.size, sizeAlign.align);
   }
   // maximum size of device memory available for allocation in current process
+  // Note: the recommendedMaxWorkingSetSize is typically 75% of the total system memory.
   size_t max_device_size() const { return [m_device recommendedMaxWorkingSetSize]; }
   // there are implicit allocations from MPS backend, so we need to query the 'device' for
   // total allocated size instead of manually tracking in MPSAllocator

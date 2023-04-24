@@ -847,7 +847,7 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst) {
 
     MTLSize threadsPerThreadgroup = MTLSizeMake(threadsPerThreadgroup_, 1, 1);
     [computeEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadsPerThreadgroup];
-    mpsStream->commitAdaptive({src, output}, gatherPSO);
+    mpsStream->commitAdaptive(src, output, gatherPSO);
   });
 
   return (dst.has_storage()) ? dst : output;
@@ -909,7 +909,7 @@ Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output){
 
       MTLSize threadsPerThreadgroup = MTLSizeMake(threadsPerThreadgroup_, 1, 1);
       [computeEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadsPerThreadgroup];
-      mpsStream->commitAdaptive({src, output}, scatterPSO);
+      mpsStream->commitAdaptive(src, output, scatterPSO);
     }
   });
 

@@ -18,6 +18,7 @@ public:
   virtual void emptyCache() const = 0;
   virtual ssize_t getUnalignedBufferSize(void* ptr) const = 0;
   virtual IntArrayRef getBufferShape(void* ptr) const = 0;
+  virtual id_t getBufferId(void* ptr) const = 0;
   virtual void setBufferShape(void* ptr, const IntArrayRef& shape) const = 0;
   virtual bool isSharedBuffer(void* ptr) const = 0;
   virtual bool isSharedStorageSupported() const = 0;
@@ -32,6 +33,8 @@ public:
   virtual size_t getCurrentAllocatedMemory() const = 0;
   virtual size_t getDriverAllocatedMemory() const = 0;
   virtual std::pair<void*, uint32_t> getSharedBufferPtr(void* buffer) const = 0;
+  virtual bool recordEvents(c10::ArrayRef<void*> buffers) const = 0;
+  virtual bool waitForEvents(c10::ArrayRef<void*> buffers) const = 0;
 };
 
 class IMpsAllocatorCallback {
