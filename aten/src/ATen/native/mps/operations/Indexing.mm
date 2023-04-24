@@ -136,7 +136,7 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
       MTLSize threadGroupSize = MTLSizeMake(tgSize, 1, 1);
       [computeEncoder dispatchThreads: gridSize
                 threadsPerThreadgroup: threadGroupSize];
-      mpsStream->commitAdaptive({inputTensor, outputTensor}, indexSelectPSO);
+      mpsStream->commitAdaptive(inputTensor, outputTensor, indexSelectPSO);
     }
   });
 

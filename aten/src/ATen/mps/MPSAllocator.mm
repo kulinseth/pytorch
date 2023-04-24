@@ -106,6 +106,10 @@ bool MPSHeapAllocatorImpl::alloc_buffer(AllocParams& params) {
   m_total_allocated_memory += params.size();
   pool.allocated_size += params.size();
   pool.n_buffers++;
+  // initialize the event for the shared buffer
+  if (pool.usage & UsageFlags::SHARED) {
+    params.buffer_block->event.emplace(/*needsListener*/ true);
+  }
 
   if ((m_debug_verbosity & DebugVerbosity::ALLOCATIONS) &&
     (!(m_debug_verbosity & DebugVerbosity::LARGE_ONLY) || !(pool.usage & UsageFlags::SMALL))) {
@@ -171,6 +175,7 @@ bool MPSHeapAllocatorImpl::get_free_buffer(AllocParams& params) {
     return false; // this will make allocator to allocate a new buffer
   }
   pool.buffers.erase(params.buffer_block);
+  params.buffer_block->requested_size = params.requested_size;
   params.buffer_block->gc_count = 0;
   pool.available_size -= params.buffer_block->size;
 
@@ -255,9 +260,9 @@ void MPSHeapAllocatorImpl::free_buffer(BufferBlock* buffer_block) {
   TORCH_INTERNAL_ASSERT(pool.buffers.insert(buffer_block).second);
   pool.available_size += buffer_block->size;
   buffer_block->shape.clear(); // reset shape
-  buffer_block->in_use = false;
   TORCH_INTERNAL_ASSERT_DEBUG_ONLY(m_current_allocated_memory >= buffer_block->size);
   m_current_allocated_memory -= buffer_block->size;
+  buffer_block->in_use = false;
 }
 
 BufferBlock* MPSHeapAllocatorImpl::get_allocated_buffer_block(void* ptr) {
@@ -500,6 +505,65 @@ std::pair<void*, uint32_t> MPSHeapAllocatorImpl::getSharedBufferPtr(void* buffer
   return {buffer_block->cpu_ptr, buffer_block->retainCount()};
 }
 
+bool MPSHeapAllocatorImpl::recordEvents(c10::ArrayRef<void*> buffers) {
+  bool recordedEvent = false;
+  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+
+  for (const auto& buffer : buffers) {
+    BufferBlock* buffer_block = get_allocated_buffer_block(buffer);
+    // return if buffer was not allocated on MPSAllocator or isn't a Shared buffer
+    if (buffer_block && (buffer_block->heap->pool->usage & UsageFlags::SHARED)) {
+      buffer_block->event->recordEvent(/*needsLock*/ false);
+      recordedEvent = true;
+    }
+  }
+  return recordedEvent;
+}
+
+bool MPSHeapAllocatorImpl::waitForEvents(c10::ArrayRef<void*> buffers) {
+  std::vector<BufferBlock*> buffer_blocks;
+  {
+    std::lock_guard<std::recursive_mutex> lock(m_mutex);
+    for (const auto& buffer : buffers) {
+      BufferBlock* buffer_block = get_allocated_buffer_block(buffer);
+      // wait on event if "shared" buffer was allocated on MPSAllocator and
+      // or actually needs waiting (based on retainCount)
+      if (buffer_block && (buffer_block->heap->pool->usage & UsageFlags::SHARED) &&
+          buffer_block->retainCount() > 1 && buffer_block->event) {
+        buffer_blocks.push_back(buffer_block);
+      }
+    }
+  }
+  bool waitedForEvent = false;
+
+  for (const auto& buffer_block : buffer_blocks) {
+    // check for retain count again as the previous wait might have released the buffer
+    if (buffer_block->retainCount() > 1) {
+      bool scheduledNotify = buffer_block->event->notifyEvent(
+                                /*needsLock*/ false, /*syncEvent*/ false,
+                                ^(id<MTLSharedEvent>, uint64_t) {
+                                  std::lock_guard<std::mutex> lock(m_gpu_sync_mutex);
+                                  buffer_block->gpu_sync_completed = true;
+                                  m_gpu_sync_cv.notify_one();
+                                });
+      if (scheduledNotify) {
+        std::unique_lock<std::mutex> lock(m_gpu_sync_mutex);
+        m_gpu_sync_cv.wait(lock, [&buffer_block]{ return buffer_block->gpu_sync_completed; });
+        buffer_block->gpu_sync_completed = false;
+        waitedForEvent |= buffer_block->retainCount() <= 1;
+      }
+    }
+  }
+  return waitedForEvent;
+}
+
+id_t MPSHeapAllocatorImpl::getBufferId(void* ptr) {
+  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+
+  BufferBlock* buffer_block = get_allocated_buffer_block(ptr);
+  return buffer_block ? buffer_block->buf_id : 0;
+}
+
 ssize_t MPSHeapAllocatorImpl::getUnalignedBufferSize(void* ptr) {
   std::lock_guard<std::recursive_mutex> lock(m_mutex);
 
@@ -628,6 +692,7 @@ public:
   bool isSharedStorageSupported() const override { return m_has_unified_memory; }
   void emptyCache() const override { _getAllocImpl().emptyCache(); }
   ssize_t getUnalignedBufferSize(void* ptr) const override { return _getAllocImpl().getUnalignedBufferSize(ptr); }
+  id_t getBufferId(void* ptr) const override { return _getAllocImpl().getBufferId(ptr); };
   IntArrayRef getBufferShape(void* ptr) const override { return _getAllocImpl().getBufferShape(ptr); }
   void setBufferShape(void* ptr, const IntArrayRef& shape) const override { _getAllocImpl().setBufferShape(ptr, shape); }
   std::string formatSize(size_t size) const override {return _getAllocImpl().format_size(size); };
@@ -639,6 +704,8 @@ public:
   size_t getHighWatermarkLimit() const override { return _getAllocImpl().getHighWatermarkLimit(); }
   void setLowWatermarkRatio(double ratio) const override { _getAllocImpl().setLowWatermarkRatio(ratio); }
   void setHighWatermarkRatio(double ratio) const override { _getAllocImpl().setHighWatermarkRatio(ratio); }
+  bool recordEvents(c10::ArrayRef<void*> buffers) const override { return _getAllocImpl().recordEvents(buffers); }
+  bool waitForEvents(c10::ArrayRef<void*> buffers) const override { return _getAllocImpl().waitForEvents(buffers); }
 
 private:
   bool m_has_unified_memory;

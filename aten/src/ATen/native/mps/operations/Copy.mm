@@ -326,17 +326,19 @@ static bool try_copy_scalars_mps(at::Tensor& dst, const at::Tensor& src, bool no
   if (!allocator.isSharedStorageSupported()) {
     return false;
   }
-  void* src_ptr = src.storage().data();
-  void* dst_ptr = dst.storage().data();
+  void* src_buf = src.storage().data();
+  void* dst_buf = dst.storage().data();
+  void* src_cpu_ptr = src_buf;
+  void* dst_cpu_ptr = dst_buf;
   uint32_t src_retain_count = 0, dst_retain_count = 0;
 
   if (src.device().type() == at::kMPS) {
-    std::tie(src_ptr, src_retain_count) = allocator.getSharedBufferPtr(src_ptr);
+    std::tie(src_cpu_ptr, src_retain_count) = allocator.getSharedBufferPtr(src_buf);
   }
   if (dst.device().type() == at::kMPS) {
-    std::tie(dst_ptr, dst_retain_count) = allocator.getSharedBufferPtr(dst_ptr);
+    std::tie(dst_cpu_ptr, dst_retain_count) = allocator.getSharedBufferPtr(dst_buf);
   }
-  if (!src_ptr || !dst_ptr) {
+  if (!src_cpu_ptr || !dst_cpu_ptr) {
     return false;
   }
   size_t src_offset = src.storage_offset() * src.itemsize();
@@ -345,16 +347,19 @@ static bool try_copy_scalars_mps(at::Tensor& dst, const at::Tensor& src, bool no
   bool needsSync = !non_blocking && (src_retain_count > 1 || dst_retain_count > 1);
 
   // this generates profile_id if only copy profiling is enabled
-  uint64_t profile_id = getMPSProfiler().beginProfileCopy(src_ptr, dst_ptr,
-                                         src, dst, length, !needsSync, false);
+  uint64_t profile_id = getMPSProfiler().beginProfileCopy(src_cpu_ptr, dst_cpu_ptr,
+                                                src, dst, length, !needsSync, false);
   if (needsSync) {
-    // wait for any possible GPU operations to finish before reading from source MPS buffers
-    auto stream = getDefaultMPSStream();
-    dispatch_sync(stream->queue(), ^() {
-      stream->synchronize(SyncType::COMMIT_AND_WAIT);
-    });
+    // wait for any possible GPU operations to finish before reading/writing to Metal buffers
+    bool syncedBufferEvents = allocator.waitForEvents({src_buf, dst_buf});
+    if (!syncedBufferEvents) {
+      auto stream = getDefaultMPSStream();
+      dispatch_sync(stream->queue(), ^() {
+        stream->synchronize(SyncType::COMMIT_AND_WAIT);
+      });
+    }
   }
-  memcpy((char*) dst_ptr + dst_offset, (char*) src_ptr + src_offset, length);
+  memcpy((char*) dst_cpu_ptr + dst_offset, (char*) src_cpu_ptr + src_offset, length);
 
   if (profile_id) {
     getMPSProfiler().endProfileCopy(profile_id, SyncType::NONE);
