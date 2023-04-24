@@ -4,6 +4,7 @@
 #include <ATen/mps/MPSDevice.h>
 #include <ATen/mps/MPSGeneratorImpl.h>
 #include <ATen/mps/MPSAllocatorInterface.h>
+#include <ATen/mps/MPSProfiler.h>
 
 namespace at {
 namespace mps {
@@ -57,6 +58,14 @@ size_t MPSHooks::getDriverAllocatedMemory() const {
 
 void MPSHooks::setMemoryFraction(double ratio) const {
   at::mps::getIMPSAllocator()->setHighWatermarkRatio(ratio);
+}
+
+void MPSHooks::profilerStartTrace(const string& mode, bool waitUntilCompleted) const {
+  at::mps::getMPSProfiler().StartTrace(mode, waitUntilCompleted);
+}
+
+void MPSHooks::profilerStopTrace() const {
+  at::mps::getMPSProfiler().StopTrace();
 }
 
 using at::MPSHooksRegistry;
