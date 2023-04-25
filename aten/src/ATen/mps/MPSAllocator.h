@@ -181,7 +181,10 @@ struct HeapBlock
     return a->size.available < b->size.available;
   }
   static NSUInteger heapAvailableSize(id<MTLHeap> heap, size_t Alignment = vm_page_size) {
-      return [heap maxAvailableSizeWithAlignment:Alignment];
+    return [heap maxAvailableSizeWithAlignment:Alignment];
+  }
+  NSUInteger Size() {
+    return [heap size];
   }
   id<MTLBuffer> newMTLBuffer(size_t length, uint32_t usage) {
     id<MTLBuffer> buf = [heap newBufferWithLength:length options:getOptions(usage)];
@@ -217,9 +220,17 @@ typedef bool (*HeapComparison)(const HeapBlock*, const HeapBlock*);
 
 struct BufferPool
 {
+  enum class Kind {
+    PRIVATE_SMALL,
+    PRIVATE_LARGE,
+    SHARED_SMALL,
+    SHARED_LARGE,
+    SCALAR, // small shared buffers to import scalar values into MPS stream
+  };
+
   BufferPool(const id<MTLDevice> Device, uint32_t Usage) :
              device(Device), usage(Usage),
-             heaps(HeapBlock::Comparator), buffers(BufferBlock::Comparator) { }
+             heaps(HeapBlock::Comparator), available_buffers(BufferBlock::Comparator) { }
 
   const id<MTLDevice> device;
   // usage flags to customize the pool for various purposes (see UsageFlags enum)
@@ -233,7 +244,14 @@ struct BufferPool
   // list of heaps ordered by their "available" (not total) memory size
   std::set<HeapBlock*, HeapComparison> heaps;
   // list of only "available" buffers in the pool (i.e., buffers not in-use)
-  std::set<BufferBlock*, BufferComparison> buffers;
+  std::set<BufferBlock*, BufferComparison> available_buffers;
+  // list of buffers that are in a state of "limbo" where they've already been freed
+  // from PyTorch-side, but were not returned to pool due to still being
+  // in-use by command buffers with retainCount > 1. In this state, the buffer is
+  // neither ready to be recycled, nor could be returned to pool as available.
+  // These buffers will be returned to pool once the command buffer's
+  // completionHandler callbacks are called.
+  std::unordered_set<BufferBlock*> buffers_pending_free;
   // list of heaps pending size update
   std::unordered_set<HeapBlock*> heaps_pending_update;
 };
@@ -243,20 +261,11 @@ class MPSHeapAllocatorImpl
 public:
   explicit MPSHeapAllocatorImpl() :
     m_device(at::mps::MPSDevice::getInstance()->device()),
-    m_large_pool_shared (m_device, UsageFlags::SHARED  | UsageFlags::HAZARD),
-    m_large_pool_private(m_device, UsageFlags::PRIVATE | UsageFlags::HAZARD),
-    m_small_pool_shared (m_device, UsageFlags::SMALL   | UsageFlags::SHARED  | UsageFlags::HAZARD),
-    m_small_pool_private(m_device, UsageFlags::SMALL   | UsageFlags::PRIVATE | UsageFlags::HAZARD),
-    // no Hazard Tracking required for the Scalar pool (synchronized manually)
-    m_scalar_pool(m_device, UsageFlags::SMALL | UsageFlags::SHARED | UsageFlags::SCALAR),
-    m_total_allocated_memory(0), m_current_allocated_memory(0),
-    m_max_buffer_size([m_device maxBufferLength]), m_stream(getDefaultMPSStream())
-  {
+    m_max_buffer_size([m_device maxBufferLength]), m_stream(getDefaultMPSStream()) {
     init_allocator();
   }
   ~MPSHeapAllocatorImpl() {
-    // make sure completion handlers are finished before destruction
-    m_stream->synchronize(SyncType::COMMIT_AND_WAIT);
+    emptyCache();
   }
   // interface exposed to at::Allocator
   id<MTLBuffer> malloc(size_t size, uint32_t usage);
@@ -264,6 +273,8 @@ public:
   void free(void* ptr);
   // releases all the cached buffers and their associated heaps
   void emptyCache();
+  // free inactive buffers that are pending to be freed
+  void freeInactiveBuffers();
   // returns true if buffer was allocated from the shared pool
   bool isSharedBuffer(void* ptr);
   // get the requested unaligned size of an MTLBuffer
@@ -327,43 +338,38 @@ private:
   std::recursive_mutex m_mutex;
   // allocated buffers by device pointer
   ska::flat_hash_map<void*, BufferBlock*> m_allocated_buffers;
-  // unallocated cached buffers larger than 1 MB
-  BufferPool m_large_pool_shared, m_large_pool_private;
-  // unallocated cached buffers 1 MB or smaller
-  BufferPool m_small_pool_shared, m_small_pool_private;
-  // small cached buffers to import scalar values into MPS stream
-  BufferPool m_scalar_pool;
+  // using a container for pools to simplify iterating them
+  ska::flat_hash_map<BufferPool::Kind, std::unique_ptr<BufferPool>> m_pools;
   // total memory allocated by HeapAllocator (including blocks in pools)
-  size_t m_total_allocated_memory;
+  size_t m_total_allocated_memory = 0;
   // currently active memory allocations in use (i.e., blocks not in pools)
-  size_t m_current_allocated_memory;
+  size_t m_current_allocated_memory = 0;
   // max buffer size allowed by Metal
-  size_t m_max_buffer_size;
+  size_t m_max_buffer_size = 0;
   // maximum total size allowed to be allocated
-  size_t m_max_total_allowed_size;
+  size_t m_max_total_allowed_size = 0;
   // high watermark ratio is a hard limit for the total allowed allocations
   // 0. : disables high watermark limit (may cause system failure if system-wide OOM occurs)
   // 1. : recommended maximum allocation size (i.e., device.recommendedMaxWorkingSetSize)
   // >1.: allows limits beyond the device.recommendedMaxWorkingSetSize
   // e.g., value 0.95 means we allocate up to 95% of recommended maximum
   // allocation size; beyond that, the allocations would fail with OOM error.
-  double m_high_watermark_ratio;
+  double m_high_watermark_ratio = 0.0;
   // low watermark ratio is a soft limit to attempt limiting memory allocations up to the lower watermark
   // level by garbage collection or committing command buffers more frequently (a.k.a, adaptive commit).
   // Value between 0 to m_high_watermark_ratio (setting 0.0 disables adaptive commit and garbage collection)
   // e.g., value 0.9 means we 'attempt' to limit allocations up to 90% of recommended maximum
   // allocation size.
-  double m_low_watermark_ratio;
+  double m_low_watermark_ratio = 0.0;
   // low watermark size limit (in Bytes) at the time we initialize the allocator
-  size_t m_low_watermark_limit;
+  size_t m_low_watermark_limit = 0;
   // use "PYTORCH_DEBUG_MPS_ALLOCATOR" env-var to set debug verbosity
-  uint32_t m_debug_verbosity;
+  uint32_t m_debug_verbosity = DebugVerbosity::SILENT;
   // default MPS stream
   MPSStream* m_stream;
   // used to sync the Shared buffers with CPU
   std::mutex m_gpu_sync_mutex{};
   std::condition_variable m_gpu_sync_cv{};
-
 
   void init_allocator();
   HeapBlock* get_free_heap(AllocParams& params);
@@ -382,13 +388,15 @@ private:
 
   BufferPool& get_pool(size_t Size, uint32_t usage) {
     if (usage & UsageFlags::SCALAR) {
-      return m_scalar_pool;
+      return *m_pools[BufferPool::Kind::SCALAR];
     }
     if (Size <= kMaxScalarAlloc && m_device.hasUnifiedMemory) {
-      return m_small_pool_shared;
+      return *m_pools[BufferPool::Kind::SHARED_SMALL];
     }
-    return Size <= kMaxSmallAlloc ? ((usage & UsageFlags::SHARED) ? m_small_pool_shared : m_small_pool_private) :
-                                    ((usage & UsageFlags::SHARED) ? m_large_pool_shared : m_large_pool_private);
+    return Size <= kMaxSmallAlloc ? ((usage & UsageFlags::SHARED) ? *m_pools[BufferPool::Kind::SHARED_SMALL] :
+                                                                    *m_pools[BufferPool::Kind::PRIVATE_SMALL]) :
+                                    ((usage & UsageFlags::SHARED) ? *m_pools[BufferPool::Kind::SHARED_LARGE] :
+                                                                    *m_pools[BufferPool::Kind::PRIVATE_LARGE]);
   }
 
   size_t get_allocation_size(size_t Length, uint32_t usage) const  {
