@@ -61,10 +61,18 @@ struct BaseInfo {
   }
 
   // builds a string for a tensor (format: Device:ScalarType[tensor.sizes()])
-  static std::string buildTensorString(const Tensor& tensor) {
+  static std::string buildTensorString(const Tensor& tensor, bool includeBufferId = false) {
     if (tensor.defined()) {
       std::stringstream tensorStr;
-      tensorStr << c10::DeviceTypeName(tensor.device().type()) << ":"
+      auto deviceType = tensor.device().type();
+      tensorStr << c10::DeviceTypeName(deviceType);
+      // see comments for INCLUDE_BUFFER_ID
+      if (includeBufferId && deviceType == at::kMPS) {
+        id<MTLBuffer> buffer = __builtin_bit_cast(id<MTLBuffer>, tensor.storage().data());
+        tensorStr << "(buf#" << (getIMPSAllocator()->getBufferId(buffer))
+                  << ":" << buffer.retainCount << ")";
+      }
+      tensorStr << ":"
                 << tensor.scalar_type() << tensor.sizes();
       return tensorStr.str();
     } else {
@@ -87,18 +95,20 @@ struct OperationInfo : BaseInfo {
   }
 
   // builds a string for a kernel
-  static std::string buildKernelString(const std::string& kernelName, const TensorList& tensors) {
+  static std::string buildKernelString(const std::string& kernelName,
+                                       const TensorList& tensors,
+                                       bool includeBufferId = false) {
     std::stringstream kernelStr;
     kernelStr << kernelName;
     for (const Tensor& tensor: tensors) {
-      kernelStr << ":" << BaseInfo::buildTensorString(tensor);
+      kernelStr << ":" << BaseInfo::buildTensorString(tensor, includeBufferId);
     }
     return kernelStr.str();
   }
 };
 
 struct CpuFbInfo : BaseInfo {
-  CpuFbInfo(const std::string& OpName, uint64_t Id) :
+  CpuFbInfo(uint64_t Id, const std::string& OpName) :
       BaseInfo(Type::CPU_FALLBACK, Id, 0), opName(OpName) { }
 
   uint64_t runCount = 0;
@@ -107,11 +117,12 @@ struct CpuFbInfo : BaseInfo {
   size_t currentCopyOverhead = 0;
   size_t totalCopyOverhead = 0;
   std::string opName;
+  std::string strKey;
   std::clock_t startTime{};
 
   const std::string toString(double gpuTime = 0, double schedulingTime = 0) const override {
     return fmt::format("CPU Fallback::{} (id={}, run={}, CopyOverhead={}{})",
-                       opName, profileId, runCount,
+                       strKey, profileId, runCount,
                        getIMPSAllocator()->formatSize(currentCopyOverhead),
                        BaseInfo::toString(0.0, schedulingTime));
   }
@@ -159,9 +170,9 @@ struct CopyInfo : BaseInfo {
                        BaseInfo::toString(gpuTime, schedulingTime));
   }
 
-  static std::string buildTensorString(const void* buffer, const OptionalTensorRef tensor) {
+  static std::string buildTensorString(const void* buffer, const OptionalTensorRef tensor, bool includeBufferId = false) {
     if (tensor.has_value()) {
-      return BaseInfo::buildTensorString(*tensor);
+      return BaseInfo::buildTensorString(*tensor, includeBufferId);
     }
     // if tensor is not defined (e.g., copy_blit_mps()), then use buffer
     // pointer to build the string.
@@ -285,9 +296,14 @@ public:
     // (i.e., KernelEndTime-KernelStartTime from Metal Command Buffers)
     // e.g., [GPU=0.324 ms, KRNL=0.036 ms]
     INCLUDE_KERNEL_TIME = (1 << 8),
+    // if enabled, includes the unique buffer ID in metadata for the storage
+    // of a tensor that was allocated on MPSAllocator. This is useful (along with
+    // the EV "PYTORCH_DEBUG_MPS_ALLOCATOR") to identify buffers that are involved
+    // with various operations.
+    INCLUDE_BUFFER_ID   = (1 << 9),
 
     // used for sanity check (Change this when new option added)
-    LOG_COUNT = (INCLUDE_KERNEL_TIME << 1) - 1,
+    LOG_COUNT = (INCLUDE_BUFFER_ID << 1) - 1,
   };
 
   explicit MPSProfiler();

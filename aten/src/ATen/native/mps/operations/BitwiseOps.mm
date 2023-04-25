@@ -1,5 +1,6 @@
 #include <ATen/mps/MPSStream.h>
 #include <ATen/mps/MPSProfiler.h>
+#include <ATen/native/mps/operations/Scalar.h>
 #include <ATen/native/Resize.h>
 #include <fmt/format.h>
 #include <torch/library.h>
@@ -246,6 +247,10 @@ at::Tensor& _bitwise_op_out_mps (const at::Tensor& self, const at::Tensor& other
     needs_output_copy = true;
   }
   if (is_other_scalar && is_self_scalar) {
+    if (at::native::mps::scalar_ops_mps(op_name, self, other, output,
+                              at::native::mps::ScalarOpCategories::BITWISE_OPS)) {
+      return output_;
+    }
     if (op_name == "and") {
       output.fill_(c10::Scalar(self.item<int64_t>() & other.item<int64_t>()));
     } else if (op_name == "or") {

@@ -76,7 +76,7 @@ public:
   void executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
                        SyncType syncType = SyncType::NONE, MPSGraphExecutable* executable = nullptr);
 
-  void addCompletedHandler(MTLCommandBufferHandler block);
+  void addCompletedHandler(MTLCommandBufferHandler block, SyncType syncType = SyncType::NONE);
   // see description for "_activeResources"
   void addActiveResource(MPSGraphTensorData* tensorData, void* buffer);
 
