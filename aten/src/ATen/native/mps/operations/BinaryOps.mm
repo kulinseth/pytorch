@@ -6,6 +6,7 @@
 #include <ATen/mps/MPSStream.h>
 #include <ATen/native/mps/OperationUtils.h>
 #include <ATen/native/mps/operations/BinaryKernel.h>
+#include <ATen/native/mps/operations/Scalar.h>
 #include <torch/library.h>
 #include <c10/util/Optional.h>
 #include <ATen/native/BinaryOps.h>
@@ -52,6 +53,12 @@ void binaryOpTensor(const Tensor& self, const Tensor& other, const Scalar& alpha
   // it's possible to receive empty tensors here
   if (self.numel() == 0 || other.numel() == 0) {
     return;
+  }
+
+  if (is_self_scalar && is_other_scalar) {
+    if (scalar_ops_mps(op_name, self, other, output_, ScalarOpCategories::BINARY_OPS)) {
+      return;
+    }
   }
 
   // Use strided kernels instead of gather-scatter if the tensors are non-contiguous

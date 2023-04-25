@@ -13,7 +13,7 @@ namespace mps {
 
 // threshold to perform adaptive commit if the accumulated size
 // of resources encoded on the command buffer exceeds that.
-static const size_t kCmdBufAdaptiveCommitThreshold = MB(32);
+static const size_t kCmdBufAdaptiveCommitThreshold = MB(64);
 
 //-----------------------------------------------------------------
 //  MPSStream
@@ -76,6 +76,9 @@ void MPSStream::synchronize(SyncType syncType) {
       // or when the sizes attached to the active command buffer exceeds the threshold
       if (getIMPSAllocator()->getLowWatermarkValue() <= 0 ||
           _commandBufferResourceSize > kCmdBufAdaptiveCommitThreshold) {
+        [commandBuffer() addCompletedHandler:(^(id <MTLCommandBuffer>) {
+          getIMPSAllocator()->freeInactiveBuffers();
+        })];
         commit();
       }
       break;
@@ -155,7 +158,6 @@ void MPSStream::commitAdaptive(const TensorList& inputTensors,
       syncType = SyncType::COMMIT;
     }
   }
-
   auto& profiler = getMPSProfiler();
   if (profiler.isOperationProfilingEnabled() && profilerHandle) {
     profiler.endProfileKernel(profilerHandle, syncType);
@@ -186,10 +188,11 @@ void MPSStream::flush() {
   }
 }
 
-void MPSStream::addCompletedHandler(MTLCommandBufferHandler block) {
+void MPSStream::addCompletedHandler(MTLCommandBufferHandler block, SyncType syncType) {
  dispatch_sync(_serialQueue, ^() {
     @autoreleasepool {
       [commandBuffer() addCompletedHandler:block];
+      synchronize(syncType);
     }
   });
 }
@@ -227,10 +230,9 @@ void MPSStream::copy(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer,
                              size:(NSUInteger)length];
       [blitEncoder endEncoding];
 
-      auto& profiler = getMPSProfiler();
       // profilerId has a value only if copy profiling is enabled
       if (profileId) {
-        profiler.endProfileCopy(profileId, syncType);
+        getMPSProfiler().endProfileCopy(profileId, syncType);
       } else {
         synchronize(syncType);
       }
@@ -286,10 +288,9 @@ void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDicti
       SyncType _syncType = _enableCommitAndContinue == false ? SyncType::COMMIT : syncType;
 
       bool recordedEvents = updateCommandBufferResourceSize([feeds allValues], [results allValues]);
-      if (recordedEvents) {
+      if (recordedEvents && _syncType != SyncType::COMMIT_AND_WAIT) {
         _syncType = SyncType::COMMIT;
       }
-
       // check if graph execution profiling is enabled
       if (isGraphProfilingEnabled) {
         // with profiler enabled, we commit after adding the completedHandler in MPSProfiler
@@ -304,7 +305,6 @@ void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDicti
 bool MPSStream::updateCommandBufferResourceSize(NSArray<MPSGraphTensorData*> *feeds,
                                                 NSArray<MPSGraphTensorData*> *results) {
   std::vector<void*> buffers;
-
   for (const auto& tensorsDataList : {feeds, results}) {
     for (MPSGraphTensorData* tensorData in tensorsDataList) {
       _commandBufferResourceSize += tensorData.mpsndarray.resourceSize;
