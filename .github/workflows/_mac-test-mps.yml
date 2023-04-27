@@ -98,7 +98,7 @@ jobs:
           ${CONDA_RUN} python3 test/test_modules.py -k mps --verbose
       
       - name: Run MPS Test NN
-         id: test_2
+         id: test_3
          env:
            ENV_NAME: conda-test-env-${{ github.run_id }}
          shell: arch -arch arm64 bash {0}

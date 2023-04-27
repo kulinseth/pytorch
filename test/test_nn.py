@@ -11540,7 +11540,7 @@ class TestNNDeviceType(NNTestCase):
                 self.assertEqual(p.grad.to(devices[0]), pe.grad)
 
     @dtypes(torch.bfloat16)
-    @dtypesIfMPS(torch.float32) # MPS backend does not currently support bfloat16
+    @dtypesIfMPS(torch.float32)  # MPS backend does not currently support bfloat16
     def test_elu_inplace_overlap(self, device, dtype):
         x = torch.randn((1, 6), dtype=dtype, device=device).expand((6, 6))
         with self.assertRaisesRegex(RuntimeError, 'unsupported operation'):
