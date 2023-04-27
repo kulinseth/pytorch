@@ -10111,8 +10111,8 @@ class TestNNDeviceType(NNTestCase):
         tol = 2 * torch.finfo(dtype).eps
         self.assertEqual(logits_soft.grad, logits_hard.grad, atol=tol, rtol=0)
 
-    @skipIfMps
     @dtypesIfCUDA(torch.half, torch.float, torch.double)
+    @dtypesIfMPS(torch.float)
     @dtypes(torch.float, torch.double)
     def test_gumbel_softmax(self, device, dtype):
         self._test_gumbel_softmax_st_shapes(device, dtype, shape=[5], dim=0, count_expected=1)
@@ -11539,9 +11539,10 @@ class TestNNDeviceType(NNTestCase):
             for p, pe in zip(test_model.parameters(), ref_model.parameters()):
                 self.assertEqual(p.grad.to(devices[0]), pe.grad)
 
-    @skipIfMps  # Crashes due to unsupported BFloat16 dtype on MPS backend
-    def test_elu_inplace_overlap(self, device):
-        x = torch.randn((1, 6), dtype=torch.bfloat16, device=device).expand((6, 6))
+    @dtypes(torch.bfloat16)
+    @dtypesIfMPS(torch.float32) # MPS backend does not currently support bfloat16
+    def test_elu_inplace_overlap(self, device, dtype):
+        x = torch.randn((1, 6), dtype=dtype, device=device).expand((6, 6))
         with self.assertRaisesRegex(RuntimeError, 'unsupported operation'):
             F.elu(x, inplace=True)
         with self.assertRaisesRegex(RuntimeError, 'unsupported operation'):
@@ -11615,19 +11616,14 @@ class TestNNDeviceType(NNTestCase):
             b.backward(torch.ones(2, device=device))
 
     # Merge into OpInfo?
-    @skipIfMps  # Crashes due to unsupported BFloat16 dtype
-    def test_leaky_relu_inplace_with_zero_slope(self, device):
-        a = torch.tensor([-2., 0., 2.], device=device, requires_grad=True)
+    @dtypes(torch.bfloat16, torch.float32)
+    @dtypesIfMPS(torch.float32)
+    def test_leaky_relu_inplace_with_zero_slope(self, device, dtype):
+        a = torch.tensor([-2., 0., 2.], device=device, dtype=dtype, requires_grad=True)
         b = torch.nn.functional.leaky_relu_(a.clone(), 0.0)
         b.backward(torch.ones(3, device=device))
-        expected = torch.tensor([0., 0., 1.], device=device)
+        expected = torch.tensor([0., 0., 1.], device=device, dtype=dtype)
         self.assertEqual(a.grad, expected)
-
-        a_bf16 = torch.tensor([-2., 0., 2.], device=device, dtype=torch.bfloat16, requires_grad=True)
-        b_bf16 = torch.nn.functional.leaky_relu_(a_bf16.clone(), 0.0)
-        b_bf16.backward(torch.ones(3, device=device))
-        expected_bf16 = torch.tensor([0., 0., 1.], device=device, dtype=torch.bfloat16)
-        self.assertEqual(a_bf16.grad, expected_bf16)
 
     @onlyCPU
     def test_softshrink(self, device):
