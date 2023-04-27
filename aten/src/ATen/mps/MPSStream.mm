@@ -128,6 +128,8 @@ void MPSStream::commitAndWait() {
     }
     // reset the accumulated resource sizes for command buffer
     _commandBufferResourceSize = 0;
+    // after waiting, it's a good time to free some pending inactive buffers
+    getIMPSAllocator()->freeInactiveBuffers();
   }
 }
 
