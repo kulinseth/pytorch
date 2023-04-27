@@ -304,9 +304,7 @@ void printTensorNDArray(const Tensor& t) {
 
   // Initialize data
   id<MTLBuffer> selfBuf = getMTLBufferStorage(t);
-  MPSGraphTensorData* tdata = [[[MPSGraphTensorData alloc] initWithMTLBuffer:selfBuf
-                                                            shape:selfShape
-                                                         dataType:selfDType] autorelease];
+  MPSGraphTensorData* tdata = allocMPSGraphTensorData(selfBuf, selfShape, selfDType);
   C10_CLANG_DIAGNOSTIC_PUSH()
   #if C10_CLANG_HAS_WARNING("-Wobjc-method-access")
   C10_CLANG_DIAGNOSTIC_IGNORE("-Wobjc-method-access")
@@ -318,10 +316,7 @@ void printTensorNDArray(const Tensor& t) {
 MPSNDArray* ndArrayFromTensor(const Tensor& tensor, MPSShape *shape, MPSDataType mpsType)
 {
   id<MTLBuffer> buffer = getMTLBufferStorage(tensor);
-  MPSGraphTensorData* tmpGraphTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer:buffer
-                                                                                    shape:shape
-                                                                                 dataType:mpsType] autorelease];
-
+  MPSGraphTensorData* tmpGraphTensorData = allocMPSGraphTensorData(buffer, shape, mpsType);
   return [tmpGraphTensorData mpsndarray];
 }
 
@@ -359,13 +354,25 @@ Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor, const Tensor& src, MPSS
       mpsShape = getMPSShape(_tensor);
     }
 
-    _value = [[[MPSGraphTensorData alloc] initWithMTLBuffer:srcBuf
-                                                      shape:mpsShape
-                                                   dataType:mpsDataType] autorelease];
+    _value = allocMPSGraphTensorData(srcBuf, mpsShape, mpsDataType);
   }
-
   TORCH_INTERNAL_ASSERT(_value);
+
   _placeholder = mpsGraphTensor;
+}
+
+MPSGraphTensorData* allocMPSGraphTensorData(id<MTLBuffer> buffer,
+                                            MPSShape *mpsShape,
+                                            MPSDataType mpsDataType) {
+  MPSGraphTensorData *tensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer: buffer
+                                                                            shape: mpsShape
+                                                                         dataType: mpsDataType] autorelease];
+  TORCH_INTERNAL_ASSERT(tensorData);
+  // there's no way to get the underlying buffer from an
+  // MPSGraphTensorData or from its internal MPSNDArray.
+  // So we have to keep a mapping of them here.
+  getDefaultMPSStream()->addActiveResource(tensorData, buffer);
+  return tensorData;
 }
 
 MPSGraphTensorData *getMPSGraphTensorData(MPSGraph* mpsGraph,
@@ -377,10 +384,7 @@ MPSGraphTensorData *getMPSGraphTensorData(MPSGraph* mpsGraph,
   MPSGraphTensorData *result = nil;
   if (tensor.numel() > 0) {
     id<MTLBuffer> buf = getMTLBufferStorage(tensor);
-    result = [[[MPSGraphTensorData alloc] initWithMTLBuffer:buf
-                                                    shape:mpsShape
-                                                 dataType:dataType]
-                                                 autorelease];
+    result = allocMPSGraphTensorData(buf, mpsShape, dataType);
   } else {
     // create empty NDArray
     MPSNDArrayDescriptor *desc = [MPSNDArrayDescriptor descriptorWithDataType:dataType
@@ -414,9 +418,7 @@ MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, MPSScalar&
   // Scalar pools are only supported on devices with unified memory
   if (mpsStream->device().hasUnifiedMemory) {
     scalar.buffer = getIMPSAllocator()->allocScalarBufferWithValue(&scalar.value, scalar.size);
-    result = [[[MPSGraphTensorData alloc] initWithMTLBuffer: scalar.getMTLBuffer()
-                                                      shape: @[@1]
-                                                   dataType: getMPSScalarType(scalar.type)] autorelease];
+    result = allocMPSGraphTensorData(scalar.getMTLBuffer(), @[@1], getMPSScalarType(scalar.type));
   } else {
     MPSNDArrayDescriptor *tensorDesc = [MPSNDArrayDescriptor descriptorWithDataType:getMPSScalarType(scalar.type) shape:@[@1]];
     MPSNDArray *tensorNDArray = [[[MPSNDArray alloc] initWithDevice:mpsStream->device() descriptor:tensorDesc] autorelease];

@@ -52,18 +52,15 @@ static Tensor& runViewGraph(ViewCachedGraph* cachedGraph, const at::Tensor& src,
   @autoreleasepool {
     NSMutableDictionary *feeds = [[NSMutableDictionary new] autorelease];
     // in case of scatter, we use output tensor as input buffer and write the results back to the source buffer
-    feeds[cachedGraph->inputTensor] = [[[MPSGraphTensorData alloc] initWithMTLBuffer: needsScatter ? outputBuffer : sourceBuffer
-                                                                               shape: inputShape
-                                                                            dataType: inputType] autorelease];
+    feeds[cachedGraph->inputTensor] = allocMPSGraphTensorData(needsScatter ? outputBuffer : sourceBuffer,
+                                                              inputShape, inputType);
     if (needsScatter) {
       auto updatesType = getMPSScalarType(src.scalar_type());
       if (updatesType == MPSDataTypeUInt8 || (updatesType == MPSDataTypeBool && !is_macos_13_or_newer())) {
         updatesType = MPSDataTypeInt8;
       }
 
-      feeds[cachedGraph->updatesTensor] = [[[MPSGraphTensorData alloc] initWithMTLBuffer: sourceBuffer
-                                                                                   shape: getMPSShape(src.numel())
-                                                                                dataType: updatesType] autorelease];
+      feeds[cachedGraph->updatesTensor] = allocMPSGraphTensorData(sourceBuffer, getMPSShape(src.numel()), updatesType);
     }
     MPSScalar storageOffsetScalar = getMPSScalar(storage_offset, ScalarType::Int);
     feeds[cachedGraph->storageOffsetTensor] = getMPSGraphTensorFromScalar(stream, storageOffsetScalar);
@@ -79,9 +76,7 @@ static Tensor& runViewGraph(ViewCachedGraph* cachedGraph, const at::Tensor& src,
     if (outputType == MPSDataTypeUInt8 || (outputType ==  MPSDataTypeBool && !is_macos_13_or_newer())) {
         outputType =  MPSDataTypeInt8;
     }
-    MPSGraphTensorData* outputTensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer: outputBuffer
-                                                                                    shape: outputShape
-                                                                                 dataType: outputType] autorelease];
+    MPSGraphTensorData* outputTensorData = allocMPSGraphTensorData(outputBuffer, outputShape, outputType);
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
       cachedGraph->outputTensor : outputTensorData
     };
@@ -847,7 +842,7 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst) {
 
     MTLSize threadsPerThreadgroup = MTLSizeMake(threadsPerThreadgroup_, 1, 1);
     [computeEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadsPerThreadgroup];
-    mpsStream->commitAdaptive({src, output}, gatherPSO);
+    mpsStream->commitAdaptive(src, output, gatherPSO);
   });
 
   return (dst.has_storage()) ? dst : output;
@@ -909,7 +904,7 @@ Tensor& scatterViewTensor(const at::Tensor& src, at::Tensor& output){
 
       MTLSize threadsPerThreadgroup = MTLSizeMake(threadsPerThreadgroup_, 1, 1);
       [computeEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadsPerThreadgroup];
-      mpsStream->commitAdaptive({src, output}, scatterPSO);
+      mpsStream->commitAdaptive(src, output, scatterPSO);
     }
   });
 

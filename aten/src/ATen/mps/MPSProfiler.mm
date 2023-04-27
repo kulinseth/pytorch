@@ -244,7 +244,8 @@ uint64_t MPSProfiler::beginProfileKernel(const void* handle, const std::string& 
 
 uint64_t MPSProfiler::beginProfileKernel(const void* handle, const std::string& kernelName, const TensorList& tensors) {
   if (isOperationProfilingEnabled()) {
-    std::string profilerStrKey = OperationInfo::buildKernelString(kernelName, tensors);
+    const bool includeBufferId = m_log_options & LogOptions::INCLUDE_BUFFER_ID;
+    std::string profilerStrKey = OperationInfo::buildKernelString(kernelName, tensors, includeBufferId);
     return beginProfileKernel(handle, profilerStrKey, false);
   }
   return 0;
@@ -276,12 +277,14 @@ void MPSProfiler::endProfileKernel(const void* handle, SyncType syncType) {
 
 uint64_t MPSProfiler::beginProfileCPUFallback(const std::string& opName, const TensorList& tensors) {
   if (m_cpu_fb_info_list.count(opName) == 0) {
-    auto cpuFbInfo = std::make_unique<CpuFbInfo>(opName, ++m_cpu_fb_counter);
+    auto cpuFbInfo = std::make_unique<CpuFbInfo>(++m_cpu_fb_counter, opName);
     m_cpu_fb_info_list.emplace(opName, std::move(cpuFbInfo));
   }
   auto& cpuFbInfo = *m_cpu_fb_info_list[opName];
   cpuFbInfo.runCount++;
   cpuFbInfo.startTime = std::clock();
+  const bool includeBufferId = m_log_options & LogOptions::INCLUDE_BUFFER_ID;
+  cpuFbInfo.strKey = OperationInfo::buildKernelString(opName, tensors, includeBufferId);
   cpuFbInfo.updateCopyOverhead(tensors);
   beginProfileExecution(cpuFbInfo, true);
 
@@ -305,10 +308,11 @@ uint64_t MPSProfiler::beginProfileCopy(const void* srcBuffer, const void* dstBuf
   if (!isCopyProfilingEnabled()) {
     return 0;
   }
+  const bool includeBufferId = m_log_options & LogOptions::INCLUDE_BUFFER_ID;
   const uint64_t profileId = ++m_copy_counter;
   auto copyInfo = std::make_unique<CopyInfo>(dstBuffer, length, profileId, isNonBlocking, usesBlitter);
-  copyInfo->srcStrKey = CopyInfo::buildTensorString(srcBuffer, srcTensor);
-  copyInfo->dstStrKey = CopyInfo::buildTensorString(dstBuffer, dstTensor);
+  copyInfo->srcStrKey = CopyInfo::buildTensorString(srcBuffer, srcTensor, includeBufferId);
+  copyInfo->dstStrKey = CopyInfo::buildTensorString(dstBuffer, dstTensor, includeBufferId);
   copyInfo->kind = CopyInfo::getCopyKind(srcBuffer, dstBuffer, srcTensor, dstTensor);
   if (!usesBlitter) {
     // for copies that don't use blitters, we measure CPU time
