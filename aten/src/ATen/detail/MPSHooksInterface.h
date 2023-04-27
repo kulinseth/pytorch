@@ -16,56 +16,69 @@ class Context;
 
 namespace at {
 
+
 struct TORCH_API MPSHooksInterface {
+  // this fails the implementation if MPSHooks functions are called, but
+  // MPS backend is not present.
+  #define FAIL_MPSHOOKS_FUNC(func) \
+    AT_ERROR("Cannot execute ", func ,"() without MPS backend.");
+
   virtual ~MPSHooksInterface() = default;
 
   // Initialize the MPS library state
   virtual void initMPS() const {
-    AT_ERROR("Cannot initialize MPS without MPS backend.");
+    FAIL_MPSHOOKS_FUNC(__func__);
   }
-
   virtual bool hasMPS() const {
     return false;
   }
-
   virtual bool isOnMacOS13orNewer(unsigned minor = 0) const {
-    AT_ERROR("MPS backend is not available.");
+    FAIL_MPSHOOKS_FUNC(__func__);
   }
-
   virtual const Generator& getDefaultMPSGenerator() const {
-    AT_ERROR("Cannot get default MPS generator without MPS backend.");
+    FAIL_MPSHOOKS_FUNC(__func__);
   }
-
   virtual Allocator* getMPSDeviceAllocator() const {
-    AT_ERROR("MPSDeviceAllocator requires MPS.");
+    FAIL_MPSHOOKS_FUNC(__func__);
   }
-
   virtual void deviceSynchronize() const {
-    AT_ERROR("Cannot synchronize MPS device without MPS backend.");
+    FAIL_MPSHOOKS_FUNC(__func__);
   }
-
   virtual void emptyCache() const {
-    AT_ERROR("Cannot execute emptyCache() without MPS backend.");
+    FAIL_MPSHOOKS_FUNC(__func__);
   }
-
   virtual size_t getCurrentAllocatedMemory() const {
-    AT_ERROR("Cannot execute getCurrentAllocatedMemory() without MPS backend.");
+    FAIL_MPSHOOKS_FUNC(__func__);
   }
-
   virtual size_t getDriverAllocatedMemory() const {
-    AT_ERROR("Cannot execute getDriverAllocatedMemory() without MPS backend.");
+    FAIL_MPSHOOKS_FUNC(__func__);
   }
-
   virtual void setMemoryFraction(double /*ratio*/) const {
-    AT_ERROR("Cannot execute setMemoryFraction() without MPS backend.");
+    FAIL_MPSHOOKS_FUNC(__func__);
   }
-
   virtual void profilerStartTrace(const string& mode, bool waitUntilCompleted) const {
-    AT_ERROR("Cannot execute profilerStartTrace() without MPS backend.");
+    FAIL_MPSHOOKS_FUNC(__func__);
   }
-
   virtual void profilerStopTrace() const {
-    AT_ERROR("Cannot execute profilerStopTrace() without MPS backend.");
+    FAIL_MPSHOOKS_FUNC(__func__);
+  }
+  virtual id_t acquireEvent(bool enable_timing) const {
+    FAIL_MPSHOOKS_FUNC(__func__);
+  }
+  virtual void releaseEvent(id_t event_id) const {
+    FAIL_MPSHOOKS_FUNC(__func__);
+  }
+  virtual void recordEvent(id_t event_id) const {
+    FAIL_MPSHOOKS_FUNC(__func__);
+  }
+  virtual void waitForEvent(id_t event_id) const {
+    FAIL_MPSHOOKS_FUNC(__func__);
+  }
+  virtual void synchronizeEvent(id_t event_id) const {
+    FAIL_MPSHOOKS_FUNC(__func__);
+  }
+  virtual bool queryEvent(id_t event_id) const {
+    FAIL_MPSHOOKS_FUNC(__func__);
   }
 };
 
