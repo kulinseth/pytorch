@@ -366,6 +366,8 @@ public:
   // stats logging could run either from destructor or signal handler
   // so this is used to check if logging has already started.
   std::atomic_bool hasLoggedStats{false};
+  // indicates there are pending completionHandler callbacks that haven't been called yet.
+  std::atomic_bool hasPendingCompletionHandlers{false};
   // used to capture sigint signal to log profiling stats
   static struct sigaction currentSigint, previousSigint;
 

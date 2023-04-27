@@ -413,7 +413,10 @@ bool MPSHeapAllocatorImpl::release_cached_buffers() {
   // before releasing the buffers make sure the command buffer has finished.
   // we need to release the lock temporarily as synchronizing may cause deadlock with completion handlers.
   m_mutex.unlock();
-  m_stream->addCompletedHandler(^(id <MTLCommandBuffer>) { freeInactiveBuffers(); }, SyncType::COMMIT_AND_WAIT);
+  auto stream = getDefaultMPSStream();
+  dispatch_sync(stream->queue(), ^() {
+    stream->synchronize(SyncType::COMMIT_AND_WAIT);
+  });
   m_mutex.lock();
   // Free all cached blocks to system allocator
   for (const auto& poolIt : m_pools) {
@@ -569,6 +572,8 @@ bool MPSHeapAllocatorImpl::waitForEvents(c10::ArrayRef<void*> buffers) {
         std::unique_lock<std::mutex> lock(m_gpu_sync_mutex);
         m_gpu_sync_cv.wait(lock, [&buffer_block]{ return buffer_block->gpu_sync_completed; });
         buffer_block->gpu_sync_completed = false;
+	// after waiting, it's a good time to free some pending inactive buffers
+	freeInactiveBuffers();
         waitedForEvent |= buffer_block->retainCount() <= 1;
       } else {
         // even if one of the buffers weren't recorded beforehand, we return

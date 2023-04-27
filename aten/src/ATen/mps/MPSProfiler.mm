@@ -46,7 +46,12 @@ MPSProfiler::MPSProfiler(): m_os_log_events(nullptr), m_os_log_intervals(nullptr
 
 MPSProfiler::~MPSProfiler() {
   // first make sure completion handlers are completed
-  getDefaultMPSStream()->synchronize(SyncType::COMMIT_AND_WAIT);
+  auto stream = getDefaultMPSStream();
+  dispatch_sync(stream->queue(), ^() {
+    if (hasPendingCompletionHandlers) {
+      stream->synchronize(SyncType::COMMIT_AND_WAIT);
+    }
+  });
   logProfilingStats();
 
   if (m_os_log_events) {
@@ -390,6 +395,7 @@ void MPSProfiler::addProfilerCompletedHandler(BaseInfo& info, SyncType syncType)
   // reset signpostIds for sanity check on next call
   info.intervalSignpostId = 0;
   info.eventSignpostId = 0;
+  hasPendingCompletionHandlers = true;
 
   auto m_stream = getDefaultMPSStream();
   // NOTE: the following block isn't thread-safe
@@ -398,6 +404,7 @@ void MPSProfiler::addProfilerCompletedHandler(BaseInfo& info, SyncType syncType)
     CFTimeInterval schedulingTime = (cb.kernelEndTime - cb.kernelStartTime) * 1000.0;
 
     endProfileExecution(info, eventSignpostId, intervalSignpostId, gpuTime, schedulingTime);
+    hasPendingCompletionHandlers = false;
   }];
 
   m_stream->synchronize((m_profile_options & ProfileOptions::WAIT_UNTIL_COMPLETED) ?
