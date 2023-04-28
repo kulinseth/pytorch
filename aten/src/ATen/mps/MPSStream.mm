@@ -34,6 +34,8 @@ MPSStream::MPSStream(Stream stream) : _stream(stream) {
   // internal CommitAndContinue heuristic of MPSGraph is disabled, and we
   // control it via Adaptive Commit in PyTorch-side
   _executionDescriptor.enableCommitAndContinue = false;
+
+  // Choose level which optimizes for GPU
   _compilationDescriptor.optimizationLevel = MPSGraphOptimizationLevel0;
   _executionDescriptor.compilationDescriptor =  _compilationDescriptor;
 }
