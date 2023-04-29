@@ -14,6 +14,7 @@ struct MPSHooks : public at::MPSHooksInterface {
   void initMPS() const override;
   bool hasMPS() const override;
   bool isOnMacOS13orNewer(unsigned minor) const override;
+  void* getMTLBuffer() const override;
   Allocator* getMPSDeviceAllocator() const override;
   const Generator& getDefaultMPSGenerator() const override;
   void deviceSynchronize() const override;

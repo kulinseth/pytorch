@@ -18,6 +18,10 @@ bool MPSHooks::hasMPS() const {
   return at::mps::is_available();
 }
 
+void* MPSHooks::getMTLBuffer() const {
+  return (void*)getCurrentMPSStream()->commandBuffer();
+}
+
 bool MPSHooks::isOnMacOS13orNewer(unsigned minor) const {
   switch (minor) {
     case 0:

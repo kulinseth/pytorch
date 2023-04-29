@@ -32,6 +32,10 @@ struct TORCH_API MPSHooksInterface {
     AT_ERROR("MPS backend is not available.");
   }
 
+  virtual void* getMTLBuffer() const {
+    AT_ERROR("getMTLBuffer is not available.");
+  }
+
   virtual const Generator& getDefaultMPSGenerator() const {
     AT_ERROR("Cannot get default MPS generator without MPS backend.");
   }
