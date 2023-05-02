@@ -686,7 +686,6 @@ void nllnd_loss_forward_impl
         };
 
         runMPSGraph(stream, cachedGraph->graph(), feeds, results);
-
     }
 
     return;

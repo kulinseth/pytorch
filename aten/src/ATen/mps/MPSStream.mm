@@ -25,6 +25,8 @@ MPSStream::MPSStream(Stream stream) : _stream(stream) {
   _serialQueue = dispatch_queue_create("metal gpu stream", nullptr);
   _executionDescriptor = [MPSGraphExecutionDescriptor new];
   _executableExecutionDescriptor = [MPSGraphExecutableExecutionDescriptor new];
+  _compilationDescriptor = [MPSGraphCompilationDescriptor new];
+
   // disable commitAndContinue if Signpost tracing is enabled
   if (getMPSProfiler().isSignpostTracingEnabled()) {
     _enableCommitAndContinue = false;
@@ -32,15 +34,21 @@ MPSStream::MPSStream(Stream stream) : _stream(stream) {
   // internal CommitAndContinue heuristic of MPSGraph is disabled, and we
   // control it via Adaptive Commit in PyTorch-side
   _executionDescriptor.enableCommitAndContinue = false;
+
+  // Choose level which optimizes for GPU
+  _compilationDescriptor.optimizationLevel = MPSGraphOptimizationLevel0;
+  _executionDescriptor.compilationDescriptor =  _compilationDescriptor;
 }
 
 MPSStream::~MPSStream() {
   [_commandQueue release];
   _commandQueue = nil;
   [_executionDescriptor release];
+  [_compilationDescriptor release];
   [_executableExecutionDescriptor release];
 
   _executionDescriptor = nil;
+  _compilationDescriptor = nil;
   _executableExecutionDescriptor = nil;
 
   assert(_commandBuffer == nil);
