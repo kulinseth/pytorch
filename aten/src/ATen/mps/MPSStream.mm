@@ -309,7 +309,7 @@ void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDicti
         synchronize(_syncType);
       }
     }
-  });
+ });
 }
 
 bool MPSStream::updateCommandBufferResourceSize(NSArray<MPSGraphTensorData*> *feeds,
@@ -356,6 +356,115 @@ MPSStream* getCurrentMPSStream() {
 
 MPSStream* getDefaultMPSStream() {
   return MPSStreamImpl::getInstance();
+}
+
+//-----------------------------------------------------------------
+//  MPSEvent
+//-----------------------------------------------------------------
+
+MPSEvent::MPSEvent(bool needsListener) :
+    _stream(getDefaultMPSStream()),
+    _event([_stream->device() newSharedEvent]) {
+
+  if (needsListener) {
+    _listener = [[MTLSharedEventListener alloc] init];
+  }
+}
+
+MPSEvent::~MPSEvent() {
+  if (_event) {
+    [_event release];
+    _event = nil;
+  }
+  if (_listener) {
+    [_listener release];
+    _listener = nil;
+  }
+}
+
+void MPSEvent::recordEventLocked(bool syncEvent) {
+  // active encoders must end before encoding or waiting
+  _stream->endKernelCoalescing();
+  ++_signalCounter;
+
+  id<MTLCommandBuffer> commandBuffer = _stream->commandBuffer();
+  [commandBuffer encodeSignalEvent:_event value:_signalCounter];
+  if (syncEvent) {
+    _stream->synchronize(SyncType::COMMIT);
+  }
+}
+
+bool MPSEvent::waitForEventLocked(bool syncEvent) {
+  // check if event is not recorded yet
+  if (_event.signaledValue >= _signalCounter) {
+    return false;
+  }
+  // active encoders must end before encoding or waiting
+  _stream->endKernelCoalescing();
+  id<MTLCommandBuffer> commandBuffer = _stream->commandBuffer();
+  [commandBuffer encodeWaitForEvent:_event value:_signalCounter];
+  if (syncEvent) {
+    _stream->synchronize(SyncType::COMMIT);
+  }
+  return true;
+}
+
+bool MPSEvent::notifyEventLocked(bool syncEvent, MTLSharedEventNotificationBlock block) {
+  TORCH_INTERNAL_ASSERT_DEBUG_ONLY(_listener);
+  // check if event is not recorded yet
+  if (_event.signaledValue >= _signalCounter) {
+    return false;
+  }
+
+  [_event notifyListener:_listener atValue:_signalCounter block:block];
+  if (syncEvent) {
+    _stream->synchronize(SyncType::COMMIT);
+  }
+  return true;
+}
+
+void MPSEvent::recordEvent(bool needsLock, bool syncEvent) {
+  if (!needsLock) {
+    recordEventLocked(syncEvent);
+    return;
+  }
+  dispatch_sync(_stream->queue(), ^() {
+    @autoreleasepool {
+      recordEventLocked(syncEvent);
+    }
+  });
+}
+
+bool MPSEvent::waitForEvent(bool needsLock, bool syncEvent) {
+  if (!needsLock) {
+    return waitForEventLocked(syncEvent);
+  }
+  __block bool waited = false;
+
+  dispatch_sync(_stream->queue(), ^() {
+    @autoreleasepool {
+      waited = waitForEventLocked(syncEvent);
+    }
+  });
+  return waited;
+}
+
+bool MPSEvent::notifyEvent(bool needsLock, bool syncEvent, MTLSharedEventNotificationBlock block) {
+  if (!needsLock) {
+    return notifyEventLocked(syncEvent, block);
+  }
+  __block bool scheduledNotify = false;
+  dispatch_sync(_stream->queue(), ^() {
+    @autoreleasepool {
+      scheduledNotify = notifyEventLocked(syncEvent, block);
+    }
+  });
+  return scheduledNotify;
+}
+
+bool MPSEvent::queryEvent() const {
+  // return false if not recorded or signaled yet
+  return _signalCounter && (_event.signaledValue >= _signalCounter);
 }
 
 } // namespace mps

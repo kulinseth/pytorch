@@ -145,5 +145,34 @@ class TORCH_API MPSStreamImpl
   MPSStreamImpl();
 };
 
+
+//-----------------------------------------------------------------
+//  MPSEvent
+//-----------------------------------------------------------------
+
+struct TORCH_API MPSEvent
+{
+  MPSEvent(bool needsListener = false);
+  ~MPSEvent();
+  MTLSharedEvent_t event() const {return _event; }
+
+  void recordEvent(bool needsLock, bool syncEvent = false);
+  bool waitForEvent(bool needsLock, bool syncEvent = false);
+  bool notifyEvent(bool needsLock, bool syncEvent, MTLSharedEventNotificationBlock block);
+  bool queryEvent() const;
+private:
+  uint64_t _signalCounter = 0;
+  MPSStream* _stream = nullptr;
+  MTLSharedEvent_t _event = nullptr;
+  MTLSharedEventListener* _listener = nullptr;
+
+  void recordEventLocked(bool syncEvent);
+  bool waitForEventLocked(bool syncEvent);
+  bool notifyEventLocked(bool syncEvent, MTLSharedEventNotificationBlock block);
+};
+
+typedef MPSEvent* mpsEvent_t;
+
+
 } // namespace mps
 } // namespace at

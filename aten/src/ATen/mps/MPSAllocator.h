@@ -4,7 +4,6 @@
 
 #include <ATen/mps/MPSAllocatorInterface.h>
 #include <ATen/mps/MPSStream.h>
-#include <ATen/mps/MPSEvent.h>
 #include <cstdio>
 #include <mutex>
 #include <set>
@@ -69,7 +68,9 @@ struct BufferBlock
   // counter to assign unique ids to buffer blocks
   static uint64_t buffer_counter;
   // Metal events used to sync GPU/CPU operations on the shared-storage buffers
-  MPSEventPtr event;
+  c10::optional<MPSEvent> event = c10::nullopt;
+  // CondVar predicate used to sync GPU/CPU operations on the shared-storage buffers
+  bool gpu_sync_completed = false;
 
   BufferBlock(size_t Size, size_t RequestedSize = 0, const id<MTLBuffer> Buffer = nullptr,
               HeapBlock* Heap = nullptr) :
@@ -260,9 +261,7 @@ class MPSHeapAllocatorImpl
 public:
   explicit MPSHeapAllocatorImpl() :
     m_device(at::mps::MPSDevice::getInstance()->device()),
-    m_max_buffer_size([m_device maxBufferLength]),
-    m_stream(getDefaultMPSStream()),
-    m_event_pool(getMPSEventPool()) {
+    m_max_buffer_size([m_device maxBufferLength]), m_stream(getDefaultMPSStream()) {
     init_allocator();
   }
   ~MPSHeapAllocatorImpl() {
@@ -368,8 +367,9 @@ private:
   uint32_t m_debug_verbosity = DebugVerbosity::SILENT;
   // default MPS stream
   MPSStream* m_stream;
-  // we hold a reference to MPSEventPool so it could get destroyed after MPSAllocator
-  std::shared_ptr<MPSEventPool> m_event_pool;
+  // used to sync the Shared buffers with CPU
+  std::mutex m_gpu_sync_mutex{};
+  std::condition_variable m_gpu_sync_cv{};
 
   void init_allocator();
   HeapBlock* get_free_heap(AllocParams& params);

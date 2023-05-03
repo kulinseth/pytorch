@@ -5,7 +5,6 @@
 #include <c10/macros/Macros.h>
 #include <c10/util/Exception.h>
 #include <ATen/mps/MPSStream.h>
-#include <ATen/mps/MPSEvent.h>
 
 #ifdef __OBJC__
 #include <Foundation/Foundation.h>
@@ -25,8 +24,6 @@
 
 namespace at {
 namespace mps {
-
-typedef MPSEvent* mpsEvent_t;
 
 // TODO: Move the MPSGuardImpl to inherit from NoOpDeviceGuardImpl
 // https://github.com/pytorch/pytorch/issues/77170
