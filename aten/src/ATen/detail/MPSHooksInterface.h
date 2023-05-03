@@ -89,6 +89,9 @@ struct TORCH_API MPSHooksInterface {
   virtual bool queryEvent(id_t event_id) const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
+  virtual double elapsedTimeOfEvents(id_t start_event_id, id_t end_event_id) const {
+    FAIL_MPSHOOKS_FUNC(__func__);
+  }
 };
 
 struct TORCH_API MPSHooksArgs {};

@@ -187,8 +187,28 @@ static PyObject* MPSModule_synchronizeEvent(PyObject* _unused, PyObject* args) {
 static PyObject* MPSModule_queryEvent(PyObject* _unused, PyObject* args) {
   HANDLE_TH_ERRORS
   const uint32_t event_id = THPUtils_unpackUInt32(args);
-  return PyLong_FromUnsignedLong(
-      at::detail::getMPSHooks().queryEvent(event_id));
+
+  if (at::detail::getMPSHooks().queryEvent(event_id)) {
+    Py_RETURN_TRUE;
+  } else {
+    Py_RETURN_FALSE;
+  }
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_elapsedTimeOfEvents(
+    PyObject* _unused,
+    PyObject* args) {
+  HANDLE_TH_ERRORS
+  PyObject* start_event_o = nullptr;
+  PyObject* end_event_o = nullptr;
+  if (!PyArg_ParseTuple(args, "OO", &start_event_o, &end_event_o)) {
+    return nullptr;
+  }
+  const uint32_t start_event_id = THPUtils_unpackUInt32(start_event_o);
+  const uint32_t end_event_id = THPUtils_unpackUInt32(end_event_o);
+  return PyFloat_FromDouble(at::detail::getMPSHooks().elapsedTimeOfEvents(
+      start_event_id, end_event_id));
   END_HANDLE_TH_ERRORS
 }
 
@@ -231,6 +251,10 @@ static struct PyMethodDef _MPSModule_methods[] = {
     {"_mps_waitForEvent", MPSModule_waitForEvent, METH_O, nullptr},
     {"_mps_synchronizeEvent", MPSModule_synchronizeEvent, METH_O, nullptr},
     {"_mps_queryEvent", MPSModule_queryEvent, METH_O, nullptr},
+    {"_mps_elapsedTimeOfEvents",
+     MPSModule_elapsedTimeOfEvents,
+     METH_VARARGS,
+     nullptr},
     {nullptr}};
 
 PyMethodDef* python_functions() {

@@ -104,6 +104,9 @@ bool MPSHooks::queryEvent(id_t event_id) const {
   return m_event_pool->queryEvent(event_id);
 }
 
+double MPSHooks::elapsedTimeOfEvents(id_t start_event_id, id_t end_event_id) const {
+  return m_event_pool->elapsedTime(start_event_id, end_event_id);
+}
 
 using at::MPSHooksRegistry;
 using at::RegistererMPSHooksRegistry;

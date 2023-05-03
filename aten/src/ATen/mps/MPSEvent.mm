@@ -23,7 +23,9 @@ void MPSEvent::recordLocked(bool syncEvent) {
   // active encoders must end before encoding or waiting
   m_stream->endKernelCoalescing();
   ++m_signalCounter;
-
+  if (m_enable_timing) {
+    notifyLocked(^(id<MTLSharedEvent>, uint64_t) { m_completion_time = getTime(); });
+  }
   id<MTLCommandBuffer> commandBuffer = m_stream->commandBuffer();
   [commandBuffer encodeSignalEvent:m_event value:m_signalCounter];
   if (syncEvent) {
@@ -99,6 +101,7 @@ bool MPSEvent::notify(bool needsLock, MTLSharedEventNotificationBlock block) {
 bool MPSEvent::synchronize() {
   bool scheduledNotify = notifyLocked(
                              ^(id<MTLSharedEvent>, uint64_t) {
+                               m_completion_time = getTime();
                                std::lock_guard<std::mutex> lock(m_cpu_sync_mutex);
                                m_cpu_sync_completed = true;
                                m_cpu_sync_cv.notify_one();
@@ -143,7 +146,6 @@ MPSEventPool::~MPSEventPool() {
   emptyCache();
 }
 
-
 MPSEventPtr MPSEventPool::acquireEvent(bool enable_timing, MPSStream* stream) {
   if (!stream) {
     stream = m_default_stream;
@@ -185,43 +187,52 @@ void MPSEventPool::releaseEvent(id_t event_id)  {
 }
 
 void MPSEventPool::recordEvent(id_t event_id, bool syncEvent) {
-  MPSEvent* event = nullptr;
-  {
-    std::lock_guard<std::recursive_mutex> lock(m_mutex);
-    TORCH_CHECK(m_in_use_events.count(event_id) > 0, "Invalid Event ID: ", event_id);
-    event = m_in_use_events[event_id].get();
-  }
+  MPSEvent* event = getInUseEvent(event_id);
   event->record(/*needsLock*/ true, syncEvent);
 }
 
 void MPSEventPool::waitForEvent(id_t event_id, bool syncEvent) {
-  MPSEvent* event = nullptr;
-  {
-    std::lock_guard<std::recursive_mutex> lock(m_mutex);
-    TORCH_CHECK(m_in_use_events.count(event_id) > 0, "Invalid Event ID: ", event_id);
-    event = m_in_use_events[event_id].get();
-  }
+  MPSEvent* event = getInUseEvent(event_id);
   event->wait(/*needsLock*/ true, syncEvent);
 }
 
 void MPSEventPool::synchronizeEvent(id_t event_id) {
-  MPSEvent* event = nullptr;
-  {
-    std::lock_guard<std::recursive_mutex> lock(m_mutex);
-    TORCH_CHECK(m_in_use_events.count(event_id) > 0, "Invalid Event ID: ", event_id);
-    event = m_in_use_events[event_id].get();
-  }
+  MPSEvent* event = getInUseEvent(event_id);
   event->synchronize();
 }
 
 bool MPSEventPool::queryEvent(id_t event_id) {
-  std::lock_guard<std::recursive_mutex> lock(m_mutex);
-  TORCH_CHECK(m_in_use_events.count(event_id) > 0, "Invalid Event ID: ", event_id);
-  MPSEvent* event = m_in_use_events[event_id].get();
-  // query the event with mutex locked
+  MPSEvent* event = getInUseEvent(event_id);
   return event->query();
 }
 
+double MPSEventPool::elapsedTime(id_t start_event_id, id_t end_event_id) {
+  // first make sure notifyListeners are called to capture events' completion times
+  dispatch_sync(m_default_stream->queue(), ^() {
+    m_default_stream->synchronize(SyncType::COMMIT_AND_WAIT);
+  });
+  std::lock_guard<std::recursive_mutex> lock(m_mutex);
+  MPSEvent* start_event = getInUseEvent(start_event_id, false);
+  MPSEvent* end_event = getInUseEvent(end_event_id, false);
+
+  const uint64_t start_time = start_event->getCompletionTime();
+  const uint64_t end_time = end_event->getCompletionTime();
+  TORCH_CHECK(start_time > 0 && end_time > 0, "Events were not created with argument 'enable_timing=True'");
+  TORCH_CHECK(end_time > start_time, "End event ", end_event_id, " was not recorded after start event ", start_event_id);
+  return double(end_time - start_time) * 1e-6;
+}
+
+MPSEvent* MPSEventPool::getInUseEvent(id_t event_id, bool locked) {
+  if (locked) {
+    m_mutex.lock();
+  }
+  TORCH_CHECK(m_in_use_events.count(event_id) > 0, "Invalid Event ID: ", event_id);
+  MPSEvent* event = m_in_use_events[event_id].get();
+  if (locked) {
+    m_mutex.unlock();
+  }
+  return event;
+}
 
 std::shared_ptr<MPSEventPool> getMPSEventPool() {
   static std::shared_ptr<MPSEventPool> event_pool =

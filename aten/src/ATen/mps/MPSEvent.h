@@ -30,6 +30,8 @@ public:
   void reset(MPSStream* stream, bool enable_timing);
   // returns the unique ID of the event instance
   id_t getID() const { return m_id; }
+  // returns the completion timestamp of the event
+  uint64_t getCompletionTime() const { return m_completion_time; }
 
 private:
   id_t m_id;
@@ -45,11 +47,14 @@ private:
   // CondVar predicate to sync the events created on this Stream with CPU
   bool m_cpu_sync_completed = false;
   // used to compute elapsed time
-  clock_t m_completion_time = 0;
+  uint64_t m_completion_time = 0;
 
   void recordLocked(bool syncEvent);
   bool waitLocked(bool syncEvent);
   bool notifyLocked(MTLSharedEventNotificationBlock block);
+  static double getTime() {
+    return clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW);
+  }
 };
 
 typedef std::unique_ptr<MPSEvent, std::function<void(MPSEvent*)>> MPSEventPtr;
@@ -69,6 +74,8 @@ public:
   void waitForEvent(id_t event_id, bool syncEvent);
   void synchronizeEvent(id_t event_id);
   bool queryEvent(id_t event_id);
+  // returns elapsed time between two recorded events in milliseconds
+  double elapsedTime(id_t start_event_id, id_t end_event_id);
 
 private:
   MPSStream* m_default_stream = nullptr;
@@ -80,6 +87,8 @@ private:
   std::unordered_map<id_t, MPSEventPtr> m_in_use_events{};
   uint64_t m_event_counter = 0;
   std::function<void(MPSEvent*)> m_default_deleter;
+
+  MPSEvent* getInUseEvent(id_t event_id, bool locked = true);
 };
 
 // shared_ptr is used to get MPSEventPool destroyed after dependent instances
