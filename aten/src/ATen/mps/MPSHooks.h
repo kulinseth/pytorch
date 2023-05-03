@@ -43,6 +43,7 @@ struct MPSHooks : public at::MPSHooksInterface {
   void waitForEvent(id_t event_id) const override;
   void synchronizeEvent(id_t event_id) const override;
   bool queryEvent(id_t event_id) const override;
+  double elapsedTimeOfEvents(id_t start_event_id, id_t end_event_id) const override;
 
 private:
   std::shared_ptr<MPSEventPool> m_event_pool;
