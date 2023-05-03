@@ -41,7 +41,16 @@ struct TORCH_API MPSHooksInterface {
   virtual Allocator* getMPSDeviceAllocator() const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
-  virtual void deviceSynchronize() const {
+  virtual void synchronizeStream() const {
+    FAIL_MPSHOOKS_FUNC(__func__);
+  }
+  virtual void commitStream() const {
+    FAIL_MPSHOOKS_FUNC(__func__);
+  }
+  virtual void* getCommandBuffer() const {
+    FAIL_MPSHOOKS_FUNC(__func__);
+  }
+  virtual void* getDispatchQueue() const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
   virtual void emptyCache() const {

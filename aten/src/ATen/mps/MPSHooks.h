@@ -20,7 +20,10 @@ struct MPSHooks : public at::MPSHooksInterface {
   const Generator& getDefaultMPSGenerator() const override;
 
   // MPSStream interface
-  void deviceSynchronize() const override;
+  void synchronizeStream() const override;
+  void commitStream() const override;
+  void* getCommandBuffer() const override;
+  void* getDispatchQueue() const override;
 
   // MPSAllocator interface
   Allocator* getMPSDeviceAllocator() const override;
