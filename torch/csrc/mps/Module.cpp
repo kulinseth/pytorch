@@ -4,6 +4,7 @@
 #include <torch/csrc/THP.h>
 #include <torch/csrc/python_headers.h>
 #include <torch/csrc/utils/python_numbers.h>
+#include <torch/csrc/utils/python_strings.h>
 
 // pthread.h is included for tracking bad forks
 #ifndef WIN32
@@ -94,8 +95,8 @@ static PyObject* MPSModule_setMemoryFraction(
       THPUtils_checkDouble(args), "invalid argument to setMemoryFraction()");
   double fraction = THPUtils_unpackDouble(args);
   at::detail::getMPSHooks().setMemoryFraction(fraction);
-  END_HANDLE_TH_ERRORS
   Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
 }
 
 static PyObject* MPSModule_currentAllocatedMemory(
@@ -113,6 +114,81 @@ static PyObject* MPSModule_driverAllocatedMemory(
   HANDLE_TH_ERRORS
   return PyLong_FromUnsignedLongLong(
       at::detail::getMPSHooks().getDriverAllocatedMemory());
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_profilerStartTrace(
+    PyObject* _unused,
+    PyObject* args) {
+  HANDLE_TH_ERRORS
+  PyObject* mode_string_o = nullptr;
+  PyObject* wait_until_completed_string_o = nullptr;
+  if (!PyArg_ParseTuple(
+          args, "OO", &mode_string_o, &wait_until_completed_string_o)) {
+    return nullptr;
+  }
+  const std::string mode = THPUtils_unpackString(mode_string_o);
+  const bool waitUntilCompleted =
+      THPUtils_unpackBool(wait_until_completed_string_o);
+  at::detail::getMPSHooks().profilerStartTrace(mode, waitUntilCompleted);
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_profilerStopTrace(
+    PyObject* _unused,
+    PyObject* noargs) {
+  HANDLE_TH_ERRORS
+  at::detail::getMPSHooks().profilerStopTrace();
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_acquireEvent(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  const bool enable_timing = THPUtils_unpackBool(args);
+  return PyLong_FromUnsignedLong(
+      at::detail::getMPSHooks().acquireEvent(enable_timing));
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_releaseEvent(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  const uint32_t event_id = THPUtils_unpackUInt32(args);
+  at::detail::getMPSHooks().releaseEvent(event_id);
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_recordEvent(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  const uint32_t event_id = THPUtils_unpackUInt32(args);
+  at::detail::getMPSHooks().recordEvent(event_id);
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_waitForEvent(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  const uint32_t event_id = THPUtils_unpackUInt32(args);
+  at::detail::getMPSHooks().waitForEvent(event_id);
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_synchronizeEvent(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  const uint32_t event_id = THPUtils_unpackUInt32(args);
+  at::detail::getMPSHooks().synchronizeEvent(event_id);
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_queryEvent(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  const uint32_t event_id = THPUtils_unpackUInt32(args);
+  return PyLong_FromUnsignedLong(
+      at::detail::getMPSHooks().queryEvent(event_id));
   END_HANDLE_TH_ERRORS
 }
 
@@ -141,6 +217,20 @@ static struct PyMethodDef _MPSModule_methods[] = {
      MPSModule_driverAllocatedMemory,
      METH_NOARGS,
      nullptr},
+    {"_mps_profilerStartTrace",
+     MPSModule_profilerStartTrace,
+     METH_VARARGS,
+     nullptr},
+    {"_mps_profilerStopTrace",
+     MPSModule_profilerStopTrace,
+     METH_NOARGS,
+     nullptr},
+    {"_mps_acquireEvent", MPSModule_acquireEvent, METH_O, nullptr},
+    {"_mps_releaseEvent", MPSModule_releaseEvent, METH_O, nullptr},
+    {"_mps_recordEvent", MPSModule_recordEvent, METH_O, nullptr},
+    {"_mps_waitForEvent", MPSModule_waitForEvent, METH_O, nullptr},
+    {"_mps_synchronizeEvent", MPSModule_synchronizeEvent, METH_O, nullptr},
+    {"_mps_queryEvent", MPSModule_queryEvent, METH_O, nullptr},
     {nullptr}};
 
 PyMethodDef* python_functions() {

@@ -25,20 +25,30 @@ MPSStream::MPSStream(Stream stream) : _stream(stream) {
   _serialQueue = dispatch_queue_create("metal gpu stream", nullptr);
   _executionDescriptor = [MPSGraphExecutionDescriptor new];
   _executableExecutionDescriptor = [MPSGraphExecutableExecutionDescriptor new];
+  _compilationDescriptor = [MPSGraphCompilationDescriptor new];
+
   // disable commitAndContinue if Signpost tracing is enabled
   if (getMPSProfiler().isSignpostTracingEnabled()) {
     _enableCommitAndContinue = false;
   }
-  _executionDescriptor.enableCommitAndContinue = _enableCommitAndContinue;
+  // internal CommitAndContinue heuristic of MPSGraph is disabled, and we
+  // control it via Adaptive Commit in PyTorch-side
+  _executionDescriptor.enableCommitAndContinue = false;
+
+  // Choose level which optimizes for GPU
+  _compilationDescriptor.optimizationLevel = MPSGraphOptimizationLevel0;
+  _executionDescriptor.compilationDescriptor =  _compilationDescriptor;
 }
 
 MPSStream::~MPSStream() {
   [_commandQueue release];
   _commandQueue = nil;
   [_executionDescriptor release];
+  [_compilationDescriptor release];
   [_executableExecutionDescriptor release];
 
   _executionDescriptor = nil;
+  _compilationDescriptor = nil;
   _executableExecutionDescriptor = nil;
 
   assert(_commandBuffer == nil);
@@ -74,6 +84,9 @@ void MPSStream::synchronize(SyncType syncType) {
       // or when the sizes attached to the active command buffer exceeds the threshold
       if (getIMPSAllocator()->getLowWatermarkValue() <= 0 ||
           _commandBufferResourceSize > kCmdBufAdaptiveCommitThreshold) {
+        [commandBuffer() addCompletedHandler:(^(id <MTLCommandBuffer>) {
+          getIMPSAllocator()->freeInactiveBuffers();
+        })];
         commit();
       }
       break;
@@ -108,12 +121,23 @@ void MPSStream::commitAndWait() {
   }
 
   if (_commandBuffer) {
-    [_commandBuffer commit];
-    [_commandBuffer waitUntilCompleted];
-    [_commandBuffer release];
-    _commandBuffer = nil;
+    if (_enableCommitAndContinue) {
+      // no need to release the command buffer with CommitAndContinue
+      // This improves the performance by eliminating the overhead of recreating
+      // command buffers, and avoiding distruption to commitAndContinue's internal cache
+      id<MTLCommandBuffer> rootCommandBuffer = _commandBuffer.rootCommandBuffer;
+      [_commandBuffer commitAndContinue];
+      [rootCommandBuffer waitUntilCompleted];
+    } else {
+      [_commandBuffer commit];
+      [_commandBuffer waitUntilCompleted];
+      [_commandBuffer release];
+      _commandBuffer = nil;
+    }
     // reset the accumulated resource sizes for command buffer
     _commandBufferResourceSize = 0;
+    // after waiting, it's a good time to free some pending inactive buffers
+    getIMPSAllocator()->freeInactiveBuffers();
   }
 }
 
@@ -122,17 +146,33 @@ void MPSStream::commitAndContinue() {
   [_commandBuffer commitAndContinue];
 }
 
-void MPSStream::commitAdaptive(const TensorList& tensors, void* profilerHandle) {
-  if (_enableCommitAndContinue) {
-    for (const auto& tensor : tensors) {
+void MPSStream::commitAdaptive(const TensorList& inputTensors,
+                               const TensorList& outputTensors, void* profilerHandle) {
+  std::vector<void*> buffers;
+  bool isOutputTensor = false;
+
+  for (const auto& tensorsList : {inputTensors, outputTensors}) {
+    for (const auto& tensor : tensorsList) {
       _commandBufferResourceSize += tensor.nbytes();
+      if (isOutputTensor) {
+        buffers.push_back(tensor.storage().data());
+      }
+    }
+    isOutputTensor = true;
+  }
+
+  SyncType syncType = SyncType::COMMIT_ADAPTIVE;
+  if (!buffers.empty()) {
+    bool recordedEvents = getIMPSAllocator()->recordEvents(buffers);
+    if (recordedEvents) {
+      syncType = SyncType::COMMIT;
     }
   }
   auto& profiler = getMPSProfiler();
-  if (profiler.isOperationProfilingEnabled()) {
-    profiler.endProfileKernel(profilerHandle, SyncType::COMMIT_ADAPTIVE);
+  if (profiler.isOperationProfilingEnabled() && profilerHandle) {
+    profiler.endProfileKernel(profilerHandle, syncType);
   } else {
-    synchronize(SyncType::COMMIT_ADAPTIVE);
+    synchronize(syncType);
   }
 }
 
@@ -150,7 +190,6 @@ void MPSStream::flush() {
     // if commitAndContinue is disabled (e.g., for Profiler), we keep the command
     // buffer so we could wait on it later, if required.
     if (!_enableCommitAndContinue) {
-      TORCH_INTERNAL_ASSERT(getMPSProfiler().isSignpostTracingEnabled());
       _prevCommandBuffer = _commandBuffer;
     } else {
       [_commandBuffer release];
@@ -159,10 +198,11 @@ void MPSStream::flush() {
   }
 }
 
-void MPSStream::addCompletedHandler(MTLCommandBufferHandler block) {
+void MPSStream::addCompletedHandler(MTLCommandBufferHandler block, SyncType syncType) {
  dispatch_sync(_serialQueue, ^() {
     @autoreleasepool {
       [commandBuffer() addCompletedHandler:block];
+      synchronize(syncType);
     }
   });
 }
@@ -200,10 +240,9 @@ void MPSStream::copy(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer,
                              size:(NSUInteger)length];
       [blitEncoder endEncoding];
 
-      auto& profiler = getMPSProfiler();
-      // check if copy profiling is enabled
-      if (profiler.isCopyProfilingEnabled()) {
-        profiler.endProfileCopy(profileId, syncType);
+      // profilerId has a value only if copy profiling is enabled
+      if (profileId) {
+        getMPSProfiler().endProfileCopy(profileId, syncType);
       } else {
         synchronize(syncType);
       }
@@ -255,11 +294,13 @@ void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDicti
                       resultsDictionary:results
                     executionDescriptor:_executionDescriptor];
       }
-
-      updateCommandBufferResourceSize([feeds allValues]);
       // if commitAndContinue is disabled, we need to always commit manually after encoding
       SyncType _syncType = _enableCommitAndContinue == false ? SyncType::COMMIT : syncType;
 
+      bool recordedEvents = updateCommandBufferResourceSize([feeds allValues], [results allValues]);
+      if (recordedEvents && _syncType != SyncType::COMMIT_AND_WAIT) {
+        _syncType = SyncType::COMMIT;
+      }
       // check if graph execution profiling is enabled
       if (isGraphProfilingEnabled) {
         // with profiler enabled, we commit after adding the completedHandler in MPSProfiler
@@ -268,16 +309,29 @@ void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDicti
         synchronize(_syncType);
       }
     }
- });
+  });
 }
 
-void MPSStream::updateCommandBufferResourceSize(NSArray<MPSGraphTensorData*> *feeds) {
-  if (_enableCommitAndContinue) {
-    for (MPSGraphTensorData* tensorData in feeds) {
-      size_t resource_size = tensorData.mpsndarray.resourceSize;
-      _commandBufferResourceSize += resource_size;
+bool MPSStream::updateCommandBufferResourceSize(NSArray<MPSGraphTensorData*> *feeds,
+                                                NSArray<MPSGraphTensorData*> *results) {
+  std::vector<void*> buffers;
+  for (const auto& tensorsDataList : {feeds, results}) {
+    for (MPSGraphTensorData* tensorData in tensorsDataList) {
+      _commandBufferResourceSize += tensorData.mpsndarray.resourceSize;
+      if (tensorsDataList == results && _activeResources.count(tensorData)) {
+        buffers.push_back(_activeResources[tensorData]);
+      }
     }
   }
+  bool recordedEvents = false;
+  if (!buffers.empty()) {
+    recordedEvents = getIMPSAllocator()->recordEvents(buffers);
+  }
+  return recordedEvents;
+}
+
+void MPSStream::addActiveResource(MPSGraphTensorData* tensorData, void* buffer) {
+  _activeResources[tensorData] = buffer;
 }
 
 //-----------------------------------------------------------------
@@ -302,79 +356,6 @@ MPSStream* getCurrentMPSStream() {
 
 MPSStream* getDefaultMPSStream() {
   return MPSStreamImpl::getInstance();
-}
-
-//-----------------------------------------------------------------
-//  MPSEvent
-//-----------------------------------------------------------------
-
-MPSEvent::MPSEvent(bool deferInitialization) :
-    is_initialized(false), _signalCounter(0), _stream(nil), _event(nil), _listener(nil) {
-  if (!deferInitialization) {
-    initialize();
-  }
-}
-
-MPSEvent::~MPSEvent() {
-  if (_event) {
-    [_event release];
-    _event = nil;
-  }
-  if (_listener) {
-    [_listener release];
-    _listener = nil;
-  }
-}
-
-void MPSEvent::initialize() {
-  _stream = getDefaultMPSStream();
-  _event = [_stream->device() newSharedEvent];
-  _listener = [[MTLSharedEventListener alloc] init];
-  is_initialized = true;
-}
-
-void MPSEvent::recordEvent(bool syncEvent) {
-  if (!is_initialized)
-    initialize();
-
-  dispatch_sync(_stream->queue(), ^() {
-    @autoreleasepool {
-      ++_signalCounter;
-      id<MTLCommandBuffer> commandBuffer = _stream->commandBuffer();
-      [commandBuffer encodeSignalEvent:_event value:_signalCounter];
-      if (syncEvent)
-        _stream->synchronize(SyncType::COMMIT);
-    }
-  });
-}
-
-void MPSEvent::waitForEvent(bool syncEvent) {
-  TORCH_INTERNAL_ASSERT(is_initialized);
-  dispatch_sync(_stream->queue(), ^() {
-    @autoreleasepool {
-      id<MTLCommandBuffer> commandBuffer = _stream->commandBuffer();
-      [commandBuffer encodeWaitForEvent:_event value:_signalCounter];
-      if (syncEvent)
-        _stream->synchronize(SyncType::COMMIT);
-    }
-  });
-}
-
-void MPSEvent::notifyEvent(MTLSharedEventNotificationBlock block)
-{
-  if (!is_initialized)
-    initialize();
-  dispatch_sync(_stream->queue(), ^() {
-    @autoreleasepool {
-      ++_signalCounter;
-      [_event notifyListener:_listener atValue:_signalCounter block:block];
-    }
-  });
-}
-
-bool MPSEvent::queryEvent() const {
-  // return false if not recorded or signaled yet
-  return _signalCounter && (_event.signaledValue >= _signalCounter);
 }
 
 } // namespace mps

@@ -56,15 +56,23 @@ struct BaseInfo {
     // The interval-based signposts will have "duration" as well as accumulated
     // total GPU time, up to the point of execution.
     return fmt::format("{}{}",
-                       gpuTime > 0.0 ? fmt::format(", GPU={:.3f} ms", gpuTime) : "",
-                       schedulingTime > 0.0 ? fmt::format(", KRNL={:.3f} ms", schedulingTime) : "");
+                       gpuTime > 0.0 ? fmt::format(", gpu={:.3f} ms", gpuTime) : "",
+                       schedulingTime > 0.0 ? fmt::format(", cpu={:.3f} ms", schedulingTime) : "");
   }
 
   // builds a string for a tensor (format: Device:ScalarType[tensor.sizes()])
-  static std::string buildTensorString(const Tensor& tensor) {
+  static std::string buildTensorString(const Tensor& tensor, bool includeBufferId = false) {
     if (tensor.defined()) {
       std::stringstream tensorStr;
-      tensorStr << c10::DeviceTypeName(tensor.device().type()) << ":"
+      auto deviceType = tensor.device().type();
+      tensorStr << c10::DeviceTypeName(deviceType);
+      // see comments for INCLUDE_BUFFER_ID
+      if (includeBufferId && deviceType == at::kMPS) {
+        id<MTLBuffer> buffer = __builtin_bit_cast(id<MTLBuffer>, tensor.storage().data());
+        tensorStr << "(buf#" << (getIMPSAllocator()->getBufferId(buffer))
+                  << ":" << buffer.retainCount << ")";
+      }
+      tensorStr << ":"
                 << tensor.scalar_type() << tensor.sizes();
       return tensorStr.str();
     } else {
@@ -81,24 +89,26 @@ struct OperationInfo : BaseInfo {
   std::string strKey;
 
   const std::string toString(double gpuTime = 0, double schedulingTime = 0) const override {
-    return fmt::format("{} #{} [Run#={}{}]: {}",
-                       type == Type::GRAPH ? "Graph" : "Kernel", profileId, runCount,
-                       BaseInfo::toString(gpuTime, schedulingTime), strKey);
+    return fmt::format("aten::{} (id={}{}, run={}{})",
+                       strKey, type == Type::GRAPH ? "G" : "K", profileId, runCount,
+                       BaseInfo::toString(gpuTime, schedulingTime));
   }
 
   // builds a string for a kernel
-  static std::string buildKernelString(const std::string& kernelName, const TensorList& tensors) {
+  static std::string buildKernelString(const std::string& kernelName,
+                                       const TensorList& tensors,
+                                       bool includeBufferId = false) {
     std::stringstream kernelStr;
     kernelStr << kernelName;
     for (const Tensor& tensor: tensors) {
-      kernelStr << ":" << BaseInfo::buildTensorString(tensor);
+      kernelStr << ":" << BaseInfo::buildTensorString(tensor, includeBufferId);
     }
     return kernelStr.str();
   }
 };
 
 struct CpuFbInfo : BaseInfo {
-  CpuFbInfo(const std::string& OpName, uint64_t Id) :
+  CpuFbInfo(uint64_t Id, const std::string& OpName) :
       BaseInfo(Type::CPU_FALLBACK, Id, 0), opName(OpName) { }
 
   uint64_t runCount = 0;
@@ -107,13 +117,14 @@ struct CpuFbInfo : BaseInfo {
   size_t currentCopyOverhead = 0;
   size_t totalCopyOverhead = 0;
   std::string opName;
+  std::string strKey;
   std::clock_t startTime{};
 
   const std::string toString(double gpuTime = 0, double schedulingTime = 0) const override {
-    return fmt::format("CPU Fallback Op #{} [Run#={}, CopyOverhead={}{}]: {}",
-                       profileId, runCount,
+    return fmt::format("CPU Fallback::{} (id={}, run={}, CopyOverhead={}{})",
+                       strKey, profileId, runCount,
                        getIMPSAllocator()->formatSize(currentCopyOverhead),
-                       schedulingTime > 0. ? fmt::format(", CPU={:.3f} ms", schedulingTime) : "", opName);
+                       BaseInfo::toString(0.0, schedulingTime));
   }
 
   void updateCopyOverhead(const TensorList& tensors) {
@@ -148,20 +159,20 @@ struct CopyInfo : BaseInfo {
   std::clock_t startTime{};
 
   const std::string toString(double gpuTime = 0, double schedulingTime = 0) const override {
-    return fmt::format("{}Copy{} #{} [Len={}{}]: {} -> {}",
+    return fmt::format("{}Copy{}: {} --> {} (len={}{})",
                        // Copies could be using Blit Encoder, or using regular
                        // memcpy() on Unified memory
                        usesBlitter ? "Blit" : "Mem",
                        // CopySync indicates COMMIT_AND_WAIT was used to synchronize
                        // the GPU stream with CPU after the blocking copy
-                       isNonBlocking ? "" : "Sync", profileId,
+                       isNonBlocking ? "" : "Sync", srcStrKey, dstStrKey,
                        getIMPSAllocator()->formatSize(length),
-                       BaseInfo::toString(gpuTime, schedulingTime), srcStrKey, dstStrKey);
+                       BaseInfo::toString(gpuTime, schedulingTime));
   }
 
-  static std::string buildTensorString(const void* buffer, const OptionalTensorRef tensor) {
+  static std::string buildTensorString(const void* buffer, const OptionalTensorRef tensor, bool includeBufferId = false) {
     if (tensor.has_value()) {
-      return BaseInfo::buildTensorString(*tensor);
+      return BaseInfo::buildTensorString(*tensor, includeBufferId);
     }
     // if tensor is not defined (e.g., copy_blit_mps()), then use buffer
     // pointer to build the string.
@@ -253,24 +264,46 @@ public:
 
   enum LogOptions : uint32_t {
     LOG_NONE = 0,
+
+    // Info logging options during execution
+    // -------------------------------------
     // prints operation info (id/key/run_count) during execution
-    OPERATION_INFO    = (1 << 0),
+    OPERATION_INFO      = (1 << 0),
     // prints copy info (src/dst tensors/buffers, size, etc.) during execution
-    COPY_INFO         = (1 << 1),
+    COPY_INFO           = (1 << 1),
     // prints CPU Fallback info (id/runCount/opName/copyOverhead) during execution
-    CPU_FALLBACK_INFO = (1 << 2),
+    CPU_FALLBACK_INFO   = (1 << 2),
+
+    // Profiling Statistics logging options when process terminates
+    // ------------------------------------------------------------
     // prints all stats (OPERATION_STATS, COPY_STATS, CPU_FALLBACK_STATS) before process terminates
     // this is convenient to not combine following stats bit flags manually
-    ALL_STATS         = (1 << 3),
+    ALL_STATS           = (1 << 3),
     // prints operation stats (GPU times, run count, etc.) before process terminates
-    OPERATION_STATS   = (1 << 4),
+    OPERATION_STATS     = (1 << 4),
     // prints copies stats (GPU times, copy kinds, sizes, etc.) before process terminates
-    COPY_STATS        = (1 << 5),
+    COPY_STATS          = (1 << 5),
     // prints CPU Fallback stats (CPU times, run times, size of MPS<->CPU copies
     // for tensors, etc.) before process terminates
-    CPU_FALLBACK_STATS= (1 << 6),
+    CPU_FALLBACK_STATS  = (1 << 6),
+
+    // Metadata format options when logging the info
+    // ---------------------------------------------
+    // if enabled, includes GPU run time in metadata (i.e., GPUEndTime-GPUStartTime
+    // from Metal Command Buffers) (e.g., [GPU=0.324 ms])
+    INCLUDE_GPU_TIME    = (1 << 7),
+    // if enabled, includes GPU scheduling time in metadata separately
+    // (i.e., KernelEndTime-KernelStartTime from Metal Command Buffers)
+    // e.g., [GPU=0.324 ms, KRNL=0.036 ms]
+    INCLUDE_KERNEL_TIME = (1 << 8),
+    // if enabled, includes the unique buffer ID in metadata for the storage
+    // of a tensor that was allocated on MPSAllocator. This is useful (along with
+    // the EV "PYTORCH_DEBUG_MPS_ALLOCATOR") to identify buffers that are involved
+    // with various operations.
+    INCLUDE_BUFFER_ID   = (1 << 9),
+
     // used for sanity check (Change this when new option added)
-    LOG_COUNT = (CPU_FALLBACK_STATS << 1) - 1,
+    LOG_COUNT = (INCLUDE_BUFFER_ID << 1) - 1,
   };
 
   explicit MPSProfiler();
@@ -290,6 +323,14 @@ public:
   void endProfileCopy(uint64_t profileId, SyncType syncType);
   void endProfileKernel(const void* handle, SyncType syncType = SyncType::NONE);
   void endProfileCPUFallback(const std::string& opName);
+
+  // these are used to hook into Python bindings for torch.mps.profiler module.
+  // this enables generating OS Signpost traces from MPSProfiler on-demand
+  // during runtime (instead of environment variables).
+  // The "mode" could be either "interval", "event", or both "interval,event"
+  // for interval-based and/or event-based signpost tracing.
+  void StartTrace(const string& mode, bool waitUntilCompleted);
+  void StopTrace();
 
   // convenience functions to indicate whether signpost tracing or
   // logging are enabled for the SignpostTypes
@@ -325,6 +366,8 @@ public:
   // stats logging could run either from destructor or signal handler
   // so this is used to check if logging has already started.
   std::atomic_bool hasLoggedStats{false};
+  // indicates there are pending completionHandler callbacks that haven't been called yet.
+  std::atomic_bool hasPendingCompletionHandlers{false};
   // used to capture sigint signal to log profiling stats
   static struct sigaction currentSigint, previousSigint;
 
@@ -346,6 +389,7 @@ public:
   // a short list that contains copy stats
   std::unordered_map<CopyInfo::Kind, std::unique_ptr<CopyStat>> m_copy_stat_list{};
 
+  void initialize();
   void beginProfileExecution(BaseInfo& info, bool cpuExecution = false);
   void endProfileExecution(BaseInfo& info, os_signpost_id_t event_signpost_id,
                            os_signpost_id_t interval_signpost_id,
@@ -360,7 +404,7 @@ public:
 
   void updateCopyStats(const CopyInfo& copyInfo, double gpuTime, double schedulingTime);
   // returns true if logging the profiling info "during the execution" is enabled
-  bool isProfileInfoLoggingEnabled(BaseInfo::Type infoType);
+  bool isProfileInfoLoggingEnabled(BaseInfo::Type infoType, bool isExecutionEnded);
   // logs all the profiling stats that are enabled
   void logProfilingStats();
   // logs kernel profiling stats when the process ends.

@@ -65,7 +65,7 @@ public:
   MTLComputeCommandEncoder_t commandEncoder();
   void endKernelCoalescing();
   void synchronize(SyncType syncType);
-  void commitAdaptive(const TensorList& tensors, void* profilerHandle);
+  void commitAdaptive(const TensorList& inputTensors, const TensorList& outputTensors, void* profilerHandle);
   void fill(id<MTLBuffer> buffer, uint8_t value, size_t length, size_t offset, SyncType syncType = SyncType::NONE);
   void copy(id<MTLBuffer> srcBuffer, id<MTLBuffer> dstBuffer,
             size_t length, size_t srcOffset, size_t dstOffset,
@@ -76,7 +76,9 @@ public:
   void executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
                        SyncType syncType = SyncType::NONE, MPSGraphExecutable* executable = nullptr);
 
-  void addCompletedHandler(MTLCommandBufferHandler block);
+  void addCompletedHandler(MTLCommandBufferHandler block, SyncType syncType = SyncType::NONE);
+  // see description for "_activeResources"
+  void addActiveResource(MPSGraphTensorData* tensorData, void* buffer);
 
   /// Get the MPS device index that this stream is associated with.
   c10::DeviceIndex device_index() const { return _stream.device_index(); }
@@ -96,11 +98,15 @@ private:
   MTLComputeCommandEncoder_t _commandEncoder = nil;
   MPSGraphExecutionDescriptor *_executionDescriptor = nil;
   MPSGraphExecutableExecutionDescriptor *_executableExecutionDescriptor = nil;
+  MPSGraphCompilationDescriptor *_compilationDescriptor = nil;
   dispatch_queue_t _serialQueue = nullptr;
   // CommitAndContinue is enabled by default
   bool _enableCommitAndContinue = true;
   // accumulated sizes of resources encoded on command buffer
   size_t _commandBufferResourceSize = 0;
+  // unfortunately, there's no way to get the underlying buffer from
+  // an MPSGraphTensorData. so we need to keep a mapping of them here
+  std::unordered_map<MPSGraphTensorData*, void*> _activeResources{};
 
   // use synchronize() to access any of these commit functions outside MPSStream
   void commit();
@@ -108,7 +114,8 @@ private:
   void commitAndContinue();
   void flush();
 
-  void updateCommandBufferResourceSize(NSArray<MPSGraphTensorData*> *feeds);
+  bool updateCommandBufferResourceSize(NSArray<MPSGraphTensorData*> *feeds,
+                                       NSArray<MPSGraphTensorData*> *results);
 };
 
 /**
@@ -137,39 +144,6 @@ class TORCH_API MPSStreamImpl
   static MPSStream* _stream;
   MPSStreamImpl();
 };
-
-
-//-----------------------------------------------------------------
-//  MPSEvent
-//-----------------------------------------------------------------
-
-struct TORCH_API MPSEvent
-{
-  // for a new instance of MPSEvent, sometimes we want an empty shell and don't
-  // necessarily want to create events or listeners. So we defer initialization
-  // until we actually use the event (e.g., record, notify, etc.)
-  MPSEvent(bool deferInitialization = true);
-  ~MPSEvent();
-  MTLSharedEvent_t event() const {return _event; }
-
-  void recordEvent(bool syncEvent = false);
-  void waitForEvent(bool syncEvent = false); // waits on the cpu
-  void notifyEvent(MTLSharedEventNotificationBlock block);
-  bool queryEvent() const;
-  uint64_t getCurrentValue() const { return _signalCounter; }
-  void setCurrentValue(uint64_t currValue) { _signalCounter = currValue; }
-private:
-  bool is_initialized;
-  uint64_t _signalCounter;
-  MPSStream* _stream;
-  MTLSharedEvent_t _event;
-  MTLSharedEventListener* _listener;
-
-  void initialize();
-};
-
-typedef MPSEvent* mpsEvent_t;
-
 
 } // namespace mps
 } // namespace at
