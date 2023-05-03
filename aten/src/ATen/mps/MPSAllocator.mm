@@ -125,10 +125,6 @@ bool MPSHeapAllocatorImpl::alloc_buffer(AllocParams& params) {
   m_total_allocated_memory += params.size();
   pool.allocated_size += params.size();
   pool.n_buffers++;
-  // initialize the event for the shared buffer
-  if (pool.usage & UsageFlags::SHARED) {
-    params.buffer_block->event.emplace(/*needsListener*/ true);
-  }
 
   if ((m_debug_verbosity & DebugVerbosity::ALLOCATIONS) &&
     (!(m_debug_verbosity & DebugVerbosity::LARGE_ONLY) || !(pool.usage & UsageFlags::SMALL))) {
@@ -281,6 +277,10 @@ void MPSHeapAllocatorImpl::free_buffer(BufferBlock* buffer_block) {
   buffer_block->shape.clear(); // reset shape
   TORCH_INTERNAL_ASSERT_DEBUG_ONLY(m_current_allocated_memory >= buffer_block->size);
   m_current_allocated_memory -= buffer_block->size;
+  if (buffer_block->event) {
+    // returns the MPSEvent back to MPSEventPool
+    buffer_block->event.reset(nullptr);
+  }
   buffer_block->in_use = false;
 }
 
@@ -535,7 +535,11 @@ bool MPSHeapAllocatorImpl::recordEvents(c10::ArrayRef<void*> buffers) {
     BufferBlock* buffer_block = get_allocated_buffer_block(buffer);
     // return if buffer was not allocated on MPSAllocator or isn't a Shared buffer
     if (buffer_block && (buffer_block->heap->pool->usage & UsageFlags::SHARED)) {
-      buffer_block->event->recordEvent(/*needsLock*/ false);
+      if (!buffer_block->event) {
+        buffer_block->event = m_event_pool->acquireEvent(false, nullptr);
+        TORCH_INTERNAL_ASSERT_DEBUG_ONLY(buffer_block->event);
+      }
+      buffer_block->event->record(/*needsLock*/ false);
       recordedEvent = true;
     }
   }
@@ -561,19 +565,10 @@ bool MPSHeapAllocatorImpl::waitForEvents(c10::ArrayRef<void*> buffers) {
   for (const auto& buffer_block : buffer_blocks) {
     // check for retain count again as the previous wait might have released the buffer
     if (buffer_block->retainCount() > 1) {
-      bool scheduledNotify = buffer_block->event->notifyEvent(
-                                /*needsLock*/ false, /*syncEvent*/ false,
-                                ^(id<MTLSharedEvent>, uint64_t) {
-                                  std::lock_guard<std::mutex> lock(m_gpu_sync_mutex);
-                                  buffer_block->gpu_sync_completed = true;
-                                  m_gpu_sync_cv.notify_one();
-                                });
-      if (scheduledNotify) {
-        std::unique_lock<std::mutex> lock(m_gpu_sync_mutex);
-        m_gpu_sync_cv.wait(lock, [&buffer_block]{ return buffer_block->gpu_sync_completed; });
-        buffer_block->gpu_sync_completed = false;
-	// after waiting, it's a good time to free some pending inactive buffers
-	freeInactiveBuffers();
+      bool waitedOnCPU = buffer_block->event->synchronize();
+      if (waitedOnCPU) {
+        // after waiting, it's a good time to free some pending inactive buffers
+        freeInactiveBuffers();
         waitedForEvent |= buffer_block->retainCount() <= 1;
       } else {
         // even if one of the buffers weren't recorded beforehand, we return

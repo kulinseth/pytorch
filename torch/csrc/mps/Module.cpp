@@ -144,6 +144,54 @@ static PyObject* MPSModule_profilerStopTrace(
   END_HANDLE_TH_ERRORS
 }
 
+static PyObject* MPSModule_acquireEvent(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  const bool enable_timing = THPUtils_unpackBool(args);
+  return PyLong_FromUnsignedLong(
+      at::detail::getMPSHooks().acquireEvent(enable_timing));
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_releaseEvent(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  const uint32_t event_id = THPUtils_unpackUInt32(args);
+  at::detail::getMPSHooks().releaseEvent(event_id);
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_recordEvent(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  const uint32_t event_id = THPUtils_unpackUInt32(args);
+  at::detail::getMPSHooks().recordEvent(event_id);
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_waitForEvent(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  const uint32_t event_id = THPUtils_unpackUInt32(args);
+  at::detail::getMPSHooks().waitForEvent(event_id);
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_synchronizeEvent(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  const uint32_t event_id = THPUtils_unpackUInt32(args);
+  at::detail::getMPSHooks().synchronizeEvent(event_id);
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
+static PyObject* MPSModule_queryEvent(PyObject* _unused, PyObject* args) {
+  HANDLE_TH_ERRORS
+  const uint32_t event_id = THPUtils_unpackUInt32(args);
+  return PyLong_FromUnsignedLong(
+      at::detail::getMPSHooks().queryEvent(event_id));
+  END_HANDLE_TH_ERRORS
+}
+
 // NOLINTNEXTLINE(modernize-avoid-c-arrays,
 // cppcoreguidelines-avoid-non-const-global-variables,
 // cppcoreguidelines-avoid-c-arrays)
@@ -177,6 +225,12 @@ static struct PyMethodDef _MPSModule_methods[] = {
      MPSModule_profilerStopTrace,
      METH_NOARGS,
      nullptr},
+    {"_mps_acquireEvent", MPSModule_acquireEvent, METH_O, nullptr},
+    {"_mps_releaseEvent", MPSModule_releaseEvent, METH_O, nullptr},
+    {"_mps_recordEvent", MPSModule_recordEvent, METH_O, nullptr},
+    {"_mps_waitForEvent", MPSModule_waitForEvent, METH_O, nullptr},
+    {"_mps_synchronizeEvent", MPSModule_synchronizeEvent, METH_O, nullptr},
+    {"_mps_queryEvent", MPSModule_queryEvent, METH_O, nullptr},
     {nullptr}};
 
 PyMethodDef* python_functions() {
