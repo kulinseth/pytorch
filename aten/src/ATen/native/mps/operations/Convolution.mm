@@ -485,7 +485,19 @@ Tensor mps_convolution_backward_weights(
           MPSGraphTensor* gradOutputTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, native_mps::getMPSScalarType(grad_output_t.scalar_type()), gradOutputShape);
           MPSGraphTensor* inputTensor = native_mps::mpsGraphRankedPlaceHolder(mpsGraph, input_t);
 
-          MPSGraphTensor *gradOutputTensorTranspose = gradOutputTensor;
+          auto input_mps_dtype = native_mps::getMPSDataType(input_t.scalar_type());
+          bool isFP16 = input_mps_dtype == MPSDataTypeFloat16;
+
+          MPSGraphTensor* gradOutputCastTensor = gradOutputTensor;
+          MPSGraphTensor* inputCastTensor = inputTensor;
+
+          if(isFP16) {
+            // up casting to fp32
+            gradOutputCastTensor = mps::castMPSTensor(mpsGraph, gradOutputTensor, MPSDataTypeFloat32);
+            inputCastTensor = mps::castMPSTensor(mpsGraph, inputTensor, MPSDataTypeFloat32);
+          }
+
+          MPSGraphTensor *gradOutputTensorTranspose = gradOutputCastTensor;
           if (is_channels_last) {
             gradOutputTensorTranspose = mps::convertNHWCtoNCHW(mpsGraph, gradOutputTensorTranspose);
           }
@@ -495,18 +507,24 @@ Tensor mps_convolution_backward_weights(
               NSNumber* outputFeatChannelDim = mps_weight_shape[0];
               MPSShape* weightShapeTranspose = @[@1, outputFeatChannelDim, mps_weight_shape[2], mps_weight_shape[3]];
               MPSGraphTensor* gradWeightTensorTranspose = [mpsGraph depthwiseConvolution3DWeightsGradientWithIncomingGradientTensor:gradOutputTensorTranspose
-                                                                                              sourceTensor:inputTensor
+                                                                                              sourceTensor:inputCastTensor
                                                                                                outputShape:weightShapeTranspose
                                                                                                 descriptor:depthWiseConv3dDescriptor_
                                                                                                       name:nil];
               gradWeightTensor = [mpsGraph transposeTensor:gradWeightTensorTranspose dimension:-3 withDimension:-4 name:nil];
           } else {
               gradWeightTensor = [mpsGraph convolution2DWeightsGradientWithIncomingGradientTensor:gradOutputTensorTranspose
-                                                                                               sourceTensor:inputTensor
+                                                                                               sourceTensor:inputCastTensor
                                                                                                 outputShape:mps_weight_shape
                                                                                forwardConvolutionDescriptor:conv2dDescriptor_
                                                                                                        name:nil];
           }
+
+          if(isFP16) {
+            // down cast back to fp16
+            gradWeightTensor = mps::castMPSTensor(mpsGraph, gradWeightTensor, MPSDataTypeFloat16);
+          }
+
           newCachedGraph->gradOutputTensor_ = gradOutputTensor;
           newCachedGraph->inputTensor_ = inputTensor;
           newCachedGraph->gradWeightTensor_ = gradWeightTensor;
