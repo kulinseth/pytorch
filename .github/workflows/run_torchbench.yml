@@ -26,7 +26,7 @@ jobs:
         uses: pytorch/test-infra/.github/actions/check-disk-space@main
 
       - name: Checkout PyTorch
-        uses: pytorch/pytorch/.github/actions/checkout-pytorch@master
+        uses: kulinseth/pytorch/.github/actions/checkout-pytorch@master
 
       - name: Setup miniconda
         uses: pytorch/test-infra/.github/actions/setup-miniconda@main
@@ -45,7 +45,7 @@ jobs:
           ${CONDA_RUN} pip install boto3
           ${CONDA_RUN} conda install -y pytest tabulate gitpython git-lfs tqdm psutil
           ${CONDA_RUN} conda install -yq -c conda-forge spacy sentencepiece transformers
-          ${CONDA_RUN} pip3 install --pre torch torchtext torchvision torchaudio torchdata --extra-index-url https://download.pytorch.org/whl/nightly/cpu
+          ${CONDA_RUN} pip3 install --pre torch torchtext==0.15.1 torchvision==0.15.1 torchaudio==2.0.1 torchdata==0.6.0 --extra-index-url https://download.pytorch.org/whl/nightly/cpu
 
       - name: Setup TorchBench branch
         env:
