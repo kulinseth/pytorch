@@ -19,12 +19,22 @@ namespace at {
 namespace mps {
 namespace HeapAllocator {
 
-static const size_t kMaxSmallAlloc = MB(1);    // largest "small" allocation is 1 MiB
-static const size_t kMinLargeAlloc = MB(10);   // allocations between 1 and 10 MiB may use kLargeHeap
-static const size_t kRoundLarge    = MB(2);    // round up large allocations to 2 MiB
-static const size_t kSmallHeap     = MB(8);    // "small" allocations are packed in 8 MiB heaps
-static const size_t kLargeHeap     = MB(32);   // "large" allocations may be packed in 32 MiB heaps
-static const size_t kMaxScalarAlloc= (sizeof(int64_t)); // largest "scalar" allocation
+// largest "small" allocation is 1 MiB
+static const size_t kMaxSmallAlloc = MB(1);
+// allocations between 1 and 10 MiB may use kLargeHeap
+static const size_t kMinLargeAlloc = MB(10);
+// round up large allocations to 2 MiB
+static const size_t kRoundLarge = MB(2);
+// "small" allocations are packed in 8 MiB heaps
+static const size_t kSmallHeap = MB(8);
+// "large" allocations may be packed in 32 MiB heaps
+static const size_t kLargeHeap = MB(32);
+// largest "scalar" allocation
+static const size_t kMaxScalarAlloc = (sizeof(int64_t));
+// smallest size that gets round up to the next power of 2
+static const size_t kMinRoundUpSize = 1024;
+// largest size that gets round up to the next power of 2
+static const size_t kMaxRoundUpSize = MB(128);
 // "extra large" allocations may be packed in heap sizes of
 // (recommendedMaxWorkingSetSize / kXLargeHeapDivisor)
 // Considering recommendedMaxWorkingSetSize is typically 75% of total system memory,
@@ -331,8 +341,7 @@ private:
   // we set the allowed upper bound to twice the size of recommendedMaxWorkingSetSize.
   constexpr static double default_high_watermark_upper_bound = 2.0;
   // (see m_low_watermark_ratio for description)
-  // on unified memory, we could allocate beyond the recommendedMaxWorkingSetSize
-  constexpr static double default_low_watermark_ratio_unified  = 1.2;
+  constexpr static double default_low_watermark_ratio_unified  = 1.0;
   constexpr static double default_low_watermark_ratio_discrete = 1.0;
 
   const id<MTLDevice> m_device;
@@ -372,6 +381,7 @@ private:
   std::shared_ptr<MPSEventPool> m_event_pool;
 
   void init_allocator();
+  void init_buffer_pools();
   HeapBlock* get_free_heap(AllocParams& params);
   bool get_free_buffer(AllocParams& params);
   BufferBlock* get_allocated_buffer_block(void* ptr);
@@ -385,25 +395,12 @@ private:
   bool release_cached_buffers();
   // free unused cached blocks to reclaim GPU memory if memory pressure is high
   void garbage_collect_cached_buffers(AllocParams& params);
-
-  BufferPool& get_pool(size_t Size, uint32_t usage) {
-    if (usage & UsageFlags::SCALAR) {
-      return *m_pools[BufferPool::Kind::SCALAR];
-    }
-    if (Size <= kMaxScalarAlloc && m_device.hasUnifiedMemory) {
-      return *m_pools[BufferPool::Kind::SHARED_SMALL];
-    }
-    return Size <= kMaxSmallAlloc ? ((usage & UsageFlags::SHARED) ? *m_pools[BufferPool::Kind::SHARED_SMALL] :
-                                                                    *m_pools[BufferPool::Kind::PRIVATE_SMALL]) :
-                                    ((usage & UsageFlags::SHARED) ? *m_pools[BufferPool::Kind::SHARED_LARGE] :
-                                                                    *m_pools[BufferPool::Kind::PRIVATE_LARGE]);
-  }
-
-  size_t get_allocation_size(size_t Length, uint32_t usage) const  {
-    MTLSizeAndAlign sizeAlign = [m_device heapBufferSizeAndAlignWithLength:Length
-                                                                   options:HeapBlock::getOptions(usage)];
-    return BufferBlock::alignUp(sizeAlign.size, sizeAlign.align);
-  }
+  // returns the suitable buffer pool type for the usage or
+  // requested/allocated sizes
+  BufferPool& get_pool(size_t requested_size, size_t aligned_size, uint32_t usage);
+  // returns the aligned allocation size that is optimized
+  // for the buffers to get reused frequently
+  size_t get_allocation_size(size_t size, uint32_t usage) const;
   // maximum size of device memory available for allocation in current process
   // Note: the recommendedMaxWorkingSetSize is typically 75% of the total system memory.
   size_t max_device_size() const { return [m_device recommendedMaxWorkingSetSize]; }
