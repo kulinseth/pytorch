@@ -3,6 +3,7 @@
 #include <ATen/mps/MPSAllocator.h>
 #include <c10/core/Allocator.h>
 #include <c10/core/Storage.h>
+#include <c10/util/llvmMathExtras.h>
 #include <ATen/CPUFunctions.h>
 #include <iostream>
 
@@ -32,6 +33,10 @@ void MPSHeapAllocatorImpl::init_allocator() {
   const double low_watermark_ratio = low_watermark_ratio_str ? strtod(low_watermark_ratio_str, nullptr) : default_low_watermark_ratio;
   setLowWatermarkRatio(low_watermark_ratio);
 
+  init_buffer_pools();
+}
+
+void MPSHeapAllocatorImpl::init_buffer_pools() {
   // using a container for pools to simplify iterating over them
   // Pool of large buffers with private storage mode
   m_pools.emplace(BufferPool::Kind::PRIVATE_LARGE,
@@ -50,6 +55,21 @@ void MPSHeapAllocatorImpl::init_allocator() {
   // no Hazard Tracking required for the Scalar pool (synchronized manually).
   m_pools.emplace(BufferPool::Kind::SCALAR,
                   std::make_unique<BufferPool>(m_device, UsageFlags::SMALL | UsageFlags::SHARED | UsageFlags::SCALAR));
+}
+
+BufferPool& MPSHeapAllocatorImpl::get_pool(size_t requested_size, size_t aligned_size, uint32_t usage) {
+  BufferPool::Kind poolKind;
+
+  if (usage & UsageFlags::SCALAR) {
+    poolKind = BufferPool::Kind::SCALAR;
+  } else if (requested_size <= kMaxScalarAlloc && m_device.hasUnifiedMemory) {
+    poolKind = BufferPool::Kind::SHARED_SMALL;
+  } else if (aligned_size <= kMaxSmallAlloc) {
+    poolKind = (usage & UsageFlags::SHARED) ? BufferPool::Kind::SHARED_SMALL : BufferPool::Kind::PRIVATE_SMALL;
+  } else {
+    poolKind = (usage & UsageFlags::SHARED) ? BufferPool::Kind::SHARED_LARGE : BufferPool::Kind::PRIVATE_LARGE;
+  }
+  return *m_pools[poolKind];
 }
 
 void MPSHeapAllocatorImpl::setHighWatermarkRatio(double ratio) {
@@ -75,6 +95,20 @@ void MPSHeapAllocatorImpl::setLowWatermarkRatio(double ratio) {
               << (ratio == 0.0 ? "unlimited" : format_size(m_low_watermark_limit)) << "\n";
   }
   m_low_watermark_ratio = ratio;
+}
+
+size_t MPSHeapAllocatorImpl::get_allocation_size(size_t size, uint32_t usage) const {
+  // for the non-scalar buffers that are within the range of [kMinRoundUpSize, kMaxRoundUpSize],
+  // we round up the allocation sizes to the next power of 2.
+  // This helps with sequential allocations with odd sizes (e.g., 1.11 MB, then 1.12 MB, ...)
+  // that would prevent older buffers in the pool to be reused due to their slightly smaller sizes
+  // compared to the new allocation size requests.
+  if (!(usage & UsageFlags::SCALAR) && size > kMinRoundUpSize && size < kMaxRoundUpSize) {
+    size = llvm::PowerOf2Ceil(size);
+  }
+  MTLSizeAndAlign sizeAlign = [m_device heapBufferSizeAndAlignWithLength: size
+                                                                 options: HeapBlock::getOptions(usage)];
+  return BufferBlock::alignUp(sizeAlign.size, sizeAlign.align);
 }
 
 HeapBlock* MPSHeapAllocatorImpl::get_free_heap(AllocParams& params) {
@@ -213,7 +247,7 @@ BufferBlock* MPSHeapAllocatorImpl::alloc_buffer_block(size_t size, uint32_t usag
   TORCH_CHECK(size < m_max_buffer_size, "Invalid buffer size: ", format_size(size));
 
   size_t alloc_size = get_allocation_size(size, usage);
-  auto& pool = get_pool(size, usage);
+  auto& pool = get_pool(size, alloc_size, usage);
   AllocParams params(alloc_size, size, &pool);
   // we care about memory pressure if only we're allocating large buffers when the
   // low watermark limit has been reached

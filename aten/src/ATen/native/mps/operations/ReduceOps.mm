@@ -1503,37 +1503,36 @@ void argmax_argmin_out_mps
       dim_ = 0;
   }
 
+  if (output_t.numel() == 0) {
+    return;
+  }
   // Calculate the output shape according to keepdim=True
   // If there is no dim argument, the input shape is flattened
   IntArrayRef input_shape = input_t.sizes();
   int64_t num_input_dims = input_shape.size();
-  NSMutableArray<NSNumber*> *apparent_in_shape = nil;
-  NSMutableArray<NSNumber*> *apparent_out_shape = nil;
 
-  if (dim.has_value()) {
-    apparent_out_shape = [NSMutableArray<NSNumber*> arrayWithCapacity:num_input_dims];
-    for (const auto i : c10::irange(num_input_dims)) {
-      apparent_out_shape[i] = dim_ == i ? @1 : [NSNumber numberWithInt:input_shape[i]];
-    }
-  } else {
-    apparent_in_shape = [NSMutableArray<NSNumber*> arrayWithCapacity:1];
-    int64_t num_in_elements = c10::multiply_integers(input_shape);
-    apparent_in_shape[0] = [NSNumber numberWithInt:num_in_elements];
-
-    apparent_out_shape = [NSMutableArray<NSNumber*> arrayWithCapacity:1];
-    apparent_out_shape[0] = @1;
-  }
-
-  if (output_t.numel() == 0) {
-      return;
-  }
-
-  if (!apparent_in_shape) {
-    apparent_in_shape = [getMPSShape(input_t.sizes()) mutableCopy];
-  }
-
-  auto stream = at::mps::getCurrentMPSStream();
   @autoreleasepool {
+    NSMutableArray<NSNumber*> *apparent_in_shape = nil;
+    NSMutableArray<NSNumber*> *apparent_out_shape = nil;
+    if (dim.has_value()) {
+      apparent_out_shape = [NSMutableArray<NSNumber*> arrayWithCapacity:num_input_dims];
+      for (const auto i : c10::irange(num_input_dims)) {
+        apparent_out_shape[i] = dim_ == i ? @1 : [NSNumber numberWithInt:input_shape[i]];
+      }
+    } else {
+      apparent_in_shape = [NSMutableArray<NSNumber*> arrayWithCapacity:1];
+      int64_t num_in_elements = c10::multiply_integers(input_shape);
+      apparent_in_shape[0] = [NSNumber numberWithInt:num_in_elements];
+
+      apparent_out_shape = [NSMutableArray<NSNumber*> arrayWithCapacity:1];
+      apparent_out_shape[0] = @1;
+    }
+
+    if (!apparent_in_shape) {
+      apparent_in_shape = [[getMPSShape(input_t.sizes()) mutableCopy] autorelease];
+    }
+
+    auto stream = at::mps::getCurrentMPSStream();
     NSString* ns_key = [[apparent_in_shape valueForKey:@"description"] componentsJoinedByString:@","];
     string key = func_name                                + ":" +
                  to_string(dim_)                          + ":" +
