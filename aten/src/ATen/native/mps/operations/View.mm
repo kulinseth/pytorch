@@ -803,46 +803,48 @@ Tensor gatherViewTensor(const at::Tensor& src, at::Tensor& dst) {
 
   MPSStream* mpsStream = getCurrentMPSStream();
   dispatch_sync(mpsStream->queue(), ^(){
-    id<MTLComputeCommandEncoder> computeEncoder = mpsStream->commandEncoder();
-    std::string functionName = getGatherScatterFunctionName(output.scalar_type(), output.dim(), /*needsScatter=*/false);
-    id<MTLComputePipelineState> gatherPSO = getPipelineState(MPSDevice::getInstance()->device(),
-                                                             functionName,
-                                                             getMetalScalarType(src),
-                                                             getMetalScalarType(output),
-                                                             /*needsScatter=*/false);
+    @autoreleasepool {
+      id<MTLComputeCommandEncoder> computeEncoder = mpsStream->commandEncoder();
+      std::string functionName = getGatherScatterFunctionName(output.scalar_type(), output.dim(), /*needsScatter=*/false);
+      id<MTLComputePipelineState> gatherPSO = getPipelineState(MPSDevice::getInstance()->device(),
+                                                              functionName,
+                                                              getMetalScalarType(src),
+                                                              getMetalScalarType(output),
+                                                              /*needsScatter=*/false);
 
-    // this function call is a no-op if MPS Profiler is not enabled
-    getMPSProfiler().beginProfileKernel(gatherPSO, functionName, {src, output});
+      // this function call is a no-op if MPS Profiler is not enabled
+      getMPSProfiler().beginProfileKernel(gatherPSO, functionName, {src, output});
 
-    uint32_t kernel_size = src.sizes().size();
-    std::vector<uint32_t> src_sizes(kernel_size == 0 ? 1 : kernel_size);
-    std::vector<uint32_t> src_strides(kernel_size == 0 ? 1 : kernel_size);
+      uint32_t kernel_size = src.sizes().size();
+      std::vector<uint32_t> src_sizes(kernel_size == 0 ? 1 : kernel_size);
+      std::vector<uint32_t> src_strides(kernel_size == 0 ? 1 : kernel_size);
 
-    if (kernel_size == 0) {
-      src_sizes[0] = src_strides[0] = 1;
-    } else {
-      for (int i = 0; i < kernel_size; i++) {
-        src_sizes[i] = (uint32_t)(src.sizes()[i]);
-        src_strides[i] = (uint32_t)(src.strides()[i]);
+      if (kernel_size == 0) {
+        src_sizes[0] = src_strides[0] = 1;
+      } else {
+        for (int i = 0; i < kernel_size; i++) {
+          src_sizes[i] = (uint32_t)(src.sizes()[i]);
+          src_strides[i] = (uint32_t)(src.strides()[i]);
+        }
       }
+
+      [computeEncoder setComputePipelineState: gatherPSO];
+      [computeEncoder setBuffer:getMTLBufferStorage(src) offset:src.storage_offset() * src.element_size() atIndex:0];
+      [computeEncoder setBuffer:outputBuffer offset:outputStorageOffset atIndex:1];
+      [computeEncoder setBytes:&src_sizes[0] length:sizeof(uint32_t) * kernel_size atIndex:2];
+      [computeEncoder setBytes:&src_strides[0] length:sizeof(uint32_t) * kernel_size atIndex:3];
+      [computeEncoder setBytes:&numThreads length:sizeof(uint32_t) atIndex:4];
+
+      MTLSize gridSize = MTLSizeMake(numThreads, 1, 1);
+      NSUInteger threadsPerThreadgroup_ = gatherPSO.maxTotalThreadsPerThreadgroup;
+      if (threadsPerThreadgroup_ > numThreads) {
+          threadsPerThreadgroup_ = numThreads;
+      }
+
+      MTLSize threadsPerThreadgroup = MTLSizeMake(threadsPerThreadgroup_, 1, 1);
+      [computeEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadsPerThreadgroup];
+      mpsStream->commitAdaptive(src, output, gatherPSO);
     }
-
-    [computeEncoder setComputePipelineState: gatherPSO];
-    [computeEncoder setBuffer:getMTLBufferStorage(src) offset:src.storage_offset() * src.element_size() atIndex:0];
-    [computeEncoder setBuffer:outputBuffer offset:outputStorageOffset atIndex:1];
-    [computeEncoder setBytes:&src_sizes[0] length:sizeof(uint32_t) * kernel_size atIndex:2];
-    [computeEncoder setBytes:&src_strides[0] length:sizeof(uint32_t) * kernel_size atIndex:3];
-    [computeEncoder setBytes:&numThreads length:sizeof(uint32_t) atIndex:4];
-
-    MTLSize gridSize = MTLSizeMake(numThreads, 1, 1);
-    NSUInteger threadsPerThreadgroup_ = gatherPSO.maxTotalThreadsPerThreadgroup;
-    if (threadsPerThreadgroup_ > numThreads) {
-        threadsPerThreadgroup_ = numThreads;
-    }
-
-    MTLSize threadsPerThreadgroup = MTLSizeMake(threadsPerThreadgroup_, 1, 1);
-    [computeEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadsPerThreadgroup];
-    mpsStream->commitAdaptive(src, output, gatherPSO);
   });
 
   return (dst.has_storage()) ? dst : output;
