@@ -15,7 +15,8 @@ class Event:
         self.__eventId = torch._C._mps_acquireEvent(enable_timing)
 
     def __del__(self):
-        if self.__eventId > 0:
+        # checks if torch._C is already destroyed
+        if hasattr(torch._C, '_mps_releaseEvent') and self.__eventId > 0:
             torch._C._mps_releaseEvent(self.__eventId)
 
     def record(self):
