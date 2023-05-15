@@ -113,7 +113,7 @@ void copy_cast_mps(at::Tensor& dst, const at::Tensor& src,
   MPSShape* srcShape = getMPSShape(src);
 
   @autoreleasepool {
-    string key = "copy_cast_mps" + getTensorsStringKey({src, dst});
+    string key = "copy_cast_mps" + getTensorsStringKey({src, dst}, true, /*exclude_shape*/true);
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
 
     if (!cachedGraph) {
@@ -123,7 +123,7 @@ void copy_cast_mps(at::Tensor& dst, const at::Tensor& src,
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, src);
+          MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, srcDType);
           MPSGraphTensor* inputCastTensor = inputTensor;
           if (isFloatingType(src.scalar_type()) && dstDType == MPSDataTypeUInt8) {
             inputCastTensor = [mpsGraph castTensor:inputTensor toType:MPSDataTypeInt32 name:@"cast"];

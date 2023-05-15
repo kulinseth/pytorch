@@ -103,10 +103,8 @@ TORCH_IMPL_FUNC(softmax_mps_out)
       }
     }
 
-    NSString* ns_shape_key = [[input_shape valueForKey:@"description"] componentsJoinedByString:@","];
-
-    string key = "softmax_mps_out:" + mem_format_key + ":" + getMPSTypeString(input.scalar_type()) + ":"
-                                    + [ns_shape_key UTF8String] + ":" + std::to_string(dim_);
+    string key = "softmax_mps_out" + getTensorsStringKey(input, true, /*exclude_shape*/true) + ":" +
+                 mem_format_key + ":" + std::to_string(dim_);
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
 
     if(!cachedGraph) {
@@ -117,7 +115,7 @@ TORCH_IMPL_FUNC(softmax_mps_out)
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSDataType(input.scalar_type()), input_shape);
+          MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input.scalar_type()));
 
           // passing selector of softMaxWithTensor on the mpsGraph object
           MPSGraphTensor* outputTensor = [mpsGraph softMaxWithTensor:inputTensor
@@ -125,6 +123,7 @@ TORCH_IMPL_FUNC(softmax_mps_out)
                                                                 name:nil];
 
           // Output needs to be contiguous format
+          // TODO: consider using empty_restride() for the output tensor
           if(memory_format == at::MemoryFormat::ChannelsLast) {
             auto N = input_shape[0];
             auto H = input_shape[1];
