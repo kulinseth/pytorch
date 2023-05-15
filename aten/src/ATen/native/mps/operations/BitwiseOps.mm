@@ -179,23 +179,25 @@ void handle_tensor_tensor_binary_op(const at::Tensor& self, const at::Tensor& ot
   }
 
   dispatch_sync(stream->queue(), ^(){
-    // this function call is a no-op if MPS Profiler is not enabled
-    getMPSProfiler().beginProfileKernel(cplState, kernel_name, {self, other});
+    @autoreleasepool {
+      // this function call is a no-op if MPS Profiler is not enabled
+      getMPSProfiler().beginProfileKernel(cplState, kernel_name, {self, other});
 
-    id<MTLComputeCommandEncoder> commandEncoder = stream->commandEncoder();
+      id<MTLComputeCommandEncoder> commandEncoder = stream->commandEncoder();
 
-    id<MTLBuffer> outBuf = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
-    id<MTLBuffer> selfBuf = __builtin_bit_cast(id<MTLBuffer>, self.storage().data());
-    id<MTLBuffer> otherBuf = __builtin_bit_cast(id<MTLBuffer>, other.storage().data());
+      id<MTLBuffer> outBuf = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
+      id<MTLBuffer> selfBuf = __builtin_bit_cast(id<MTLBuffer>, self.storage().data());
+      id<MTLBuffer> otherBuf = __builtin_bit_cast(id<MTLBuffer>, other.storage().data());
 
-    [commandEncoder pushDebugGroup:[NSString stringWithFormat:@"Dispatch %s kernel", kernel_name.c_str()]];
-    [commandEncoder setComputePipelineState:cplState];
-    [commandEncoder setBytes:&length length:sizeof(length) atIndex:0];
-    [commandEncoder setBuffer:outBuf offset:output.storage_offset()*output.itemsize() atIndex:1];
-    [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
-    [commandEncoder setBuffer:otherBuf offset:other.storage_offset()*other.itemsize() atIndex:3];
-    dispatch1DJob(commandEncoder, cplState, length);
-    stream->commitAdaptive({self, other}, output, cplState);
+      [commandEncoder pushDebugGroup:[NSString stringWithFormat:@"Dispatch %s kernel", kernel_name.c_str()]];
+      [commandEncoder setComputePipelineState:cplState];
+      [commandEncoder setBytes:&length length:sizeof(length) atIndex:0];
+      [commandEncoder setBuffer:outBuf offset:output.storage_offset()*output.itemsize() atIndex:1];
+      [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
+      [commandEncoder setBuffer:otherBuf offset:other.storage_offset()*other.itemsize() atIndex:3];
+      dispatch1DJob(commandEncoder, cplState, length);
+      stream->commitAdaptive({self, other}, output, cplState);
+    }
   });
 }
 
@@ -214,21 +216,23 @@ void handle_tensor_scalar_binary_op(const at::Tensor& self, const at::Scalar& ot
   }
 
   dispatch_sync(stream->queue(), ^(){
-    getMPSProfiler().beginProfileKernel(cplState, kernel_name, {self});
+    @autoreleasepool {
+      getMPSProfiler().beginProfileKernel(cplState, kernel_name, {self});
 
-    id<MTLComputeCommandEncoder> commandEncoder  = stream->commandEncoder();
+      id<MTLComputeCommandEncoder> commandEncoder  = stream->commandEncoder();
 
-    id<MTLBuffer> outBuf = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
-    id<MTLBuffer> selfBuf = __builtin_bit_cast(id<MTLBuffer>, self.storage().data());
+      id<MTLBuffer> outBuf = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
+      id<MTLBuffer> selfBuf = __builtin_bit_cast(id<MTLBuffer>, self.storage().data());
 
-    [commandEncoder pushDebugGroup:[NSString stringWithFormat:@"Dispatch %s kernel", kernel_name.c_str()]];
-    [commandEncoder setComputePipelineState:cplState];
-    [commandEncoder setBytes:&length length:sizeof(length) atIndex:0];
-    [commandEncoder setBuffer:outBuf offset:output.storage_offset()*output.itemsize() atIndex:1];
-    [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
-    [commandEncoder setBytes:&sval length:sizeof(sval) atIndex:3];
-    dispatch1DJob(commandEncoder, cplState, length);
-    stream->commitAdaptive(self, output, cplState);
+      [commandEncoder pushDebugGroup:[NSString stringWithFormat:@"Dispatch %s kernel", kernel_name.c_str()]];
+      [commandEncoder setComputePipelineState:cplState];
+      [commandEncoder setBytes:&length length:sizeof(length) atIndex:0];
+      [commandEncoder setBuffer:outBuf offset:output.storage_offset()*output.itemsize() atIndex:1];
+      [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
+      [commandEncoder setBytes:&sval length:sizeof(sval) atIndex:3];
+      dispatch1DJob(commandEncoder, cplState, length);
+      stream->commitAdaptive(self, output, cplState);
+    }
   });
 }
 
@@ -324,20 +328,22 @@ at::Tensor& bitwise_not_out_mps (const at::Tensor& self, at::Tensor& output_) {
                                                      "bitwise_not");
 
   dispatch_sync(stream->queue(), ^(){
-    getMPSProfiler().beginProfileKernel(cplState, "bitwise_not", {self});
+    @autoreleasepool {
+      getMPSProfiler().beginProfileKernel(cplState, "bitwise_not", {self});
 
-    id<MTLComputeCommandEncoder> commandEncoder = stream->commandEncoder();
+      id<MTLComputeCommandEncoder> commandEncoder = stream->commandEncoder();
 
-    id<MTLBuffer> outBuf = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
-    id<MTLBuffer> selfBuf = __builtin_bit_cast(id<MTLBuffer>, self.storage().data());
+      id<MTLBuffer> outBuf = __builtin_bit_cast(id<MTLBuffer>, output.storage().data());
+      id<MTLBuffer> selfBuf = __builtin_bit_cast(id<MTLBuffer>, self.storage().data());
 
-    [commandEncoder pushDebugGroup:@"Dispatch bitwise_not kernel"];
-    [commandEncoder setComputePipelineState:cplState];
-    [commandEncoder setBytes:&length length:sizeof(length) atIndex:0];
-    [commandEncoder setBuffer:outBuf offset:output.storage_offset()*output.itemsize() atIndex:1];
-    [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
-    dispatch1DJob(commandEncoder, cplState, length);
-    stream->commitAdaptive(self, output, cplState);
+      [commandEncoder pushDebugGroup:@"Dispatch bitwise_not kernel"];
+      [commandEncoder setComputePipelineState:cplState];
+      [commandEncoder setBytes:&length length:sizeof(length) atIndex:0];
+      [commandEncoder setBuffer:outBuf offset:output.storage_offset()*output.itemsize() atIndex:1];
+      [commandEncoder setBuffer:selfBuf offset:self.storage_offset()*self.itemsize()  atIndex:2];
+      dispatch1DJob(commandEncoder, cplState, length);
+      stream->commitAdaptive(self, output, cplState);
+    }
   });
   if (needs_output_copy) {
       output_.copy_(output);
