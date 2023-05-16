@@ -1,16 +1,14 @@
 #pragma once
 #include <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
 
-#if !defined(__MAC_13_0) && !defined(MAC_OS_X_VERSION_13_0)
+#if !defined(__MAC_13_2) && !defined(MAC_OS_X_VERSION_13_2)
 using MPSGraphResizeNearestRoundingMode_Ventura = NSUInteger;
+#if !defined(__MAC_13_0) && !defined(MAC_OS_X_VERSION_13_0)
 MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeRoundPreferCeil = 0L;
 MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeRoundPreferFloor = 1L;
 MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeCeil = 2L;
 MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeFloor = 3L;
-MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeRoundToEven = 4L;
-MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeRoundToOdd = 5L;
-#elif !defined(__MAC_13_2) && !defined(MAC_OS_X_VERSION_13_2)
-using MPSGraphResizeNearestRoundingMode_Ventura = NSUInteger;
+#endif
 MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeRoundToEven = 4L;
 MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeRoundToOdd = 5L;
 #else
