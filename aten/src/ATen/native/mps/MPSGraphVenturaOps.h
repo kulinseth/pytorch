@@ -11,7 +11,7 @@ MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingMod
 typedef NSUInteger MPSGraphResizeNearestRoundingMode_Ventura NS_TYPED_ENUM;
 MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeRoundToEven = 4L;
 MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeRoundToOdd = 5L;
-#elif
+#else
 typedef MPSGraphResizeNearestRoundingMode MPSGraphResizeNearestRoundingMode_Ventura;
 #endif
 
