@@ -1,21 +1,22 @@
 #pragma once
 #include <MetalPerformanceShadersGraph/MetalPerformanceShadersGraph.h>
 
+#if !defined(__MAC_13_0) && !defined(MAC_OS_X_VERSION_13_0)
+typedef NSUInteger MPSGraphResizeNearestRoundingMode_Ventura NS_TYPED_ENUM;
+MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeRoundPreferCeil = 0L;
+MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeRoundPreferFloor = 1L;
+MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeCeil = 2L;
+MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeFloor = 3L;
+#elif !defined(__MAC_13_2) && !defined(MAC_OS_X_VERSION_13_2)
+typedef NSUInteger MPSGraphResizeNearestRoundingMode_Ventura NS_TYPED_ENUM;
+MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeRoundToEven = 4L;
+MPSGraphResizeNearestRoundingMode_Ventura const MPSGraphResizeNearestRoundingModeRoundToOdd = 5L;
+#elif
+typedef MPSGraphResizeNearestRoundingMode MPSGraphResizeNearestRoundingMode_Ventura;
+#endif
+
 // TODO: Remove me when moved to MacOS 13
 @interface MPSGraph (VenturaOps)
-
-#if !defined(__MAC_13_0) && !defined(MAC_OS_X_VERSION_13_0)
-typedef NSUInteger MPSGraphResizeNearestRoundingMode NS_TYPED_ENUM;
-MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeRoundPreferCeil = 0L;
-MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeRoundPreferFloor = 1L;
-MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeCeil = 2L;
-MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeFloor = 3L;
-#endif
-
-#if !defined(__MAC_13_2) && !defined(MAC_OS_X_VERSION_13_2)
-MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeRoundToEven = 4L;
-MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeRoundToOdd = 5L;
-#endif
 
 - (MPSGraphTensor * _Nonnull)cumulativeSumWithTensor:(MPSGraphTensor * _Nonnull)tensor
                                                 axis:(NSInteger)axis
@@ -134,7 +135,7 @@ MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeRoundTo
                                      relativeCoordinates:(BOOL) relativeCoordinates
                                             alignCorners:(BOOL) alignCorners
                                              paddingMode:(MPSGraphPaddingMode) paddingMode
-                                     nearestRoundingMode:(MPSGraphResizeNearestRoundingMode) nearestRoundingMode
+                                     nearestRoundingMode:(MPSGraphResizeNearestRoundingMode_Ventura) nearestRoundingMode
                                            constantValue:(double) constantValue
                                                     name:(NSString * _Nullable) name;
 - (MPSGraphTensor * _Nonnull) truncateWithTensor:(MPSGraphTensor * _Nonnull) tensor
