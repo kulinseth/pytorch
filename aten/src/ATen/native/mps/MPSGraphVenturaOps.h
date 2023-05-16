@@ -4,18 +4,17 @@
 // TODO: Remove me when moved to MacOS 13
 @interface MPSGraph (VenturaOps)
 
-#if !defined(__MAC_13_0) && \
-    (!defined(MAC_OS_X_VERSION_13_0) || (MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_13_0))
+#if !defined(__MAC_13_0) && !defined(MAC_OS_X_VERSION_13_0)
+typedef NSUInteger MPSGraphResizeNearestRoundingMode NS_TYPED_ENUM;
+MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeRoundPreferCeil = 0L;
+MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeRoundPreferFloor = 1L;
+MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeCeil = 2L;
+MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeFloor = 3L;
+#endif
 
-typedef NS_ENUM(NSUInteger, MPSGraphResizeNearestRoundingMode)
-{
-    MPSGraphResizeNearestRoundingModeRoundPreferCeil   =  0L,
-    MPSGraphResizeNearestRoundingModeRoundPreferFloor  =  1L,
-    MPSGraphResizeNearestRoundingModeCeil              =  2L,
-    MPSGraphResizeNearestRoundingModeFloor             =  3L,
-    MPSGraphResizeNearestRoundingModeRoundToEven       =  4L,
-    MPSGraphResizeNearestRoundingModeRoundToOdd        =  5L,
-};
+#if !defined(__MAC_13_2) && !defined(MAC_OS_X_VERSION_13_2)
+MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeRoundToEven = 4L;
+MPSGraphResizeNearestRoundingMode const MPSGraphResizeNearestRoundingModeRoundToOdd = 5L;
 #endif
 
 - (MPSGraphTensor * _Nonnull)cumulativeSumWithTensor:(MPSGraphTensor * _Nonnull)tensor
