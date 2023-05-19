@@ -16,7 +16,7 @@ jobs:
       BISECTION_ROOT: ".torchbench/v2-bisection-ci"
       IS_GHA: 1
       BUILD_ENVIRONMENT: benchmark-nightly
-    runs-on: [macos-nightly]
+    runs-on: [macos-torchbench]
     steps:
       - name: Clean up disk space before running MacOS workflow
         uses: pytorch/test-infra/.github/actions/check-disk-space@main
