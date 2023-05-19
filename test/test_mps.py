@@ -6477,7 +6477,7 @@ class TestNLLLoss(TestCaseMPS):
         x = net1(x)
         torch.mps.profiler.stop()
 
-        torch.mps.profiler.start(mode="interval", wait_until_completed=True)
+        torch.mps.profiler.start(mode="interval,log_stats", wait_until_completed=True)
         # just running some ops to capture the OS Signposts traces for profiling
         x = torch.rand(1, 128, 6, 6, device='mps', dtype=torch.float, requires_grad=True)
         x = net1(x)

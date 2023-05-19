@@ -11,10 +11,11 @@ def start(mode: str = "interval", wait_until_completed: bool = False) -> None:
 
     Args:
         mode(str): OS Signpost tracing mode could be "interval", "event",
-            or both "interval,event".
+            "log_stats" or a combination of them (e.g., "interval,event").
             The interval mode traces the duration of execution of the operations,
             whereas event mode marks the completion of executions.
             See document `Recording Performance Data`_ for more info.
+            use "log_stats" to log the profiling statistics after process's termination.
         wait_until_completed(bool): Waits until the MPS Stream complete
             executing each encoded GPU operation. This helps generating single
             dispatches on the trace's timeline.
@@ -36,10 +37,11 @@ def profile(mode: str = "interval", wait_until_completed: bool = False):
 
     Args:
     mode(str): OS Signpost tracing mode could be "interval", "event",
-        or both "interval,event".
+        "log_stats" or a combination of them (e.g., "interval,event").
         The interval mode traces the duration of execution of the operations,
         whereas event mode marks the completion of executions.
         see document `Recording Performance Data`_ for more info.
+        use "log_stats" to log the profiling statistics after process's termination.
     wait_until_completed(bool): Waits until the MPS Stream complete
         executing each encoded GPU operation. This helps generating single
         dispatches on the trace's timeline.
