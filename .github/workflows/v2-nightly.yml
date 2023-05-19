@@ -35,7 +35,7 @@ jobs:
         run: |
           # shellcheck disable=SC1090
           set -ex
-          ${CONDA_RUN} pip install requests bs4 argparse gitpython boto3 regex
+          ${CONDA_RUN} pip install requests bs4 argparse gitpython boto3 regex pyyaml
           # Check if nightly builds are available
           # Install PyTorch nightly from pip
           ${CONDA_RUN} pip3 install --pre torch torchvision torchtext torchaudio --index-url https://download.pytorch.org/whl/nightly/cpu
