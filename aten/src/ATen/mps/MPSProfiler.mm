@@ -150,9 +150,13 @@ void MPSProfiler::StartTrace(const string& mode, bool waitUntilCompleted) {
   while (getline(ss, token, ',')) {
     if (!token.empty()) {
       if (token == "interval") {
-         m_profile_options |= ProfileOptions::ALL_SIGNPOST_INTERVALS;
+        m_profile_options |= ProfileOptions::ALL_SIGNPOST_INTERVALS;
       } else if (token == "event") {
         m_profile_options |= ProfileOptions::ALL_SIGNPOST_EVENTS;
+      } else if (token == "log_stats") {
+        m_log_api_options |= LogOptions::ALL_STATS;
+        // keep m_log_api_options separately to avoid conflicts with env-var log settings
+        m_log_options |= m_log_api_options;
       } else {
         AT_ERROR("Invalid Signpost trace mode: ", token);
       }
@@ -169,6 +173,9 @@ void MPSProfiler::StartTrace(const string& mode, bool waitUntilCompleted) {
 void MPSProfiler::StopTrace() {
   m_profile_options = ProfileOptions::OPTIONS_NONE;
   m_signpost_types = SignpostTypes::SIGNPOST_NONE;
+  // only disable log options that were enabled via the APIs and not env-vars
+  m_log_options &= ~m_log_api_options;
+  m_log_api_options = LogOptions::LOG_NONE;
 }
 
 void MPSProfiler::beginProfileExecution(BaseInfo& info, bool cpuExecution) {
