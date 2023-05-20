@@ -328,7 +328,8 @@ public:
   // this enables generating OS Signpost traces from MPSProfiler on-demand
   // during runtime (instead of environment variables).
   // The "mode" could be either "interval", "event", or both "interval,event"
-  // for interval-based and/or event-based signpost tracing.
+  // for interval-based and/or event-based signpost tracing, or "log_stats"
+  // to log the profiling statistics after process's termination.
   void StartTrace(const string& mode, bool waitUntilCompleted);
   void StopTrace();
 
@@ -355,6 +356,7 @@ public:
   uint32_t m_signpost_types = 0;
   uint32_t m_profile_options = 0;
   uint32_t m_log_options = 0;
+  uint32_t m_log_api_options = 0;
   uint64_t m_kernel_counter = 0;
   uint64_t m_graph_counter = 0;
   uint64_t m_cpu_fb_counter = 0;
