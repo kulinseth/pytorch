@@ -438,11 +438,15 @@ TORCH_IMPL_FUNC(cumsum_out_mps)
   // issue #103810551: cumsum is horribly broken for int8, int16 and as chances for overflow is pretty high, cast to int32
   // fixed in macOS 13.3
   bool castInputData = (isIntegralType(input.scalar_type()) &&
-                        input.scalar_type() != ScalarType::Int &&
-                        input.scalar_type() != ScalarType::Long);
+                        input.scalar_type() != ScalarType::Int);
 
-  TORCH_CHECK(macOS13_3_plus || input.scalar_type() != ScalarType::Long,
-              "MPS does not support cumsum op with int64 input. Support has been added in macOS 13.3");
+  // TORCH_CHECK(macOS13_3_plus || input.scalar_type() != ScalarType::Long,
+  //             "MPS does not support cumsum op with int64 input. Support has been added in macOS 13.3");
+
+
+  if (castInputData) {
+    TORCH_WARN("Casting input tensor from ", input.scalar_type(), "to int32");
+  }
 
   mps::unary_op(input, result, "cumsum_out_mp" + std::to_string(dim),
                 ^ MPSGraphTensor* (MPSGraph* mpsGraph, MPSGraphTensor* inputTensor) {
