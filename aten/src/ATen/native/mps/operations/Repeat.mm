@@ -86,7 +86,7 @@ Tensor repeat_mps(const Tensor& self, IntArrayRef repeats) {
   }
 
   @autoreleasepool {
-    string key = "repeat_mps:" + getTensorsStringKey(self) + ":" + getArrayRefString(repeats);
+    string key = "repeat_mps:" + getTensorsStringKey(self, true, /*exclude_shape*/ true) + ":" + getArrayRefString(repeats);
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
 
     if(!cachedGraph) {
@@ -97,7 +97,7 @@ Tensor repeat_mps(const Tensor& self, IntArrayRef repeats) {
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, inputDataType, getMPSShape(expanded_tensor));
+          MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, inputDataType);
           MPSGraphTensor* outputTensor = [mpsGraph tileTensor:inputTensor
                                                withMultiplier:getMPSShape(repeats)
                                                          name:nil];

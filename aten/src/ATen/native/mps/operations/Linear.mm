@@ -51,7 +51,7 @@ Tensor _mps_linear(
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
 
   @autoreleasepool {
-    string key = "mps_linear" + getTensorsStringKey({input, weight, bias}) ;
+    string key = "mps_linear" + getTensorsStringKey({input, weight, bias}, true, /*exclude_shape*/ true) ;
     CachedGraph* cachedGraph = cache_->LookUpAs<CachedGraph>(key);
     if(!cachedGraph) {
       cachedGraph = cache_->CreateCachedGraphAs<CachedGraph>(key, ^ MPSCachedGraph * () {
@@ -62,8 +62,8 @@ Tensor _mps_linear(
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, input);
-          MPSGraphTensor* weightTensor = mpsGraphRankedPlaceHolder(mpsGraph, weight);
+          MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input.scalar_type()));
+          MPSGraphTensor* weightTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(weight.scalar_type()));
 
           MPSGraphTensor* weightTransposeTensor = [mpsGraph transposeTensor:weightTensor
                                                                   dimension:-1
@@ -87,7 +87,7 @@ Tensor _mps_linear(
               inputFlattened = [mpsGraph flatten2DTensor:inputTensor axis:-1 name:nil];
             }
 
-            newCachedGraph->biasTensor_ = mpsGraphRankedPlaceHolder(mpsGraph, bias);
+            newCachedGraph->biasTensor_ = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(bias.scalar_type()));
             MPSGraphTensor* xMulWTTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:inputFlattened
                                                                            secondaryTensor:weightTransposeTensor
                                                                                       name:nil];

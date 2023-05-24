@@ -25,8 +25,8 @@ struct RangeCachedGraph : public mps::MPSCachedGraph {
                                                     name:nil];
       coordsTensor = [mpsGraph castTensor:coordsTensor toType:dataType name:@"coords"];
 
-      startTensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, dataType, @[@1]);
-      multiplyTensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, dataType, @[@1]);
+      startTensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, dataType);
+      multiplyTensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, dataType);
       auto scaledCoords = [mpsGraph multiplicationWithPrimaryTensor:coordsTensor
                                                     secondaryTensor:multiplyTensor
                                                                name:nil];
@@ -34,7 +34,7 @@ struct RangeCachedGraph : public mps::MPSCachedGraph {
                                          secondaryTensor:startTensor
                                                     name:nil];
       if (needsClamp) {
-        endTensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, dataType, @[@1]);
+        endTensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, dataType);
         outputTensor = [mpsGraph clampWithTensor:outputTensor
                                   minValueTensor: startLessEnd? startTensor : endTensor
                                   maxValueTensor: startLessEnd? endTensor : startTensor
@@ -99,7 +99,7 @@ Tensor& arange_mps_out(const Scalar& start, const Scalar& end, const Scalar& ste
     auto stream = getCurrentMPSStream();
     auto mpsDataType = getMPSDataType(result.scalar_type());
     @autoreleasepool {
-      string key = "arange_mps_out" + getTensorsStringKey({result}) + ":" + to_string(size);
+      string key = "arange_mps_out" + getTensorsStringKey({result}, true, /*exclude_shape*/ true) + ":" + to_string(size);
       auto cachedGraph = static_cast<RangeCachedGraph *>(cache_->LookUp(key));
       if (!cachedGraph) {
         auto *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph *() {
@@ -170,7 +170,7 @@ Tensor& range_mps_out(const Scalar& start, const Scalar& end, const Scalar& step
     auto stream = getCurrentMPSStream();
     auto mpsDataType = getMPSDataType(result.scalar_type());
     @autoreleasepool {
-      string key = "arange_mps_out" + getTensorsStringKey({result}) + ":" + to_string(size);
+      string key = "range_mps_out" + getTensorsStringKey({result}, true, /*exclude_shape*/ true) + ":" + to_string(size);
       auto cachedGraph = static_cast<RangeCachedGraph *>(cache_->LookUp(key));
       if (!cachedGraph) {
         auto *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph *() {

@@ -2149,7 +2149,7 @@ TORCH_IMPL_FUNC(silu_out_mps) (
   MPSStream* stream = getCurrentMPSStream();
 
   @autoreleasepool {
-    string key = "silu_out_mps:" + getTensorsStringKey({self});
+    string key = "silu_out_mps" + getTensorsStringKey({self}, true, /*exclude_shape*/ true);
 
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
     if(!cachedGraph) {
@@ -2161,7 +2161,7 @@ TORCH_IMPL_FUNC(silu_out_mps) (
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          MPSGraphTensor *inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, self);
+          MPSGraphTensor *inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(self.scalar_type()));
 
           MPSGraphTensor* unitTensor = [mpsGraph constantWithScalar:1.0
                                                               shape:@[@1]

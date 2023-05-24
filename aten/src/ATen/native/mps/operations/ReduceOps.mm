@@ -192,7 +192,7 @@ void reduction_out_mps(
     NSString* ns_key = [[wrappedAxes valueForKey:@"description"] componentsJoinedByString:@","];
     string key = func_name                                                             + ":" +
                  string([ns_key UTF8String])                                           + ":" +
-                 getTensorsStringKey({input_t, output_t})                              + ":" +
+                 getTensorsStringKey({input_t, output_t}, true, /*exclude_shape*/true) + ":" +
                  std::to_string(keepdim)                                               + ":" +
                  std::to_string(reduction_type)                                        + ":" +
                  dtype_str;
@@ -208,7 +208,7 @@ void reduction_out_mps(
           newCachedGraph = new CachedGraph(mpsGraph);
           auto inputScalarType = input_t.scalar_type();
 
-          MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type()), mpsShape);
+          MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input_t.scalar_type()));
           MPSGraphTensor* castInputTensor = inputTensor;
           MPSDataType inputCastType = MPSDataTypeInvalid;
           if (dtype.has_value() &&
