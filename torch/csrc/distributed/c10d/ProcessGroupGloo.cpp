@@ -1763,6 +1763,45 @@ class AsyncAllgatherWork : public ProcessGroupGloo::AsyncWork {
   }
 };
 
+
+class AsyncAllgatherMPSWork : public AsyncAllgatherWork {
+ public:
+  AsyncAllgatherMPSWork(
+      const std::shared_ptr<gloo::Context>& context,
+      std::vector<std::vector<at::Tensor>>& outputs,
+      std::vector<at::Tensor>& inputs,
+      uint32_t tag)
+      : AsyncAllgatherWork(context, outputs, inputs, tag){}
+  void run() override {
+    std::vector<at::Tensor> inputs_cpu;
+    std::vector<std::vector<at::Tensor>> outputs_cpu;
+    std::vector<at::Tensor> temp;
+
+    for( int i = 0; i < inputs.size(); i++) {
+      inputs_cpu.push_back( inputs[i].to("cpu") );
+    }
+
+    for( int i = 0; i < outputs.size(); i++) {
+      temp.clear();
+      for( int j = 0; j < outputs[i].size(); j++) {
+          temp.push_back( outputs[i][j].to("cpu"));
+        }
+      outputs_cpu.push_back(temp);
+    }
+
+    allgather(outputs_cpu, inputs_cpu);
+
+    for( int i = 0; i < inputs.size(); i++) {
+      inputs[i].copy_( inputs_cpu[i] );
+    }
+    for( int i = 0; i < outputs.size(); i++) {
+      for( int j = 0; j < outputs[i].size(); j++) {
+          outputs[i][j].copy_( outputs_cpu[i][j] );
+        }
+    }
+  }
+};
+
 // Note: current CUDA implementation holds the assumption that the
 // tensors in the nested output tensor vectors are on the same device.
 class AsyncAllgatherCUDAWork : public AsyncAllgatherWork {
@@ -1881,6 +1920,8 @@ c10::intrusive_ptr<Work> ProcessGroupGloo::allgather(
   switch (device.type()) {
     case at::kCPU:
       break;
+    case at::kMPS:
+      break;
     case at::kCUDA:
       // If the user gave us a CUDA tensor then CUDA must be loaded.
       TORCH_INTERNAL_ASSERT(at::hasCUDA());
@@ -1894,6 +1935,9 @@ c10::intrusive_ptr<Work> ProcessGroupGloo::allgather(
   auto context = getContext(tag);
   if (device.type() == at::kCPU) {
     work = c10::make_intrusive<AsyncAllgatherWork>(
+        std::move(context), outputs, inputs, tag);
+  } else if (device.type() == at::kMPS) {
+    work = c10::make_intrusive<AsyncAllgatherMPSWork>(
         std::move(context), outputs, inputs, tag);
   } else if (device.type() == at::kCUDA) {
     work = c10::make_intrusive<AsyncAllgatherCUDAWork>(
