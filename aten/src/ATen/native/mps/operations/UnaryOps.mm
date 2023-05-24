@@ -8,8 +8,6 @@ namespace at::native {
 enum class MPSCumulativeOpType : uint8_t {
   MPS_CUMSUM  = 0,
   MPS_CUMPROD = 1,
-  MPS_CUMMIN  = 2,
-  MPS_CUMMAX  = 3,
 };
 namespace mps {
 
@@ -470,12 +468,6 @@ void cumulative_op_impl(
                       break;
                     case MPSCumulativeOpType::MPS_CUMPROD:
                       cumulativeOpTensor = [mpsGraph cumulativeProductWithTensor:inputTensor axis:dim name:nil];
-                      break;
-                    case MPSCumulativeOpType::MPS_CUMMIN:
-                      cumulativeOpTensor = [mpsGraph cumulativeMinimumWithTensor:inputTensor axis:dim name:nil];
-                      break;
-                    case MPSCumulativeOpType::MPS_CUMMAX:
-                      cumulativeOpTensor = [mpsGraph cumulativeMaximumWithTensor:inputTensor axis:dim name:nil];
                       break;
                     default:
                       TORCH_CHECK(false, "Undefined cumulative op type");
