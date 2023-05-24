@@ -232,6 +232,7 @@ class BackendConfig:
             # default config when backend is not specified
             self.device_backend_map = {
                 "cpu": Backend.GLOO,
+                "mps": Backend.GLOO,
                 "cuda": Backend.NCCL,
             }
         elif backend.lower() in Backend.backend_list:
@@ -239,6 +240,7 @@ class BackendConfig:
             backend_val = Backend(backend)
             self.device_backend_map = {
                 "cpu": backend_val,
+                "mps": backend_val,
                 "cuda": backend_val,
             }
         else:
@@ -249,17 +251,9 @@ class BackendConfig:
                 Custom backend string is an experimental feature where the backend string must be in the format:
                 "<device_type1>:<backend1>,<device_type2>:<backend2>...". e.g. 'cpu:gloo,cuda:nccl'"""
 
-            # parse the backend string and populate the device_backend_map
-            for device_backend_pair_str in backend.lower().split(","):
-                device_backend_pair = device_backend_pair_str.split(":")
-                if len(device_backend_pair) != 2:
-                    raise ValueError(f"Invalid device:backend pairing: \
-                                     {device_backend_pair_str}. {backend_str_error_message}")
-                device, backend = device_backend_pair
-                if device in self.device_backend_map:
-                    raise ValueError(f"Duplicate device type {device} \
-                                     in backend string: {backend}. {backend_str_error_message}")
-                self.device_backend_map[device] = Backend(backend)
+        required_devices = ["cpu", "mps", "cuda"]
+        for device in required_devices:
+            assert device in self.device_backend_map
 
     def __repr__(self):
         # string with all the device:backend pairs separared by commas
