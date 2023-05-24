@@ -565,7 +565,7 @@ PickleOpCode Unpickler::readInstruction() {
       }
 
       if (device.is_cuda() || device.is_xpu() || device.is_meta() ||
-          device.is_hpu()) {
+          device.is_hpu() || device.is_mps()) {
         tensor = tensor.to(device, tensor.scalar_type());
       } else if (device.type() != DeviceType::CPU) {
         AT_ERROR(
