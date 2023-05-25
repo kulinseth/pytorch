@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Owner(s): ["module: mps"]
 
+import io
 import platform
 import sys
 import math
@@ -6495,6 +6496,15 @@ class TestNLLLoss(TestCaseMPS):
         elapsedTime = startEvent.elapsed_time(endEvent)
         self.assertTrue(elapsedTime > 0.0)
         print(f"Elapsed time of events: {elapsedTime:.3f} ms")
+
+    def test_jit_save_load(self):
+        m = torch.nn.Module()
+        m.x = torch.rand(3, 3, device='mps')
+        buffer = io.BytesIO()
+        torch.jit.save(torch.jit.script(m), buffer)
+        buffer.seek(0)
+        n = torch.jit.load(buffer)
+        self.assertEqual(n.x, m.x)
 
     # Test random_.to and random_.from
     def test_random(self):
