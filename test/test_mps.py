@@ -7802,7 +7802,6 @@ class TestViewOpsMPS(TestCaseMPS):
         [helper(op) for op in [torch.mul, torch.div, torch.add, torch.sub, torch.lt, torch.le, torch.gt,
                                torch.ge, torch.ne, torch.logical_or, torch.logical_and, torch.eq]]
 
-
     # TODO: is resize best put in test_view_ops?
     def test_resize_as_preserves_strides(self, device="mps"):
         x = torch.empty(2, 3).t()
