@@ -7788,6 +7788,20 @@ class TestViewOpsMPS(TestCaseMPS):
         c2 = torch.tensor([True, False], dtype=bool, device=device)
         self.assertEqual(c1.dtype, c2.dtype)
 
+    def test_binary_kernels(self):
+        def helper(torch_op):
+            x = torch.randn(5, dtype=torch.half, device="mps")[2:].view([1, 3])
+            y = torch.randn(100, dtype=torch.half, device="mps")[9].view([1, 1])
+
+            x_cpu = x.detach().clone().cpu()
+            y_cpu = y.detach().clone().cpu()
+
+            out = torch_op(x, y)
+            out_cpu = torch_op(x_cpu, y_cpu)
+            self.assertEqual(out, out_cpu, rtol=0.0, atol=0.0)
+        [helper(op) for op in [torch.mul, torch.div, torch.add, torch.sub, torch.lt, torch.le, torch.gt,
+                               torch.ge, torch.ne, torch.logical_or, torch.logical_and, torch.eq]]
+
     # TODO: is resize best put in test_view_ops?
     def test_resize_as_preserves_strides(self, device="mps"):
         x = torch.empty(2, 3).t()
