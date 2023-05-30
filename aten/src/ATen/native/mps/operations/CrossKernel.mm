@@ -155,12 +155,13 @@ void cross_mps_impl(const Tensor& out, const Tensor& input, const Tensor& other,
       }
 
       id<MTLComputePipelineState> kernelDataOffsetsPSO = MPSDevice::getInstance()->metalIndexingFunction("kernel_index_offsets");
-      id<MTLBuffer> kernelDataOffsets = [[device newBufferWithLength: numThreads * sizeof(simd_uint3)
-                                                             options: 0] autorelease];
+      c10::DataPtr kernelDataOffsetsPtr = getIMPSAllocator()->allocate(numThreads * sizeof(simd_uint3));
+      id<MTLBuffer> kernelDataOffsetsBuf = (id<MTLBuffer>) kernelDataOffsetsPtr.get();
+
       TORCH_CHECK(kernelDataOffsetsPSO, "Failed to created pipeline state object, error: ", [[error description] UTF8String]);
       [computeEncoder setComputePipelineState:kernelDataOffsetsPSO];
       [computeEncoder setBytes:strides.data() length:sizeof(uint32_t) * nDim * nOffsets atIndex:0];
-      [computeEncoder setBuffer:kernelDataOffsets offset:0 atIndex:1];
+      [computeEncoder setBuffer:kernelDataOffsetsBuf offset:0 atIndex:1];
       [computeEncoder setBytes:iterShapeData.data() length:sizeof(uint32_t) * iterShape.size() atIndex:2];
       [computeEncoder setBytes:&nDim length:sizeof(uint32_t) atIndex:3];
       [computeEncoder setBytes:&nOffsets length:sizeof(uint32_t) atIndex:4];
@@ -182,7 +183,7 @@ void cross_mps_impl(const Tensor& out, const Tensor& input, const Tensor& other,
       [computeEncoder setBuffer:inputBuffer  offset:input.storage_offset() * input.element_size() atIndex:0];
       [computeEncoder setBuffer:otherBuffer  offset:other.storage_offset() * other.element_size() atIndex:1];
       [computeEncoder setBuffer:outputBuffer offset:out.storage_offset() * out.element_size() atIndex:2];
-      [computeEncoder setBuffer:kernelDataOffsets offset:0 atIndex:3];
+      [computeEncoder setBuffer:kernelDataOffsetsBuf offset:0 atIndex:3];
       [computeEncoder setBytes:&out_dim_stride  length:sizeof(int64_t)  atIndex:4];
       [computeEncoder setBytes:&input_dim_stride length:sizeof(int64_t) atIndex:5];
       [computeEncoder setBytes:&other_dim_stride length:sizeof(int64_t) atIndex:6];
