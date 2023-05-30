@@ -77,11 +77,18 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
       std::string indexFunction = getIndexFunctionName(inputTensor.scalar_type(), index_select, accumulate);
       id<MTLComputePipelineState> indexSelectPSO = nil;
       id<MTLBuffer> indexAB = nil;
+      c10::DataPtr indexABPtr;
 #if defined(__MAC_13_0)
       if (is_macos_13_or_newer(MacOSVersion::MACOS_VER_13_0_PLUS)) {
         indexSelectPSO = MPSDevice::getInstance()->metalIndexingFunction(indexFunction);
         size_t argumentBufferLength = sizeof(uint64_t) * num_indices;
-        indexAB = [[device newBufferWithLength:argumentBufferLength options:0] autorelease];
+        if (device.hasUnifiedMemory) {
+          // this only works on unified memory where Metal Heaps with Shared-storage mode are supported
+          indexABPtr = getIMPSAllocator(/*sharedAllocator*/true)->allocate(argumentBufferLength);
+          indexAB = (id<MTLBuffer>) indexABPtr.get();
+        } else {
+          indexAB = [[device newBufferWithLength:argumentBufferLength options:0] autorelease];
+        }
         uint64_t* indexABContents = (uint64_t*)(indexAB.contents);
         for (uint32_t idx = 0; idx < num_indices; idx++) {
           const Tensor& indexTensor = iter.tensor(idx+2);
@@ -97,7 +104,13 @@ bool dispatchIndexKernel(TensorIteratorBase& iter,
         id<MTLFunction> indexKernelFunction = [[lib newFunctionWithName: [NSString stringWithUTF8String: indexFunction.c_str()]] autorelease];
         id<MTLArgumentEncoder> argumentEncoder = [[indexKernelFunction newArgumentEncoderWithBufferIndex:0] autorelease];
         NSUInteger argumentBufferLength = argumentEncoder.encodedLength;
-        indexAB = [[device newBufferWithLength:argumentBufferLength options:0] autorelease];
+        if (device.hasUnifiedMemory) {
+          // this only works on unified memory where Metal Heaps with Shared-storage mode are supported
+          indexABPtr = getIMPSAllocator(/*sharedAllocator*/true)->allocate(argumentBufferLength);
+          indexAB = (id<MTLBuffer>) indexABPtr.get();
+        } else {
+          indexAB = [[device newBufferWithLength:argumentBufferLength options:0] autorelease];
+        }
         [argumentEncoder setArgumentBuffer:indexAB offset:0];
 
         for (uint32_t idx = 0; idx < num_indices; idx++) {

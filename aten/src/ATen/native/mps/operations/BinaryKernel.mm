@@ -269,17 +269,18 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
   id<MTLBuffer> outputBuffer = mps::getMTLBufferStorage(outputTensor);
   uint32_t inputTensorStorage = inputTensor.storage_offset() * inputTensor.element_size();
   uint32_t otherTensorStorage = otherTensor.storage_offset() * otherTensor.element_size();
-  mps::MPSScalar scalar;
+  mps::MPSScalar scalarInput;
+  mps::MPSScalar scalarOther;
   if (all_scalar) {
     type = BinaryKernelType::Scalar;
     if (iter.is_cpu_scalar(1)) {
-      scalar = mps::getMPSScalar(inputTensor.item(), inputTensor.scalar_type());
-      inputBuffer = (id<MTLBuffer>)getIMPSAllocator()->allocScalarBufferWithValue(&scalar.value, scalar.size).get();
+      scalarInput = mps::getMPSScalar(inputTensor.item(), inputTensor.scalar_type());
+      inputBuffer = getMTLBufferFromScalar(mpsStream, scalarInput);
       inputTensorStorage = 0;
     }
     if (iter.is_cpu_scalar(2)) {
-      scalar = mps::getMPSScalar(otherTensor.item(), otherTensor.scalar_type());
-      otherBuffer = (id<MTLBuffer>)getIMPSAllocator()->allocScalarBufferWithValue(&scalar.value, scalar.size).get();
+      scalarOther = mps::getMPSScalar(otherTensor.item(), otherTensor.scalar_type());
+      otherBuffer = getMTLBufferFromScalar(mpsStream, scalarOther);
       otherTensorStorage = 0;
     }
   } else if (scalar_pos) {
@@ -291,12 +292,12 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
 
     if (iter.is_cpu_scalar(scalar_pos)) {
       if (scalar_pos == 1) {
-        scalar = mps::getMPSScalar(inputTensor.item(), inputTensor.scalar_type());
-        inputBuffer = (id<MTLBuffer>)getIMPSAllocator()->allocScalarBufferWithValue(&scalar.value, scalar.size).get();
+        scalarInput = mps::getMPSScalar(inputTensor.item(), inputTensor.scalar_type());
+        inputBuffer = getMTLBufferFromScalar(mpsStream, scalarInput);
         inputTensorStorage = 0;
       } else {
-        scalar = mps::getMPSScalar(otherTensor.item(), otherTensor.scalar_type());
-        otherBuffer = (id<MTLBuffer>)getIMPSAllocator()->allocScalarBufferWithValue(&scalar.value, scalar.size).get();
+        scalarOther = mps::getMPSScalar(otherTensor.item(), otherTensor.scalar_type());
+        otherBuffer = getMTLBufferFromScalar(mpsStream, scalarOther);
         otherTensorStorage = 0;
       }
     }
@@ -568,12 +569,12 @@ void fmax_fmin_mps_impl(TensorIteratorBase& iter, const std::string max_min) {
       }
 
       id<MTLComputePipelineState> kernelDataOffsetsPSO = MPSDevice::getInstance()->metalIndexingFunction("kernel_index_offsets");
-      id<MTLBuffer> kernelDataOffsets = [[device newBufferWithLength: numThreads * sizeof(simd_uint3)
-                                                             options: 0] autorelease];
+      c10::DataPtr kernelDataOffsetsPtr = getIMPSAllocator()->allocate(numThreads * sizeof(simd_uint3));
+      id<MTLBuffer> kernelDataOffsetsBuf = (id<MTLBuffer>) kernelDataOffsetsPtr.get();
       TORCH_CHECK(kernelDataOffsetsPSO, "Failed to created pipeline state object, error: ", [[error description] UTF8String]);
       [computeEncoder setComputePipelineState:kernelDataOffsetsPSO];
       [computeEncoder setBytes:strides.data() length:sizeof(uint32_t) * nDim * nOffsets atIndex:0];
-      [computeEncoder setBuffer:kernelDataOffsets offset:0 atIndex:1];
+      [computeEncoder setBuffer:kernelDataOffsetsBuf offset:0 atIndex:1];
       [computeEncoder setBytes:iterShapeData.data() length:sizeof(uint32_t) * iterShape.size() atIndex:2];
       [computeEncoder setBytes:&nDim length:sizeof(uint32_t) atIndex:3];
       [computeEncoder setBytes:&nOffsets length:sizeof(uint32_t) atIndex:4];
@@ -596,7 +597,7 @@ void fmax_fmin_mps_impl(TensorIteratorBase& iter, const std::string max_min) {
       [computeEncoder setBuffer:inputBuffer  offset:input.storage_offset() * input.element_size() atIndex:0];
       [computeEncoder setBuffer:otherBuffer  offset:other.storage_offset() * other.element_size() atIndex:1];
       [computeEncoder setBuffer:outputBuffer offset:out.storage_offset() * out.element_size() atIndex:2];
-      [computeEncoder setBuffer:kernelDataOffsets offset:0 atIndex:3];
+      [computeEncoder setBuffer:kernelDataOffsetsBuf offset:0 atIndex:3];
 
       NSUInteger tgSize = fmaxfminPSO.maxTotalThreadsPerThreadgroup;
       if (tgSize > numThreads) {

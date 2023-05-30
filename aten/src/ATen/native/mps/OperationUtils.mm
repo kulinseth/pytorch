@@ -428,6 +428,19 @@ MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, MPSScalar&
   return result;
 }
 
+id<MTLBuffer> getMTLBufferFromScalar(MPSStream* mpsStream, MPSScalar& scalar) {
+  id<MTLBuffer> buffer = nullptr;
+  auto device = mpsStream->device();
+  // Scalar pools are only supported on devices with unified memory
+  if (device.hasUnifiedMemory) {
+    scalar.buffer = getIMPSAllocator()->allocScalarBufferWithValue(&scalar.value, scalar.size);
+    buffer = scalar.getMTLBuffer();
+  } else {
+    buffer = [[device newBufferWithBytes:&scalar.value length:scalar.size options:0] autorelease];
+  }
+  return buffer;
+}
+
 void resize_tensor(Tensor* output) {
   output->resize_(output->sizes());
 }
