@@ -109,6 +109,7 @@ MPSGraphTensor* castMPSTensor(MPSGraph *mpsGraph, MPSGraphTensor* tensor, MPSDat
 MPSGraphTensorData* allocMPSGraphTensorData(id<MTLBuffer> buffer, MPSShape *mpsShape, MPSDataType mpsDataType);
 MPSGraphTensorData *getMPSGraphTensorData(MPSGraph* mpsGraph, MPSStream* mpsStream, const Tensor& tensor);
 MPSGraphTensorData* getMPSGraphTensorFromScalar(MPSStream* mpsStream, MPSScalar& scalar);
+id<MTLBuffer> getMTLBufferFromScalar(MPSStream* mpsStream, MPSScalar& scalar);
 
 MPSGraph* make_mps_graph();
 void printTensorNDArray(const Tensor& t);
