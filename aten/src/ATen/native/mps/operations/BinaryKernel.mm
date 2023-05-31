@@ -379,8 +379,331 @@ void dispatch_binary_kernel_mps_(TensorIteratorBase& iter, const std::string& op
   });
 }
 
+static char* BINARY_OP_TEMPLATE_STRIDED_TENSOR2 =
+R"METAL_BINARY(
+kernel void {3}_kernel_strided_1(uint linear_index [[thread_position_in_grid]],
+                                 const device void     * input_             [[buffer(0)]],
+                                 const device void     * other_             [[buffer(1)]],
+                                 device void           * output_            [[buffer(2)]],
+
+                                 constant int & size_input                  [[buffer(3)]],
+                                 constant int & stride_input                [[buffer(4)]],
+
+                                 constant int & size_other                  [[buffer(5)]],
+                                 constant int & stride_other                [[buffer(6)]],
+
+                                 constant int & size_output                 [[buffer(7)]],
+                                 constant int & stride_output               [[buffer(8)]]) {{
+  device {0}* output       = (device {0}*)(output_);
+  const device {1}* input  = (const device {1}*)(input_);
+  const device {2}* other  = (const device {2}*)(other_);
+
+  // Input
+  const int local_index_input = linear_index % size_input;
+  const int strided_index_input = local_index_input * stride_input;
+
+  // Other
+  const int local_index_other = linear_index % size_other;
+  const int strided_index_other = local_index_other * stride_other;
+
+  // Output
+  const int local_index_output = linear_index % size_output;
+  const int strided_index_output = local_index_output * stride_output;
+
+  output[strided_index_output] = ({5})input[strided_index_input] {4} ({5})other[strided_index_other];
+}}
+
+kernel void {3}_kernel_strided_2(uint linear_index [[thread_position_in_grid]],
+                                 const device void     * input_             [[buffer(0)]],
+                                 const device void     * other_             [[buffer(1)]],
+                                 device void           * output_            [[buffer(2)]],
+
+                                 constant packed_uint2 & size_input         [[buffer(3)]],
+                                 constant packed_uint2 & stride_input       [[buffer(4)]],
+
+                                 constant packed_uint2 & size_other                  [[buffer(5)]],
+                                 constant packed_uint2 & stride_other                [[buffer(6)]],
+
+                                 constant packed_uint2 & size_output                 [[buffer(7)]],
+                                 constant packed_uint2 & stride_output               [[buffer(8)]]) {{
+  device {0}* output       = (device {0}*)(output_);
+  const device {1}* input  = (const device {1}*)(input_);
+  const device {2}* other  = (const device {2}*)(other_);
+
+  packed_uint2 local_index;
+
+  // Input
+  local_index.x = linear_index / size_input[1] % size_input[0];
+  local_index.y = linear_index % size_input[1];
+  const packed_uint2 strided_index_input = local_index * stride_input;
+
+  // Other
+  local_index.x = linear_index / size_other[1] % size_other[0];
+  local_index.y = linear_index % size_other[1];
+  const packed_uint2 strided_index_other = local_index * stride_other;
+
+  // Output
+  local_index.x = linear_index / size_output[1] % size_output[0];
+  local_index.y = linear_index % size_output[1];
+  const packed_uint2 strided_index_output = local_index * stride_output;
+
+  output[strided_index_output.x + strided_index_output.y] = ({5})input[strided_index_input.x + strided_index_input.y] {4} ({5})other[strided_index_other.x + strided_index_other.y];
+}}
+
+kernel void {3}_kernel_strided_3(uint linear_index [[thread_position_in_grid]],
+                                 const device void     * input_             [[buffer(0)]],
+                                 const device void     * other_             [[buffer(1)]],
+                                 device void           * output_            [[buffer(2)]],
+
+                                 constant packed_uint3 & size_input         [[buffer(3)]],
+                                 constant packed_uint3 & stride_input       [[buffer(4)]],
+
+                                 constant packed_uint3 & size_other                  [[buffer(5)]],
+                                 constant packed_uint3 & stride_other                [[buffer(6)]],
+
+                                 constant packed_uint3 & size_output                 [[buffer(7)]],
+                                 constant packed_uint3 & stride_output               [[buffer(8)]]) {{
+  device {0}* output       = (device {0}*)(output_);
+  const device {1}* input  = (const device {1}*)(input_);
+  const device {2}* other  = (const device {2}*)(other_);
+
+  packed_uint3 local_index;
+
+  // Input
+  local_index.x = linear_index / (size_input[2] * size_input[1]) % size_input[0];
+  local_index.y = linear_index / size_input[2] % size_input[1];
+  local_index.z = linear_index % size_input[2];
+  const packed_uint3 strided_index_input = local_index * stride_input;
+
+  // Other
+  local_index.x = linear_index / (size_other[2] * size_other[1]) % size_other[0];
+  local_index.y = linear_index / size_other[2] % size_other[1];
+  local_index.z = linear_index % size_other[2];
+  const packed_uint3 strided_index_other = local_index * stride_other;
+
+  // Output
+  local_index.x = linear_index / (size_output[2] * size_output[1]) % size_output[0];
+  local_index.y = linear_index / size_output[2] % size_output[1];
+  local_index.z = linear_index % size_output[2];
+  const packed_uint3 strided_index_output = local_index * stride_output;
+
+  output[strided_index_output.x + strided_index_output.y + strided_index_output.z] = ({5})input[strided_index_input.x + strided_index_input.y + strided_index_input.z] {4} ({5})other[strided_index_other.x + strided_index_other.y + strided_index_other.z];
+}}
+
+kernel void {3}_kernel_strided_4(uint linear_index [[thread_position_in_grid]],
+                                 const device void     * input_             [[buffer(0)]],
+                                 const device void     * other_             [[buffer(1)]],
+                                 device void           * output_            [[buffer(2)]],
+
+                                 constant packed_uint4 & size_input         [[buffer(3)]],
+                                 constant packed_uint4 & stride_input       [[buffer(4)]],
+
+                                 constant packed_uint4 & size_other                  [[buffer(5)]],
+                                 constant packed_uint4 & stride_other                [[buffer(6)]],
+
+                                 constant packed_uint4 & size_output                 [[buffer(7)]],
+                                 constant packed_uint4 & stride_output               [[buffer(8)]]) {{
+  device {0}* output       = (device {0}*)(output_);
+  const device {1}* input  = (const device {1}*)(input_);
+  const device {2}* other  = (const device {2}*)(other_);
+
+  packed_uint4 local_index;
+
+  // Input
+  local_index.x = linear_index / (size_input[3] * size_input[2] * size_input[1]) % size_input[0];
+  local_index.y = linear_index / (size_input[3] * size_input[2]) % size_input[1];
+  local_index.z = linear_index / size_input[3] % size_input[2];
+  local_index.w = linear_index % size_input[3];
+  const packed_uint4 strided_index_input = local_index * stride_input;
+
+  // Other
+  local_index.x = linear_index / (size_other[3] * size_other[2] * size_other[1]) % size_other[0];
+  local_index.y = linear_index / (size_other[3] * size_other[2]) % size_other[1];
+  local_index.z = linear_index / size_other[3] % size_other[2];
+  local_index.w = linear_index % size_other[3];
+  const packed_uint4 strided_index_other = local_index * stride_other;
+
+  // Output
+  local_index.x = linear_index / (size_output[3] * size_output[2] * size_output[1]) % size_output[0];
+  local_index.y = linear_index / (size_output[3] * size_output[2]) % size_output[1];
+  local_index.z = linear_index / size_output[3] % size_output[2];
+  local_index.w = linear_index % size_output[3];
+  const packed_uint4 strided_index_output = local_index * stride_output;
+
+  output[strided_index_output.x + strided_index_output.y + strided_index_output.z + strided_index_output.w] = ({5})input[strided_index_input.x + strided_index_input.y + strided_index_input.z + strided_index_input.w] {4} ({5})other[strided_index_other.x + strided_index_other.y + strided_index_other.z + strided_index_other.w];
+}}
+
+)METAL_BINARY";
+
+static id<MTLLibrary> compileBinaryOpsLibrary2(id<MTLDevice> device,
+                                              const std::string& t1,
+                                              const std::string& t2,
+                                              const std::string& t3,
+                                              const std::string& common_dtype,
+                                              const std::string& op,
+                                              const std::string& kernel_operator) {
+  auto key = op + t1 + t2 + t3 + common_dtype;
+  static std::unordered_map<std::string, id<MTLLibrary>> libMap;
+  auto it = libMap.find(key);
+  if (it != libMap.end()) {
+    return it->second;
+  }
+  NSError *error = nil;
+  MTLCompileOptions *options = [[MTLCompileOptions new] autorelease];
+  MTLLanguageVersion languageVersion = MTLLanguageVersion2_2;
+#if defined(__MAC_13_0)
+  if (is_macos_13_or_newer(MacOSVersion::MACOS_VER_13_0_PLUS)) {
+    languageVersion = MTLLanguageVersion3_0;
+  }
+#endif
+
+  [options setLanguageVersion: languageVersion];
+  string s = fmt::format(BINARY_OP_TEMPLATE_STRIDED_TENSOR2, t1, t2, t3, op, kernel_operator, common_dtype);
+  // std::cout << s << std::endl;
+  auto rc = [device newLibraryWithSource:[NSString stringWithUTF8String:s.c_str()]
+                                 options:options
+                                   error:&error];
+  TORCH_CHECK(rc != nil && error == nil, "Failed to compile library: ", [[error localizedDescription] UTF8String]);
+  libMap[key] = rc;
+  return rc;
+}
+
+
+static id<MTLComputePipelineState> getBinaryPSO2(id<MTLDevice> device,
+                                                const std::string& t1,
+                                                const std::string& t2,
+                                                const std::string& t3,
+                                                const std::string& common_dtype,
+                                                const std::string& fname,
+                                                const std::string& op,
+                                                const std::string& kernel_operator) {
+  auto key = t1 + t2 + t3 + common_dtype + fname;
+  static std::unordered_map<std::string, id<MTLComputePipelineState>> cplMap;
+  auto it = cplMap.find(key);
+  if (it != cplMap.end()) {
+     return it->second;
+  }
+  NSError *error = nil;
+  auto library = compileBinaryOpsLibrary2(device, t1, t2, t3, common_dtype, op, kernel_operator);
+  id<MTLFunction> func = [library newFunctionWithName:[NSString stringWithUTF8String:fname.c_str()]];
+  TORCH_CHECK(func != nil, "Can't get function ", fname);
+  auto rc = [device newComputePipelineStateWithFunction:func error:&error];
+  TORCH_CHECK(rc != nil && error == nil, "Failed to construct pipeline state: ", [[error localizedDescription] UTF8String]);
+  cplMap[key] = rc;
+  return rc;
+}
+
 static
-void dispatch_binary_kernel_mps(const Tensor& self, const Tensor& other, const Tensor& output, const std::string& op, const std::string& kernel_operator) {
+bool dispatch_binary_kernel_mps(const Tensor& self, const Tensor& other, const Tensor& output, const std::string& op, const std::string& kernel_operator) {
+  MPSStream* mpsStream = getCurrentMPSStream();
+  if (!self.is_contiguous() || !other.is_contiguous() || !output.is_contiguous()) {
+    if (self.numel() != 1 && other.numel() != 1 && output.numel() != 1) {
+      if (self.numel() == other.numel()) {
+        dispatch_sync(mpsStream->queue(), ^(){
+          @autoreleasepool {
+            auto inputDataType = self.scalar_type();
+            auto otherDataType = other.scalar_type();
+            auto outputDataType = output.scalar_type();
+            ScalarType common_dtype = c10::promoteTypes(inputDataType, otherDataType);
+
+            if (isIntegralType(common_dtype, true)) {
+                // integer inputs must be cast to float, if output is float
+                if (isFloatingType(outputDataType)) {
+                  common_dtype = outputDataType;
+                // in boolean comparison ops with signed vs. unsigned integers, we always cast to the unsigned type
+                } else if (outputDataType == ScalarType::Bool &&
+                          (inputDataType == ScalarType::Byte ||
+                            otherDataType == ScalarType::Byte)) {
+                  common_dtype = ScalarType::Byte;
+                }
+              }
+
+              // workaround for bool issues (e.g. bool dtype: true + true in Metal would be 0, but the expected result is still 1 in PyTorch)
+              if (outputDataType == kBool && (inputDataType == kByte || otherDataType == kByte)) {
+                inputDataType = otherDataType = kByte;
+              } else {
+                if (inputDataType == kBool) {
+                  inputDataType = kChar;
+                }
+                if (otherDataType == kBool) {
+                  otherDataType = kChar;
+                }
+            }
+
+            id<MTLBuffer> inputBuffer  = getMTLBufferStorage(self);
+            id<MTLBuffer> otherBuffer  = getMTLBufferStorage(other);
+            id<MTLBuffer> outputBuffer = getMTLBufferStorage(output);
+
+            uint32_t kernel_size = self.sizes().size();
+            std::vector<uint32_t> src_sizes(kernel_size == 0 ? 1 : kernel_size);
+            std::vector<uint32_t> src_strides(kernel_size == 0 ? 1 : kernel_size);
+            std::vector<uint32_t> other_sizes(kernel_size == 0 ? 1 : kernel_size);
+            std::vector<uint32_t> other_strides(kernel_size == 0 ? 1 : kernel_size);
+            std::vector<uint32_t> output_sizes(kernel_size == 0 ? 1 : kernel_size);
+            std::vector<uint32_t> output_strides(kernel_size == 0 ? 1 : kernel_size);
+
+            if (kernel_size == 0) {
+              src_sizes[0] = src_strides[0] = other_sizes[0] = other_strides[0] = output_sizes[0] = output_strides[0] = 1;
+            } else {
+              for (int i = 0; i < kernel_size; i++) {
+                src_sizes[i] = (uint32_t)(self.sizes()[i]);
+                src_strides[i] = (uint32_t)(self.strides()[i]);
+
+                other_sizes[i] = (uint32_t)(other.sizes()[i]);
+                other_strides[i] = (uint32_t)(other.strides()[i]);
+
+                output_sizes[i] = (uint32_t)(output.sizes()[i]);
+                output_strides[i] = (uint32_t)(output.strides()[i]);
+              }
+            }
+
+            std::string kernel = op;
+            kernel += "_kernel";
+            kernel += "_strided";
+            kernel += "_" + std::to_string(kernel_size);
+            id<MTLComputeCommandEncoder> computeEncoder = mpsStream->commandEncoder();
+            id<MTLDevice> device = MPSDevice::getInstance()->device();
+            id<MTLComputePipelineState> binaryPSO = getBinaryPSO2(device,
+                          getMetalScalarType(outputDataType),
+                          getMetalScalarType(inputDataType),
+                          getMetalScalarType(otherDataType),
+                          getMetalScalarType(common_dtype),
+                          kernel,
+                          op,
+                          kernel_operator);
+
+            [computeEncoder setComputePipelineState:binaryPSO];
+            [computeEncoder setBuffer:inputBuffer  offset:self.storage_offset() * self.element_size() atIndex:0];
+            [computeEncoder setBuffer:otherBuffer  offset:other.storage_offset() * other.element_size() atIndex:1];
+            [computeEncoder setBuffer:outputBuffer offset:output.storage_offset() * output.element_size() atIndex:2];
+
+            [computeEncoder setBytes:&src_sizes[0] length:sizeof(uint32_t) * kernel_size atIndex:3];
+            [computeEncoder setBytes:&src_strides[0] length:sizeof(uint32_t) * kernel_size atIndex:4];
+
+            [computeEncoder setBytes:&other_sizes[0] length:sizeof(uint32_t) * kernel_size atIndex:5];
+            [computeEncoder setBytes:&other_strides[0] length:sizeof(uint32_t) * kernel_size atIndex:6];
+
+            [computeEncoder setBytes:&output_sizes[0] length:sizeof(uint32_t) * kernel_size atIndex:7];
+            [computeEncoder setBytes:&output_strides[0] length:sizeof(uint32_t) * kernel_size atIndex:8];
+
+            uint32_t numThreads = self.numel();
+            MTLSize gridSize = MTLSizeMake(numThreads, 1, 1);
+            NSUInteger threadsPerThreadgroup_ = binaryPSO.maxTotalThreadsPerThreadgroup;
+            if (threadsPerThreadgroup_ > numThreads) {
+                threadsPerThreadgroup_ = numThreads;
+            }
+
+            MTLSize threadsPerThreadgroup = MTLSizeMake(threadsPerThreadgroup_, 1, 1);
+            [computeEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadsPerThreadgroup];
+            mpsStream->commitAdaptive({self, other}, output, binaryPSO);
+          }
+        });
+        return true;
+      }
+    }
+  }
+
+
   TensorIterator iter;
   if (op == "lt" || op == "le" || op == "gt" || op == "ge" || op == "ne" || op == "logical_or" || op == "logical_and" || op == "eq") {
     iter = TensorIterator::comparison_op(const_cast<Tensor&>(output), self, other);
@@ -389,6 +712,7 @@ void dispatch_binary_kernel_mps(const Tensor& self, const Tensor& other, const T
   }
 
   dispatch_binary_kernel_mps_(iter, op, kernel_operator);
+  return true;
 }
 
 bool getBinaryKernelOperator(const std::string& op_name, std::pair<std::string, std::string>& kernel_operator) {
@@ -431,8 +755,7 @@ bool dispatchNativeBinaryKernel(const Tensor& self,
   if (alpha.toFloat() == 1.0) {
     std::pair<std::string, std::string> kernel_operator;
     if (getBinaryKernelOperator(op_name, kernel_operator)) {
-      dispatch_binary_kernel_mps(self, other, output, kernel_operator.first, kernel_operator.second);
-      return true;
+      return dispatch_binary_kernel_mps(self, other, output, kernel_operator.first, kernel_operator.second);
     }
   }
 
