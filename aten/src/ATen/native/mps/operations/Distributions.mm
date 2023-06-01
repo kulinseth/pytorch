@@ -581,6 +581,10 @@ Tensor& multinomial_out_mps(const Tensor& self,
   // Reference:
   // https://github.com/pytorch/pytorch/issues/11931#issuecomment-625882503
   if (!with_replacement || n_sample == 1) {
+
+// these sanity checks would cause a costly gpu-cpu sync due to .item() calls.
+// So we just check them in debug builds
+#ifndef NDEBUG
     // Sanity checks on `self`.
     auto is_valid = ((self.max() < INFINITY) & (self.min() >= 0)).item();
     TORCH_CHECK(
@@ -596,6 +600,7 @@ Tensor& multinomial_out_mps(const Tensor& self,
     TORCH_CHECK(
         !zero_prob_condition,
         "invalid multinomial distribution (sum of probabilities <= 0)");
+#endif
 
     // The algorithm is from gumbel softmax.
     // s = argmax( logp - log(-log(eps)) ) where eps ~ U(0, 1)
