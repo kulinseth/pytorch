@@ -176,26 +176,19 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool
                                                     deallocator:nil];
     id<MTLBuffer> tmpBuffer = sourceBuffer;
     Tensor tmp;
-    bool needsBlit = true;
-    if (src_.dtype() != dst.dtype()) {
-      if (destOffset == 0 && storage_byte_offset == 0) {
-        // Return the casted tensor directly if there's no destination offset
-        needsBlit = false;
-        tmpBuffer = destBuffer;
-      } else if (src.element_size() < dst.element_size()) {
-          tmp = at::native::empty_mps(dst.sizes(), dst.scalar_type(), c10::nullopt, kMPS);
-          tmpBuffer = getMTLBufferStorage(tmp);
-      }
-    }
 
     size_t size_to_copy = src.nbytes();
     // In case of dtype change, first convert src inplace
     if (src_.dtype() != dst.dtype()) {
-      copy_cast_mps(dst, src, tmpBuffer, sourceBuffer, non_blocking);
-      needsBlit = false;
-    }
-
-    if (needsBlit) {
+      copy_cast_mps(
+        dst,
+        src,
+        destBuffer,
+        sourceBuffer,
+        !dst.is_same(dst_) ? true : non_blocking,
+        destOffset,
+        storage_byte_offset);
+    } else {
       size_to_copy = (size_to_copy / src.element_size()) * dst.element_size();
 
       // If there's anything wrong with source, we shouldn't return dst_ silently and must error out.
