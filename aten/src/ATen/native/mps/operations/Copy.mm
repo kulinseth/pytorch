@@ -95,7 +95,8 @@ static id<MTLComputePipelineState> getPipelineState(id<MTLDevice> device,
 // Copy sourceBuffer into destBuffer, casting sourceBuffer to src.scalar_type().
 // The shapes and dtypes are taken from dst and src, but their storage pointers are not used.
 void copy_cast_mps(at::Tensor& dst, const at::Tensor& src,
-                   id<MTLBuffer> destBuffer, id<MTLBuffer> sourceBuffer, bool non_blocking = true) {
+                   id<MTLBuffer> destBuffer, id<MTLBuffer> sourceBuffer, 
+                   bool non_blocking = true, int64_t dstOffset = -1, int64_t srcOffset = -1) {
   using namespace mps;
   uint32_t numThreads = dst.numel();
   MPSStream* mpsStream = getCurrentMPSStream();
@@ -109,8 +110,8 @@ void copy_cast_mps(at::Tensor& dst, const at::Tensor& src,
                                                               getMetalScalarType(dst));
       getMPSProfiler().beginProfileKernel(copyCastPSO, functionName, {src, dst});
       [computeEncoder setComputePipelineState: copyCastPSO];
-      [computeEncoder setBuffer:sourceBuffer offset:src.storage_offset() * src.element_size() atIndex:0];
-      [computeEncoder setBuffer:destBuffer offset:dst.storage_offset() * dst.element_size() atIndex:1];
+      [computeEncoder setBuffer:sourceBuffer offset:(srcOffset != -1) ? srcOffset : src.storage_offset() * src.element_size() atIndex:0];
+      [computeEncoder setBuffer:destBuffer offset:(dstOffset != -1) ? dstOffset : dst.storage_offset() * dst.element_size() atIndex:1];
 
       MTLSize gridSize = MTLSizeMake(numThreads, 1, 1);
       NSUInteger threadsPerThreadgroup_ = copyCastPSO.maxTotalThreadsPerThreadgroup;
@@ -225,7 +226,7 @@ static void copy_to_mps_stride_contig(at::Tensor& dst, const at::Tensor& src, bo
   const size_t size_to_copy = src.nbytes();
   const void* host_src = static_cast<char *>(src.storage().data()) + src_byte_offset;
 
-  TORCH_INTERNAL_ASSERT(src.dtype() == dst.dtype() && src.strides() == dst.strides() && is_strided_contiguous(src));
+  TORCH_INTERNAL_ASSERT(src.strides() == dst.strides() && is_strided_contiguous(src));
 
   @autoreleasepool {
     MTLResourceOptions options = MTLResourceOptionCPUCacheModeDefault | MTLResourceStorageModeShared;
@@ -241,17 +242,26 @@ static void copy_to_mps_stride_contig(at::Tensor& dst, const at::Tensor& src, bo
 
     uint64_t profile_id = getMPSProfiler().beginProfileCopy(sourceBuffer, destBuffer,
                               src, dst, size_to_copy, non_blocking);
-
-    stream->copy_and_sync(sourceBuffer, destBuffer, size_to_copy, sourceOffset,
+    if (src.dtype() == dst.dtype()) { 
+      stream->copy_and_sync(sourceBuffer, destBuffer, size_to_copy, sourceOffset,
                           dst_byte_offset, non_blocking, profile_id);
+    } else {
+      copy_cast_mps(dst, src, destBuffer, sourceBuffer, non_blocking, dst_byte_offset, sourceOffset);
+    } 
     [sourceBuffer release];
   }
 }
 
 static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_, bool non_blocking)
 {
-  // Typecast to dst_ if needed and expand, which is a no-op
-  Tensor src = src_;
+  //  Expand to dst sizes, which is a no-op
+  Tensor src = src_.expand_as(dst_);
+  
+  // Metal doesn't support Double
+  // Cast it directly on CPU to `dst` data type
+  if (src.dtype() == kDouble) {
+    src = src.to(dst_.dtype());
+  }
 
   // If src is not contiguously strided it must be cloned
   // It does not mean that tensor is contiguous, but rather
