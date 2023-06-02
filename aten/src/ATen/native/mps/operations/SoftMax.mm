@@ -162,7 +162,7 @@ TORCH_IMPL_FUNC(softmax_mps_out)
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+    runMPSGraph(stream, cachedGraph, feeds, results, /*disable_type_inference*/ true);
   }
 
 }

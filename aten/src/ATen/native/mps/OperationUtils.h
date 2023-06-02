@@ -48,7 +48,8 @@ void runMPSGraph(
   MPSCachedGraph* cachedGraph,
   NSDictionary *feeds,
   NSDictionary *results,
-  bool disableTypeInference = false);
+  bool disableTypeInference = false,
+  SyncType syncType = SyncType::COMMIT_ADAPTIVE);
 
 
 MPSDataType getMPSDataType(ScalarType scalar_type);
