@@ -598,7 +598,7 @@ Tensor& bmm_out_mps_impl(
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    mps::runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+    mps::runMPSGraph(stream, cachedGraph, feeds, results, /*disable_type_inference*/ true);
   }
 
   return result;

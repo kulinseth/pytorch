@@ -39,6 +39,17 @@ void runMPSGraph(
     NSDictionary* feeds,
     NSDictionary* results);
 
+struct MPSCachedGraph;
+
+void runMPSGraph(
+  MPSStream *mpsStream,
+  MPSCachedGraph* cachedGraph,
+  NSDictionary *feeds,
+  NSDictionary *results,
+  bool disableTypeInference = false,
+  SyncType syncType = SyncType::COMMIT_ADAPTIVE);
+
+
 MPSDataType getMPSDataType(ScalarType scalar_type);
 MPSDataType getMPSScalarType(ScalarType scalar_type);
 MPSScalar   getMPSScalar(const Scalar& scalar, ScalarType type);

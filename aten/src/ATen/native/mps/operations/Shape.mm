@@ -447,7 +447,7 @@ TORCH_IMPL_FUNC(cat_out_mps)
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    runMPSGraph(getCurrentMPSStream(), cachedGraph->graph(), feeds, results);
+    runMPSGraph(getCurrentMPSStream(), cachedGraph, feeds, results, /*disable_type_inference*/ true);
   }
 }
 
