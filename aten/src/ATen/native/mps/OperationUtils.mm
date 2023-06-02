@@ -13,12 +13,12 @@ void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds,
 
 // this should be merged into runMPSGraph() with new arg "disableTypeInference" for executables
 void runMPSGraph(MPSStream* mpsStream, MPSCachedGraph *cachedGraph, NSDictionary* feeds,
-                 NSDictionary* results, bool disableTypeInference) {
+                 NSDictionary* results, bool disableTypeInference, SyncType syncType) {
   MPSGraphExecutable* executable = nil;
   if (disableTypeInference) {
     @autoreleasepool {
       MPSGraph *mpsGraph = cachedGraph->graph();
-      MPSGraphExecutable* executable = cachedGraph->getExecultable();
+      executable = cachedGraph->getExecultable();
       if (!executable) {
         NSMutableDictionary* shapes = [[NSMutableDictionary new] autorelease];
         for (MPSGraphTensor* graphTensor in feeds) {
@@ -39,7 +39,7 @@ void runMPSGraph(MPSStream* mpsStream, MPSCachedGraph *cachedGraph, NSDictionary
     }
   }
 
-  mpsStream->executeMPSGraph(cachedGraph->graph(), feeds, results, SyncType::COMMIT_ADAPTIVE, executable);
+  mpsStream->executeMPSGraph(cachedGraph->graph(), feeds, results, syncType, executable);
 }
 
 MPSDataType getMPSDataType(ScalarType scalar_type) {
