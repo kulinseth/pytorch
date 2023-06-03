@@ -95,7 +95,7 @@ static id<MTLComputePipelineState> getPipelineState(id<MTLDevice> device,
 // Copy sourceBuffer into destBuffer, casting sourceBuffer to src.scalar_type().
 // The shapes and dtypes are taken from dst and src, but their storage pointers are not used.
 void copy_cast_mps(at::Tensor& dst, const at::Tensor& src,
-                   id<MTLBuffer> destBuffer, id<MTLBuffer> sourceBuffer, 
+                   id<MTLBuffer> destBuffer, id<MTLBuffer> sourceBuffer,
                    bool non_blocking = true, int64_t dstOffset = -1, int64_t srcOffset = -1) {
   using namespace mps;
   uint32_t numThreads = dst.numel();
@@ -235,12 +235,12 @@ static void copy_to_mps_stride_contig(at::Tensor& dst, const at::Tensor& src, bo
 
     uint64_t profile_id = getMPSProfiler().beginProfileCopy(sourceBuffer, destBuffer,
                               src, dst, size_to_copy, non_blocking);
-    if (src.dtype() == dst.dtype()) { 
+    if (src.dtype() == dst.dtype()) {
       stream->copy_and_sync(sourceBuffer, destBuffer, size_to_copy, sourceOffset,
                           dst_byte_offset, non_blocking, profile_id);
     } else {
       copy_cast_mps(dst, src, destBuffer, sourceBuffer, non_blocking, dst_byte_offset, sourceOffset);
-    } 
+    }
     [sourceBuffer release];
   }
 }
@@ -249,7 +249,7 @@ static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_, bool n
 {
   //  Expand to dst sizes, which is a no-op
   Tensor src = src_.expand_as(dst_);
-  
+
   // Metal doesn't support Double
   // Cast it directly on CPU to `dst` data type
   if (src.dtype() == kDouble) {
