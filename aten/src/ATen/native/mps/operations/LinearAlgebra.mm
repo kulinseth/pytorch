@@ -95,6 +95,9 @@ Tensor& mm_out_mps_impl(
               || self.scalar_type() == ScalarType::Float
               || self.scalar_type() == ScalarType::Half, "MPS device does not support mm for non-float inputs");
 
+  std::cout << "MM:\n";
+  std::cout << self.sizes() << std::endl;
+  std::cout << other.sizes() << std::endl;
   TensorArg args[]{{output, "out", 0}, {self, "mat1", 1}, {other, "mat2", 2}};
   checkAllSameGPU("mm", args);
 
@@ -526,12 +529,21 @@ Tensor& bmm_out_mps_impl(
     MPSGraphTensor *batch1Tensor_ = nil;
     MPSGraphTensor *batch2Tensor_ = nil;
     MPSGraphTensor *outputTensor_ = nil;
+
   };
+
+  bool doTranspose = false;
+  if (batch2.size(-1) == batch2.size(-2)) {
+    // std::cout << "BMM:\n";
+    // std::cout << batch1.sizes() << " " << std::endl;
+    // std::cout << batch2.sizes() << " " << std::endl;
+    doTranspose = true;
+  }
 
   mps::MPSGraphCache *cache_ = mps::MPSGraphCache::getInstance();
 
   @autoreleasepool {
-    string key = "bmm_out_mps_impl" + getTensorsStringKey({batch1, batch2}, true, /*exclude_shape*/true);
+    string key = "bmm_out_mps_impl" + getTensorsStringKey({batch1, batch2}, true, /*exclude_shape*/true) + std::to_string(doTranspose);
 
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
     if(!cachedGraph) {
@@ -545,9 +557,16 @@ Tensor& bmm_out_mps_impl(
 
           MPSGraphTensor *batch1Tensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(batch1.scalar_type()));
           MPSGraphTensor *batch2Tensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(batch2.scalar_type()));
+          MPSGraphTensor *batch2TransposeTensor = batch2Tensor;
+          if (doTranspose) {
+            batch2TransposeTensor = [mpsGraph transposeTensor:batch2Tensor
+                                                                  dimension:-1
+                                                              withDimension:-2
+                                                                       name:nil];
+          }
 
           MPSGraphTensor* productTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:batch1Tensor
-                                                                          secondaryTensor:batch2Tensor
+                                                                          secondaryTensor:batch2TransposeTensor
                                                                                      name:@"MM/(batch1@batch2)"];
 
           newCachedGraph->batch1Tensor_ = batch1Tensor;
