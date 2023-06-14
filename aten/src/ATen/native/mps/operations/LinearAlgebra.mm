@@ -537,7 +537,6 @@ Tensor& bmm_out_mps_impl(
   // Handle transposes for the second batch of matrices (batch2).
   if (batch2.is_view() || batch2.storage_offset()) {
     if (batch2.numel() == batch2._base().numel()) {
-      const IntArrayRef& baseSizes = batch2._base().sizes();
       const IntArrayRef& viewSizes = batch2.sizes();
 
       // Handle 3D and 4D tensors.
