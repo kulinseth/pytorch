@@ -528,10 +528,41 @@ Tensor& bmm_out_mps_impl(
     MPSGraphTensor *outputTensor_ = nil;
   };
 
+  // if (!batch1.is_contiguous()) {
+    // std::cout << "Batch1: (" << batch1.is_contiguous() << ")\n";
+    // std::cout << "view sizes: " << batch1.sizes() << std::endl;
+    // std::cout << "view strides: " << batch1.strides() << std::endl;
+
+    // std::cout << "parent sizes: " << batch1._base().sizes() << std::endl;
+    // std::cout << "parent strides: " << batch1._base().strides() << std::endl;
+
+  // }
+
+  // if (!batch2.is_contiguous()) {
+    // std::cout << "Batch2 (" << batch2.is_contiguous() << ")\n";
+    // std::cout << "view sizes: " << batch2.sizes() << std::endl;
+    // std::cout << "view strides: " << batch2.strides() << std::endl;
+
+    // std::cout << "parent sizes: " << batch2._base().sizes() << std::endl;
+    // std::cout << "parent strides: " << batch2._base().strides() << std::endl;
+  // }
+
   mps::MPSGraphCache *cache_ = mps::MPSGraphCache::getInstance();
 
+  bool doTranspose = false;
+  if ((batch2.storage_offset() || batch2.is_view()) && batch2.is_contiguous()) {
+    if (batch2.numel() == batch2._base().numel()) {
+      const IntArrayRef& baseSizes = batch2._base().sizes();
+      const IntArrayRef& viewSizes = batch2.sizes();
+      if (batch2.stride(-1) == 1 && (batch2.size(-2) == batch2.size(-1))) {
+        doTranspose = true;
+        // std::cout << "SETTING TRANSPOSE\n";
+      }
+    }
+  }
+
   @autoreleasepool {
-    string key = "bmm_out_mps_impl" + getTensorsStringKey({batch1, batch2}, true, /*exclude_shape*/true);
+    string key = "bmm_out_mps_impl" + getTensorsStringKey({batch1, batch2}, true, /*exclude_shape*/true) + std::to_string(doTranspose);
 
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
     if(!cachedGraph) {
@@ -545,9 +576,16 @@ Tensor& bmm_out_mps_impl(
 
           MPSGraphTensor *batch1Tensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(batch1.scalar_type()));
           MPSGraphTensor *batch2Tensor = mps::mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(batch2.scalar_type()));
+          MPSGraphTensor *batch2TensorTranspose = batch2Tensor;
 
+          if (doTranspose) {
+            batch2TensorTranspose = [mpsGraph transposeTensor:batch2Tensor
+                                                        dimension:1
+                                                    withDimension:2
+                                                              name:nil];
+          }
           MPSGraphTensor* productTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:batch1Tensor
-                                                                          secondaryTensor:batch2Tensor
+                                                                          secondaryTensor:batch2TensorTranspose
                                                                                      name:@"MM/(batch1@batch2)"];
 
           newCachedGraph->batch1Tensor_ = batch1Tensor;
