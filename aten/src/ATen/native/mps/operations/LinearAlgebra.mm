@@ -533,7 +533,7 @@ Tensor& bmm_out_mps_impl(
   MPSShape* shape = nil;
   bool doTranspose = false;
 
-  // Handle transposes for the second batch of matrices.
+  // Handle transposes for the second batch of matrices (batch2).
   if (batch2.is_view() || batch2.storage_offset()) {
     if (batch2.numel() == batch2._base().numel()) {
       const IntArrayRef& baseSizes = batch2._base().sizes();
