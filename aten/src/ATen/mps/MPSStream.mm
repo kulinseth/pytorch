@@ -19,6 +19,7 @@ MPSStream::MPSStream(Stream stream) : _stream(stream) {
   TORCH_CHECK(_stream.device_type() == DeviceType::MPS);
   _serialQueue = dispatch_queue_create("metal gpu stream", nullptr);
   _executionDescriptor = [MPSGraphExecutionDescriptor new];
+  _executableExecutionDescriptor = [MPSGraphExecutableExecutionDescriptor new];
   _compilationDescriptor = [MPSGraphCompilationDescriptor new];
 
   // disable commitAndContinue if Signpost tracing is enabled
@@ -36,8 +37,10 @@ MPSStream::~MPSStream() {
   [_commandQueue release];
   _commandQueue = nil;
   [_executionDescriptor release];
+  [_executableExecutionDescriptor release];
   [_compilationDescriptor release];
   _executionDescriptor = nil;
+  _executableExecutionDescriptor = nil;
   _compilationDescriptor = nil;
 
   assert(_commandBuffer == nil);
@@ -91,6 +94,8 @@ void MPSStream::commit() {
   } else {
     flush();
   }
+  // reset the accumulated resource sizes for command buffer
+  _commandBufferResourceSize = 0;
 }
 
 void MPSStream::commitAndWait() {
@@ -100,6 +105,10 @@ void MPSStream::commitAndWait() {
     [_prevCommandBuffer waitUntilCompleted];
     [_prevCommandBuffer release];
     _prevCommandBuffer = nil;
+    // reset the accumulated resource sizes for command buffer
+    _commandBufferResourceSize = 0;
+    // after waiting, it's a good time to free some pending inactive buffers
+    getIMPSAllocator()->freeInactiveBuffers();
   }
 
   if (_commandBuffer) {
@@ -113,6 +122,36 @@ void MPSStream::commitAndWait() {
 void MPSStream::commitAndContinue() {
   assert(_commandBuffer);
   [_commandBuffer commitAndContinue];
+}
+
+void MPSStream::commitAdaptive(const TensorList& inputTensors,
+                               const TensorList& outputTensors, void* profilerHandle) {
+  std::vector<const void*> buffers;
+  bool isOutputTensor = false;
+
+  for (const auto& tensorsList : {inputTensors, outputTensors}) {
+    for (const auto& tensor : tensorsList) {
+      _commandBufferResourceSize += tensor.nbytes();
+      if (isOutputTensor) {
+        buffers.push_back(tensor.storage().data());
+      }
+    }
+    isOutputTensor = true;
+  }
+
+  SyncType syncType = SyncType::COMMIT_ADAPTIVE;
+  if (!buffers.empty()) {
+    bool recordedEvents = getIMPSAllocator()->recordEvents(buffers);
+    if (recordedEvents) {
+      syncType = SyncType::COMMIT;
+    }
+  }
+  auto& profiler = getMPSProfiler();
+  if (profiler.isOperationProfilingEnabled() && profilerHandle) {
+    profiler.endProfileKernel(profilerHandle, syncType);
+  } else {
+    synchronize(syncType);
+  }
 }
 
 void MPSStream::endKernelCoalescing() {
@@ -137,12 +176,13 @@ void MPSStream::flush() {
   }
 }
 
-void MPSStream::addCompletedHandler(MTLCommandBufferHandler block) {
-  dispatch_sync(_serialQueue, ^() {
-    @autoreleasepool {
-      [commandBuffer() addCompletedHandler:block];
-    }
-  });
+void MPSStream::addCompletedHandler(MTLCommandBufferHandler block, SyncType syncType) {
+ dispatch_sync(_serialQueue, ^() {
+   @autoreleasepool {
+     [commandBuffer() addCompletedHandler:block];
+     synchronize(syncType);
+   }
+ });
 }
 
 void MPSStream::fill(id<MTLBuffer> buffer, uint8_t value, size_t length, size_t offset, SyncType syncType) {
@@ -206,39 +246,85 @@ void MPSStream::copy_and_sync(id<MTLBuffer> srcBuffer,
        !non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT);
 }
 
-void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results, SyncType syncType) {
-  auto& profiler = getMPSProfiler();
-  const bool isGraphProfilingEnabled = profiler.isOperationProfilingEnabled();
+void MPSStream::executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
+                                SyncType syncType, MPSGraphExecutable* executable) {
+   auto& profiler = getMPSProfiler();
+   const bool isGraphProfilingEnabled = profiler.isOperationProfilingEnabled();
+ 
+   dispatch_sync(_serialQueue, ^() {
+    @autoreleasepool {
+      endKernelCoalescing();
+      if (isGraphProfilingEnabled) {
+        // this function call is only relevant for interval-based Signposts
+        // which exclude schedule time (only includes GPU run time)
+        profiler.beginProfileGPUInterval(mpsGraph);
+      }
 
-  dispatch_sync(_serialQueue, ^() {
-    endKernelCoalescing();
-    if (isGraphProfilingEnabled) {
-      // this function call is only relevant for interval-based Signposts
-      // which exclude schedule time (only includes GPU run time)
-      profiler.beginProfileGPUInterval(mpsGraph);
-    }
-    // note: CommitAndContinue feature is enabled/disabled via "_executionDescriptor"
-    [mpsGraph encodeToCommandBuffer:commandBuffer()
-                              feeds:feeds
-                   targetOperations:nil
-                  resultsDictionary:results
-                executionDescriptor:_executionDescriptor];
+      if (executable) {
+        NSMutableArray *inputsArray  = [NSMutableArray arrayWithCapacity:[feeds count]];
+        NSMutableArray *resultsArray = [NSMutableArray arrayWithCapacity:[results count]];
+        NSUInteger inputIndex = 0, ouputIndex = 0;
+        for (MPSGraphTensor *tensor in [executable feedTensors]) {
+          inputsArray[inputIndex++] = feeds[tensor];
+        }
 
-    SyncType _syncType = syncType;
-    // if commitAndContinue is disabled, we need to always commit manually after encoding
-    if (!_enableCommitAndContinue && syncType != SyncType::COMMIT_AND_WAIT) {
-      _syncType = SyncType::COMMIT;
-    }
+        for (MPSGraphTensor *tensor in [executable targetTensors]) {
+          resultsArray[ouputIndex++] = results[tensor];
+        }
 
-    // check if graph execution profiling is enabled
-    if (isGraphProfilingEnabled) {
-      // with profiler enabled, we commit after adding the completedHandler in MPSProfiler
-      profiler.endProfileKernel(mpsGraph, _syncType);
-    } else {
-      synchronize(_syncType);
-    }
+        [executable encodeToCommandBuffer:commandBuffer()
+                              inputsArray:inputsArray
+                             resultsArray:resultsArray
+                      executionDescriptor:_executableExecutionDescriptor];
+      } else {
+        // note: CommitAndContinue feature is enabled/disabled via "_executionDescriptor"
+        [mpsGraph encodeToCommandBuffer:commandBuffer()
+                                  feeds:feeds
+                       targetOperations:nil
+                      resultsDictionary:results
+                    executionDescriptor:_executionDescriptor];
+      }
+      // if commitAndContinue is disabled, we need to always commit manually after encoding
+      SyncType _syncType = _enableCommitAndContinue == false ? SyncType::COMMIT : syncType;
+
+      bool recordedEvents = updateCommandBufferResourceSize([feeds allValues], [results allValues]);
+      if (recordedEvents && _syncType != SyncType::COMMIT_AND_WAIT) {
+        _syncType = SyncType::COMMIT;
+      }
+      // check if graph execution profiling is enabled
+      if (isGraphProfilingEnabled) {
+        // with profiler enabled, we commit after adding the completedHandler in MPSProfiler
+        profiler.endProfileKernel(mpsGraph, _syncType);
+      } else {
+        synchronize(_syncType);
+      }
+     }
   });
 }
+
+
+bool MPSStream::updateCommandBufferResourceSize(NSArray<MPSGraphTensorData*> *feeds,
+                                                NSArray<MPSGraphTensorData*> *results) {
+  std::vector<const void*> buffers;
+  for (const auto& tensorsDataList : {feeds, results}) {
+    for (MPSGraphTensorData* tensorData in tensorsDataList) {
+      _commandBufferResourceSize += tensorData.mpsndarray.resourceSize;
+      if (tensorsDataList == results && _activeResources.count(tensorData)) {
+        buffers.push_back(_activeResources[tensorData]);
+      }
+    }
+  }
+  bool recordedEvents = false;
+  if (!buffers.empty()) {
+    recordedEvents = getIMPSAllocator()->recordEvents(buffers);
+  }
+  return recordedEvents;
+}
+
+void MPSStream::addActiveResource(MPSGraphTensorData* tensorData, void* buffer) {
+  _activeResources[tensorData] = buffer;
+}
+
 
 //-----------------------------------------------------------------
 //  MPSStreamImpl

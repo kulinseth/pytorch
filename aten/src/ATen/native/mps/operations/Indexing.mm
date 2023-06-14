@@ -579,106 +579,103 @@ Tensor index_select_mps(const Tensor& self, int64_t dim, const Tensor& index) {
   return result;
 }
 
-Tensor& index_select_out_mps(const Tensor& self, int64_t dim, const Tensor& index, Tensor& output) {
+Tensor& index_select_out_mps(const Tensor & self,
+                             int64_t dim,
+                             const Tensor & index,
+                             Tensor & output) {
+
   using namespace mps;
   MPSStream* stream = getCurrentMPSStream();
-  auto num_indices = index.numel();
   dim = maybe_wrap_dim(dim, self.dim());
-
   // Checks
   TORCH_CHECK_INDEX(index.dim() <= 1, "index_select(): Index is supposed to be a vector");
-  TORCH_CHECK(!(self.dim() == 0 && num_indices != 1),
-              "index_select(): Index to scalar can have only 1 value, got ",
-              num_indices,
-              " value(s)");
-  TORCH_CHECK(index.scalar_type() == ScalarType::Long || index.scalar_type() == ScalarType::Int,
-              "index_select(): Expected dtype int32 or int64 for index");
+  TORCH_CHECK(index.scalar_type() == ScalarType::Long || index.scalar_type() == ScalarType::Int, "index_select(): Expected dtype int32 or int64 for index");
   TORCH_CHECK(self.scalar_type() == output.scalar_type(),
               "index_select(): self and output must have the same scalar type");
-  TORCH_CHECK(dim == 0 || dim < self.dim(), "index_select(): Indexing dim ", dim, " is out of bounds of tensor");
-  TORCH_CHECK(output.dim() == 0 || index.size(-1) == output.size(dim),
-              "index_select(): index and output must have the same size at `dim`th dimension, but got ",
-              index.size(-1),
-              " and ",
-              output.size(dim),
-              ".");
-  TORCH_CHECK(!self.is_complex(), "index_select(): Yet not supported for complex");
-
-  for (const auto i : irange(self.dim())) {
-    if (i == dim)
-      continue;
-    TORCH_CHECK(self.size(i) == output.size(i),
-                "index_select(): self and output must have the same dimensions except for `dim`th dimension, but got ",
-                self.size(i),
-                " and ",
-                output.size(i),
-                " at dimension ",
-                i,
-                ".");
-  }
+  TORCH_CHECK(dim == 0 || dim < self.dim(),
+              "index_select(): Indexing dim ", dim, " is out of bounds of tensor");
 
   // Empty index
-  if (num_indices == 0 || self.numel() == 0) {
+  if (index.numel() == 0) {
     return output;
   }
 
   // Scalar input
-  if (self.dim() == 0 && self.numel() == 1) {
+  if (self.dim() == 0 && self.numel() == 1){
     output.copy_(self);
     return output;
   }
 
   // Derive from MPSCachedGraph
-  struct CachedGraph : public MPSCachedGraph {
-    CachedGraph(MPSGraph* graph) : MPSCachedGraph(graph) {}
+  struct CachedGraph : public MPSCachedGraph
+  {
+    CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
     MPSGraphTensor* inputTensor_ = nil;
     MPSGraphTensor* indexTensor_ = nil;
     MPSGraphTensor* outputTensor_ = nil;
   };
 
-  auto inputType = getMPSDataType(self);
-  auto outputType = getMPSDataType(output);
-  if (inputType == MPSDataTypeUInt8 || (!is_macos_13_or_newer() && inputType == MPSDataTypeBool)) {
+  MPSGraphCache* cache_ = MPSGraphCache::getInstance();
+  auto inputType = getMPSDataType(self.scalar_type());
+  auto outputType = getMPSDataType(output.scalar_type());
+  if (inputType == MPSDataTypeUInt8 ||
+     (!is_macos_13_or_newer() && inputType == MPSDataTypeBool)) {
     inputType = MPSDataTypeInt8;
   }
-  if (outputType == MPSDataTypeUInt8 || (!is_macos_13_or_newer() && outputType == MPSDataTypeBool)) {
+  if (outputType == MPSDataTypeUInt8 ||
+     (!is_macos_13_or_newer() && outputType == MPSDataTypeBool)) {
     outputType = MPSDataTypeInt8;
   }
 
   @autoreleasepool {
-    string key = "index_select_out_mps" + getTensorsStringKey({self, index}) + ":" + std::to_string(dim);
-    auto cachedGraph = LookUpOrCreateCachedGraph<CachedGraph>(key, [&](auto mpsGraph, auto newCachedGraph) {
-      MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, inputType, getMPSShape(self));
-      MPSGraphTensor* indexTensor = mpsGraphRankedPlaceHolder(mpsGraph, index);
 
-      MPSGraphTensor* outputTensor = [mpsGraph gatherWithUpdatesTensor:inputTensor
-                                                         indicesTensor:indexTensor
-                                                                  axis:dim
-                                                       batchDimensions:0
-                                                                  name:nil];
+    string key = "index_select_out_mps" + getTensorsStringKey({self, index}, true, /*exclude_shape*/true) + ":" + std::to_string(dim);
+    CachedGraph* cachedGraph = cache_->LookUpAs<CachedGraph>(key);
 
-      newCachedGraph->inputTensor_ = inputTensor;
-      newCachedGraph->indexTensor_ = indexTensor;
-      newCachedGraph->outputTensor_ = outputTensor;
-    });
+    if(!cachedGraph) {
+      cachedGraph = cache_->CreateCachedGraphAs<CachedGraph>(key, ^ MPSCachedGraph * () {
+        CachedGraph *newCachedGraph = nil;
 
-    Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_,
-                                              self,
-                                              /*mpsShape=*/nullptr,
-                                              /*gatherTensorData=*/true,
-                                              /*dataType=*/inputType);
+        @autoreleasepool {
+          MPSGraph* mpsGraph = make_mps_graph();
+          newCachedGraph = new CachedGraph(mpsGraph);
+
+          MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, inputType);
+          MPSGraphTensor* indexTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(index.scalar_type()));
+
+          MPSGraphTensor* outputTensor = [mpsGraph gatherWithUpdatesTensor:inputTensor
+                                                             indicesTensor:indexTensor
+                                                                      axis:dim
+                                                           batchDimensions:0
+                                                                      name:nil];
+
+          newCachedGraph->inputTensor_ = inputTensor;
+          newCachedGraph->indexTensor_ = indexTensor;
+          newCachedGraph->outputTensor_ = outputTensor;
+        }
+        return newCachedGraph;
+      });
+    }
+
+    Placeholder selfPlaceholder = Placeholder(cachedGraph->inputTensor_, self,
+                                  /*mpsShape=*/nullptr, /*gatherTensorData=*/true, /*dataType=*/inputType);
     Placeholder indexPlaceholder = Placeholder(cachedGraph->indexTensor_, index);
-    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_,
-                                                output,
-                                                /*mpsShape=*/nullptr,
-                                                /*gatherTensorData=*/false,
-                                                /*dataType=*/outputType);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output,
+                                  /*mpsShape=*/nullptr, /*gatherTensorData=*/false, /*dataType=*/outputType);
 
-    auto feeds = dictionaryFromPlaceholders(selfPlaceholder, indexPlaceholder);
-    runMPSGraph(stream, cachedGraph->graph(), feeds, outputPlaceholder);
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
+      selfPlaceholder.getMPSGraphTensor() : selfPlaceholder.getMPSGraphTensorData(),
+      indexPlaceholder.getMPSGraphTensor() : indexPlaceholder.getMPSGraphTensorData()
+    };
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
+      outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
+    };
+
+    runMPSGraph(stream, cachedGraph, feeds, results, /*disable_type_inference=*/true);
   }
 
   return output;
+
 }
 
 Tensor& masked_fill__mps(Tensor& self, const Tensor& mask, const Scalar& value) {

@@ -37,7 +37,11 @@ static void get_shapes(MPSShape* input_shape_readonly,
 // Note - Currently only supported for 4D image tensors
 
 TORCH_IMPL_FUNC(softmax_mps_out)
-(const Tensor& input_, const int64_t dim, const bool half_to_float, const Tensor& output) {
+(const Tensor& input_,
+ const int64_t dim,
+ const bool half_to_float,
+ const Tensor& output) {
+
   TORCH_CHECK(!half_to_float, "softmax with half to float conversion is not supported on MPS");
 
   if (input_.numel() == 0) {
@@ -47,35 +51,46 @@ TORCH_IMPL_FUNC(softmax_mps_out)
   Tensor input;
   if (input_.dim() == 0) {
     input = input_.view(1);
-  } else
+  }
+  else
     input = input_;
 
   int64_t dim_ = maybe_wrap_dim(dim, input.dim());
-  TORCH_CHECK(dim_ >= 0 && dim_ < input.dim(), "Softmax:dim must be non-negative and less than input dimensions");
+  TORCH_CHECK(
+      dim_ >= 0 && dim_ < input.dim(),
+      "Softmax:dim must be non-negative and less than input dimensions");
 
   const auto memory_format = input.suggest_memory_format();
-  // TORCH_CHECK(input.suggest_memory_format() == output.suggest_memory_format(), "Input and output memory format should
-  // match")
+  // TORCH_CHECK(input.suggest_memory_format() == output.suggest_memory_format(), "Input and output memory format should match")
 
   using namespace mps;
-  using CachedGraph = MPSUnaryCachedGraph;
   MPSStream* stream = getCurrentMPSStream();
 
+  // Derive from MPSCachedGraph
+  struct CachedGraph : public MPSCachedGraph
+  {
+    CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
+    MPSGraphTensor* inputTensor_ = nil;
+    MPSGraphTensor* outputTensor_ = nil;
+  };
+
+  MPSGraphCache* cache_ = MPSGraphCache::getInstance();
+
   @autoreleasepool {
+
     string mem_format_key = get_mem_format_string(memory_format);
     MPSShape* input_shape_readonly = mps::getMPSShape(input);
     int num_input_dims = [input_shape_readonly count];
     // Check - Channels last implies 4d
-    TORCH_CHECK(memory_format != at::MemoryFormat::ChannelsLast || num_input_dims == 4,
-                "ChannelsLast implies 4d tensor")
+    TORCH_CHECK(memory_format != at::MemoryFormat::ChannelsLast || num_input_dims == 4, "ChannelsLast implies 4d tensor")
     // Input shape changes based on memory format
     NSMutableArray<NSNumber*>* input_shape = [NSMutableArray<NSNumber*> arrayWithCapacity:num_input_dims];
 
     get_shapes(input_shape_readonly, input_shape, num_input_dims, memory_format);
 
     // Change dim
-    if (memory_format == at::MemoryFormat::ChannelsLast && dim_ > 0) {
-      switch (dim_) {
+    if(memory_format == at::MemoryFormat::ChannelsLast && dim_ > 0) {
+      switch(dim_) {
         case 1:
           dim_ = 3;
           break;
@@ -89,42 +104,69 @@ TORCH_IMPL_FUNC(softmax_mps_out)
           assert(0 && "Invalid dim\n");
       }
     }
+    bool disableTypeInference = input_.dim() <= 4;
+    string key = "softmax_mps_out" + getTensorsStringKey(input, true, /*exclude_shape*/true) + ":" +
+                 mem_format_key + ":" + std::to_string(dim_);
+    CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
 
-    NSString* ns_shape_key = [[input_shape valueForKey:@"description"] componentsJoinedByString:@","];
+    if(!cachedGraph) {
+      MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
+        CachedGraph *newCachedGraph = nil;
 
-    string key = "softmax_mps_out:" + mem_format_key + ":" + getMPSTypeString(input) + ":" + [ns_shape_key UTF8String] +
-        ":" + std::to_string(dim_);
-    auto cachedGraph = LookUpOrCreateCachedGraph<CachedGraph>(key, [&](auto mpsGraph, auto newCachedGraph) {
-      MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSDataType(input), input_shape);
+        @autoreleasepool {
+          MPSGraph* mpsGraph = make_mps_graph();
+          newCachedGraph = new CachedGraph(mpsGraph);
 
-      // passing selector of softMaxWithTensor on the mpsGraph object
-      MPSGraphTensor* outputTensor = [mpsGraph softMaxWithTensor:inputTensor axis:(NSInteger)dim_ name:nil];
+          MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(input.scalar_type()));
 
-      // Output needs to be contiguous format
-      if (memory_format == at::MemoryFormat::ChannelsLast) {
-        auto N = input_shape[0];
-        auto H = input_shape[1];
-        auto W = input_shape[2];
-        auto C = input_shape[3];
+          // passing selector of softMaxWithTensor on the mpsGraph object
+          MPSGraphTensor* outputTensor = [mpsGraph softMaxWithTensor:inputTensor
+                                                                axis:(NSInteger)dim_
+                                                                name:nil];
 
-        outputTensor = [mpsGraph reshapeTensor:outputTensor
-                                     withShape:@[ N, ([NSNumber numberWithInt:[H intValue] * [W intValue]]), C ]
-                                          name:nil];
-        outputTensor = [mpsGraph transposeTensor:outputTensor dimension:1 withDimension:2 name:nil];
-        outputTensor = [mpsGraph reshapeTensor:outputTensor withShape:@[ N, C, H, W ] name:nil];
-      }
+          // Output needs to be contiguous format
+          // TODO: consider using empty_restride() for the output tensor
+          if(memory_format == at::MemoryFormat::ChannelsLast) {
+            auto N = input_shape[0];
+            auto H = input_shape[1];
+            auto W = input_shape[2];
+            auto C = input_shape[3];
 
-      newCachedGraph->inputTensor_ = inputTensor;
-      newCachedGraph->outputTensor_ = outputTensor;
-    });
+            outputTensor = [mpsGraph reshapeTensor:outputTensor
+                                         withShape:@[N, ([NSNumber numberWithInt:[H intValue]* [W intValue]]), C]
+                                              name:nil];
+            outputTensor = [mpsGraph transposeTensor:outputTensor
+                                           dimension:1
+                                       withDimension:2
+                                                name:nil];
+            outputTensor = [mpsGraph reshapeTensor:outputTensor
+                                         withShape:@[N, C, H, W]
+                                              name:nil];
+
+          }
+
+          newCachedGraph->inputTensor_ = inputTensor;
+          newCachedGraph->outputTensor_ = outputTensor;
+        }
+        return newCachedGraph;
+      });
+      cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
+    }
 
     Placeholder inputPlaceholder = Placeholder(cachedGraph->inputTensor_, input, input_shape);
     // This must be the Contiguous shape
     Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, output);
 
-    auto feeds = dictionaryFromPlaceholders(inputPlaceholder);
-    runMPSGraph(stream, cachedGraph->graph(), feeds, outputPlaceholder);
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
+      inputPlaceholder.getMPSGraphTensor() : inputPlaceholder.getMPSGraphTensorData()
+    };
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
+      outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
+    };
+
+    runMPSGraph(stream, cachedGraph, feeds, results, disableTypeInference);
   }
+
 }
 
 TORCH_IMPL_FUNC(softmax_backward_mps_out)

@@ -9,6 +9,7 @@
 #include <ATen/ops/imag.h>
 #include <ATen/ops/neg.h>
 #include <ATen/ops/real.h>
+#include <fmt/format.h>
 #include <ATen/ops/view_as_real.h>
 #include <ATen/ops/zeros_like.h>
 
@@ -28,55 +29,111 @@ static void* pageAlignedBlockPtr(const void* ptr, NSUInteger size, NSUInteger* a
   return (void*)alignedAddress;
 }
 
-// Copy sourceBuffer into destBuffer, casting sourceBuffer to dst.scalar_type().
-// The shapes and dtypes are taken from dst and src, but their storage pointers are not used.
-static void copy_cast_mps(at::Tensor& dst,
-                          const at::Tensor& src,
-                          id<MTLBuffer> destBuffer,
-                          id<MTLBuffer> sourceBuffer,
-                          bool non_blocking = true) {
-  using namespace mps;
+/**
+ * Computes number of elements one needs to transfer to preserve all the elements
+ */
+size_t compute_strided_size(const at::Tensor& t) {
+   size_t rc = 1;
+   if (t.numel() == 0) {
+       return 0;
+   }
+   for(const auto i: c10::irange(t.dim())) {
+     assert(t.size(i) > 0);
+     rc += (t.size(i) - 1) * t.stride(i);
+   }
+   return rc;
+}
 
-  using CachedGraph = MPSUnaryCachedGraph;
+bool is_strided_contiguous(const at::Tensor& t) {
+  return compute_strided_size(t) == t.numel();
+}
 
-  MPSStream* stream = getCurrentMPSStream();
+static char* COPY_CAST_OP_TEMPLATE_TENSOR = R"METAL_COPY_CAST(
+kernel void copy_cast_kernel(uint tid              [[thread_position_in_grid]],
+                       const device {0} * input   [[buffer(0)]],
+                       device       {1} * output  [[buffer(1)]]) {{
+  output[tid] = ({1})input[tid];
+}}
+)METAL_COPY_CAST";
 
-  MPSDataType dstDType = getMPSDataType(dst);
-  MPSDataType srcDType = getMPSDataType(src);
-  MPSShape* dstShape = getMPSShape(dst);
-  MPSShape* srcShape = getMPSShape(src);
-
-  @autoreleasepool {
-    const bool needs_conj = src.is_conj() != dst.is_conj();
-    string key = "copy_cast_mps" + getTensorsStringKey({src, dst}) + ":" + std::to_string(needs_conj);
-    auto cachedGraph = LookUpOrCreateCachedGraph<CachedGraph>(key, [&](auto mpsGraph, auto newCachedGraph) {
-      auto inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, src);
-      auto outputTensor = inputTensor;
-      if (isFloatingType(src.scalar_type()) && dstDType == MPSDataTypeUInt8) {
-        outputTensor = [mpsGraph castTensor:inputTensor toType:MPSDataTypeInt32 name:@"cast"];
-      }
-      if (srcDType != dstDType) {
-        outputTensor = [mpsGraph castTensor:outputTensor toType:dstDType name:@"cast"];
-      }
-      if (needs_conj) {
-        TORCH_CHECK(supportsComplex(), "MPS complex tensors conjugation needs MacOS14+");
-        outputTensor = [mpsGraph conjugateWithTensor:outputTensor name:nil];
-      }
-
-      newCachedGraph->inputTensor_ = inputTensor;
-      newCachedGraph->outputTensor_ = outputTensor;
-    });
-    MPSGraphTensorData* srcData = [[[MPSGraphTensorData alloc] initWithMTLBuffer:sourceBuffer
-                                                                           shape:srcShape
-                                                                        dataType:srcDType] autorelease];
-    MPSGraphTensorData* dstData = [[[MPSGraphTensorData alloc] initWithMTLBuffer:destBuffer
-                                                                           shape:dstShape
-                                                                        dataType:dstDType] autorelease];
-    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{cachedGraph->inputTensor_ : srcData};
-    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{cachedGraph->outputTensor_ : dstData};
-    stream->executeMPSGraph(
-        cachedGraph->graph(), feeds, results, !non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT_ADAPTIVE);
+static
+id<MTLLibrary> compileCopyCastOpsLibrary(id<MTLDevice> device,
+                                              const std::string& dtypeSrc,
+                                              const std::string& dtypeDst) {
+  auto key = dtypeSrc + dtypeDst;
+  static std::unordered_map<std::string, id<MTLLibrary>> _libCache;
+  auto it = _libCache.find(key);
+  if (it != _libCache.end()) {
+    return it->second;
   }
+  NSError *error = nil;
+  MTLCompileOptions *options = [[MTLCompileOptions new] autorelease];
+  [options setLanguageVersion: MTLLanguageVersion2_3];
+  auto copyCastLib = [device newLibraryWithSource:[NSString stringWithUTF8String:fmt::format(COPY_CAST_OP_TEMPLATE_TENSOR, dtypeSrc, dtypeDst).c_str()]
+                                               options:options
+                                                 error:&error];
+  TORCH_CHECK(copyCastLib != nil && error == nil, "Failed to compile copy cast library, error: ", [[error description] UTF8String]);
+  _libCache[key] = copyCastLib;
+  return copyCastLib;
+}
+
+static id<MTLComputePipelineState> getPipelineState(id<MTLDevice> device,
+                                                    const std::string& kernel,
+                                                    const std::string& dtypeSrc,
+                                                    const std::string& dtypeDst) {
+  auto key = dtypeSrc + dtypeDst;
+  static std::unordered_map<std::string, id<MTLComputePipelineState>> _mtlPipelineCache;
+  auto it = _mtlPipelineCache.find(key);
+  if (it != _mtlPipelineCache.end()) {
+     return it->second;
+  }
+
+  NSError *error = nil;
+  id<MTLLibrary> library = compileCopyCastOpsLibrary(device, dtypeSrc, dtypeDst);
+  id<MTLFunction> func = [library newFunctionWithName:[NSString stringWithUTF8String:kernel.c_str()]];
+  TORCH_CHECK(func, "Failed to load the Metal Shader function: ", kernel);
+  id<MTLComputePipelineState> pso = [device newComputePipelineStateWithFunction:func error:&error];
+  TORCH_CHECK(pso != nil && error == nil, "Failed to construct pipeline state: ", [[error localizedDescription] UTF8String]);
+  _mtlPipelineCache[key] = pso;
+  return pso;
+}
+
+// Copy sourceBuffer into destBuffer, casting sourceBuffer to src.scalar_type().
+// The shapes and dtypes are taken from dst and src, but their storage pointers are not used.
+void copy_cast_mps(at::Tensor& dst, const at::Tensor& src,
+                   id<MTLBuffer> destBuffer, id<MTLBuffer> sourceBuffer,
+                   bool non_blocking = true, int64_t dstOffset = -1, int64_t srcOffset = -1) {
+  using namespace mps;
+  uint32_t numThreads = dst.numel();
+  MPSStream* mpsStream = getCurrentMPSStream();
+  dispatch_sync(mpsStream->queue(), ^(){
+    @autoreleasepool {
+      id<MTLComputeCommandEncoder> computeEncoder = mpsStream->commandEncoder();
+      std::string functionName = "copy_cast_kernel";
+      id<MTLComputePipelineState> copyCastPSO = getPipelineState(MPSDevice::getInstance()->device(),
+                                                              functionName,
+                                                              getMetalScalarType(src),
+                                                              getMetalScalarType(dst));
+      getMPSProfiler().beginProfileKernel(copyCastPSO, functionName, {src, dst});
+      [computeEncoder setComputePipelineState: copyCastPSO];
+      [computeEncoder setBuffer:sourceBuffer offset:(srcOffset != -1) ? srcOffset : src.storage_offset() * src.element_size() atIndex:0];
+      [computeEncoder setBuffer:destBuffer offset:(dstOffset != -1) ? dstOffset : dst.storage_offset() * dst.element_size() atIndex:1];
+
+      MTLSize gridSize = MTLSizeMake(numThreads, 1, 1);
+      NSUInteger threadsPerThreadgroup_ = copyCastPSO.maxTotalThreadsPerThreadgroup;
+      if (threadsPerThreadgroup_ > numThreads) {
+          threadsPerThreadgroup_ = numThreads;
+      }
+
+      MTLSize threadsPerThreadgroup = MTLSizeMake(threadsPerThreadgroup_, 1, 1);
+      [computeEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadsPerThreadgroup];
+      mpsStream->synchronize(!non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT_ADAPTIVE);
+      auto& profiler = getMPSProfiler();
+      if (profiler.isOperationProfilingEnabled()) {
+        profiler.endProfileKernel(copyCastPSO, SyncType::COMMIT_ADAPTIVE);
+      }
+    }
+  });
 }
 
 static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool non_blocking) {

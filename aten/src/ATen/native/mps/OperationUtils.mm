@@ -16,6 +16,41 @@
 
 namespace at::native::mps {
 
+void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds,
+                 NSDictionary* results) {
+  mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE);
+}
+
+// this should be merged into runMPSGraph() with new arg "disableTypeInference" for executables
+void runMPSGraph(MPSStream* mpsStream, MPSCachedGraph *cachedGraph, NSDictionary* feeds,
+                 NSDictionary* results, bool disableTypeInference, SyncType syncType) {
+  MPSGraphExecutable* executable = nil;
+  if (disableTypeInference) {
+    @autoreleasepool {
+      MPSGraph *mpsGraph = cachedGraph->graph();
+      executable = cachedGraph->getExecultable();
+      if (!executable) {
+        NSMutableDictionary* shapes = [[NSMutableDictionary new] autorelease];
+        for (MPSGraphTensor* graphTensor in feeds) {
+          MPSGraphTensorData* graphTensorData = [feeds objectForKey:graphTensor];
+          shapes[graphTensor] = [[[MPSGraphShapedType alloc] initWithShape:nil dataType:graphTensorData.dataType] autorelease];
+        }
+        MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
+        [compilationDescriptor disableTypeInference];
+        executable = [[mpsGraph compileWithDevice:nil
+                                            feeds:shapes
+                                    targetTensors:[results allKeys]
+                                 targetOperations:nil
+                            compilationDescriptor:compilationDescriptor] retain];
+        // store the executable within the cachedGraph to reuse next time
+        cachedGraph->setExecultable(executable);
+      }
+    }
+  }
+  mpsStream->executeMPSGraph(cachedGraph->graph(), feeds, results, syncType, executable);
+}
+
+
 void dispatch_sync_with_rethrow(dispatch_queue_t queue, void (^block)()) {
   __block std::optional<std::exception_ptr> block_exception;
   dispatch_sync(queue, ^() {
@@ -43,10 +78,6 @@ size_t compute_storage_numel_distance(const at::Tensor& t) {
     rc += (t.size(i) - 1) * t.stride(i);
   }
   return rc;
-}
-
-void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results) {
-  mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE);
 }
 
 static inline void checkSupportsComplex() {
@@ -110,7 +141,9 @@ MPSGraphTensor* castToIHFTypes(MPSGraph* mpsGraph,
   }
   if (condition) {
     dataType = (dataType & MPSDataTypeFloatBit) ? MPSDataTypeFloat32 : MPSDataTypeInt32;
-    return [mpsGraph castTensor:inputTensor toType:dataType name:@"castInputTensor"];
+    return [mpsGraph castTensor:inputTensor 
+                         toType:dataType 
+                           name:@"castInputTensor"];
   }
   return inputTensor;
 }
@@ -267,32 +300,56 @@ std::string getMPSShapeString(MPSShape* shape) {
   return str;
 }
 
+const std::string& getMetalScalarType(const c10::ScalarType& scalar_type) {
+  static std::unordered_map<c10::ScalarType, std::string> scalarToMetalType = {
+    {c10::ScalarType::Float, "float"},
+    {c10::ScalarType::Half,  "half"},
+    {c10::ScalarType::Long,  "long"},
+    {c10::ScalarType::Int,   "int"},
+    {c10::ScalarType::Short, "short"},
+    {c10::ScalarType::Char,  "char"},
+    {c10::ScalarType::Byte,  "uchar"},
+    {c10::ScalarType::Bool,  "bool"},
+  };
+
+  auto it = scalarToMetalType.find(scalar_type);
+  TORCH_CHECK(it != scalarToMetalType.end(), "Unsupported type byte size: ", scalar_type);
+  return it->second;
+}
+
+const std::string& getMetalScalarType(const Tensor& t) {
+  return getMetalScalarType(t.scalar_type());
+}
+
 std::string getArrayRefString(const IntArrayRef s) {
   std::stringstream ss;
   std::copy(s.begin(), s.end(), std::ostream_iterator<int>(ss, ","));
   return ss.str();
 }
 
-std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype) {
-  std::string str;
-  // The key format per tensor would look like ":Float32[1,1,1,10]:"
-  for (const Tensor& tensor : tensors) {
-    str += ":";
-    if (tensor.defined()) {
-      str += getMPSTypeString(tensor.scalar_type(), short_dtype) + "[";
-      // if tensor is a scalar
-      if (tensor.dim() == 0) {
-        str += "Scalar";
+std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype, bool exclude_shape) {
+    std::string str;
+    // The key format per tensor would look like ":Float32[1,1,1,10]:"
+    for (const Tensor& tensor: tensors) {
+      str += ":";
+      if (tensor.defined()) {
+        str += getMPSTypeString(tensor.scalar_type(), short_dtype) + "[";
+        // if tensor is a scalar
+        if (tensor.dim() == 0) {
+          str += "Scalar";
+        } else {
+          if (exclude_shape) {
+            str += "[-1]";
+          } else {
+            str += std::string([[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","].UTF8String);
+          }
+        }
+        str += "]";
       } else {
-        const NSString* ns_shape_key = [[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","];
-        str += std::string(ns_shape_key.UTF8String);
+        str += "Undefined";
       }
-      str += "]";
-    } else {
-      str += "Undefined";
     }
-  }
-  return str;
+    return str;
 }
 
 MPSShape* getMPSShape(const Tensor& t, c10::MemoryFormat memory_format) {
