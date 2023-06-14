@@ -63,12 +63,12 @@ id<MTLLibrary> compileCopyCastOpsLibrary(id<MTLDevice> device,
   NSError *error = nil;
   MTLCompileOptions *options = [[MTLCompileOptions new] autorelease];
   [options setLanguageVersion: MTLLanguageVersion2_3];
-  auto gatherScatterLib = [device newLibraryWithSource:[NSString stringWithUTF8String:fmt::format(COPY_CAST_OP_TEMPLATE_TENSOR, dtypeSrc, dtypeDst).c_str()]
+  auto copyCastLib = [device newLibraryWithSource:[NSString stringWithUTF8String:fmt::format(COPY_CAST_OP_TEMPLATE_TENSOR, dtypeSrc, dtypeDst).c_str()]
                                                options:options
                                                  error:&error];
-  TORCH_CHECK(gatherScatterLib != nil && error == nil, "Failed to compile gather-scatter library, error: ", [[error description] UTF8String]);
-  _libCache[key] = gatherScatterLib;
-  return gatherScatterLib;
+  TORCH_CHECK(copyCastLib != nil && error == nil, "Failed to compile copy cast library, error: ", [[error description] UTF8String]);
+  _libCache[key] = copyCastLib;
+  return copyCastLib;
 }
 
 static id<MTLComputePipelineState> getPipelineState(id<MTLDevice> device,
