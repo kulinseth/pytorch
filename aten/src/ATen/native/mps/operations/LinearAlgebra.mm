@@ -528,35 +528,25 @@ Tensor& bmm_out_mps_impl(
     MPSGraphTensor *outputTensor_ = nil;
   };
 
-  // if (!batch1.is_contiguous()) {
-    // std::cout << "Batch1: (" << batch1.is_contiguous() << ")\n";
-    // std::cout << "view sizes: " << batch1.sizes() << std::endl;
-    // std::cout << "view strides: " << batch1.strides() << std::endl;
-
-    // std::cout << "parent sizes: " << batch1._base().sizes() << std::endl;
-    // std::cout << "parent strides: " << batch1._base().strides() << std::endl;
-
-  // }
-
-  // if (!batch2.is_contiguous()) {
-    // std::cout << "Batch2 (" << batch2.is_contiguous() << ")\n";
-    // std::cout << "view sizes: " << batch2.sizes() << std::endl;
-    // std::cout << "view strides: " << batch2.strides() << std::endl;
-
-    // std::cout << "parent sizes: " << batch2._base().sizes() << std::endl;
-    // std::cout << "parent strides: " << batch2._base().strides() << std::endl;
-  // }
-
   mps::MPSGraphCache *cache_ = mps::MPSGraphCache::getInstance();
 
+  MPSShape* shape = nil;
   bool doTranspose = false;
-  if ((batch2.storage_offset() || batch2.is_view()) && batch2.is_contiguous()) {
+
+  // Handle transposes for the second batch of matrices.
+  if (batch2.is_view() || batch2.storage_offset()) {
     if (batch2.numel() == batch2._base().numel()) {
       const IntArrayRef& baseSizes = batch2._base().sizes();
       const IntArrayRef& viewSizes = batch2.sizes();
-      if (batch2.stride(-1) == 1 && (batch2.size(-2) == batch2.size(-1))) {
+
+      // Handle 3D and 4D tensors.
+      // For 4D tensors, first it must have been reshaped from 4D to 3D and then transposed.
+      int32_t baseTransposeStrideDim = batch2._base().dim() == 4 ? -3 : -2;
+      if (batch2.size(0) == batch2.size(0) &&
+          batch2._base().stride(0) == batch2.stride(0) &&
+          batch2._base().stride(baseTransposeStrideDim) == batch2.stride(-1)) {
+        shape = @[@(viewSizes[0]), @(viewSizes[2]), @(viewSizes[1])];
         doTranspose = true;
-        // std::cout << "SETTING TRANSPOSE\n";
       }
     }
   }
@@ -597,7 +587,7 @@ Tensor& bmm_out_mps_impl(
       cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
     }
     Placeholder batch1Placeholder = Placeholder(cachedGraph->batch1Tensor_, batch1);
-    Placeholder batch2Placeholder = Placeholder(cachedGraph->batch2Tensor_, batch2);
+    Placeholder batch2Placeholder = Placeholder(cachedGraph->batch2Tensor_, batch2, shape, !doTranspose);
     Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result);
 
     NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
