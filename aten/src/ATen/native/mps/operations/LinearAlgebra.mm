@@ -1,3 +1,4 @@
+
 //  Copyright © 2022 Apple Inc.
 
 #include <ATen/native/mps/OperationUtils.h>
@@ -570,9 +571,9 @@ Tensor& bmm_out_mps_impl(
 
           if (doTranspose) {
             batch2TensorTranspose = [mpsGraph transposeTensor:batch2Tensor
-                                                        dimension:1
-                                                    withDimension:2
-                                                              name:nil];
+                                                    dimension:1
+                                                withDimension:2
+                                                         name:nil];
           }
           MPSGraphTensor* productTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:batch1Tensor
                                                                           secondaryTensor:batch2TensorTranspose
