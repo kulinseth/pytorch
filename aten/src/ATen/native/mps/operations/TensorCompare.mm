@@ -14,12 +14,26 @@ struct CachedGraph : public MPSCachedGraph
     MPSGraphTensor *minTensor = nil, *maxTensor = nil;
 };
 
-void clamp_mps_graph(CachedGraph* cachedGraph, const Tensor& input_tensor)
+void clamp_mps_graph(CachedGraph* cachedGraph, const Tensor& input_tensor,
+                          const Tensor& min_tensor, const Tensor& max_tensor)
 {
+    auto input_dtype = input_tensor.scalar_type();
+    auto min_dtype = input_dtype;
+    auto max_dtype = input_dtype;
+    if (cachedGraph->minTensor)
+        min_dtype = min_tensor.scalar_type();
+    if (cachedGraph->maxTensor)
+        max_dtype = max_tensor.scalar_type();
     MPSGraph *mpsGraph = cachedGraph->graph();
 
     cachedGraph->inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, input_tensor);
 
+    if (input_dtype != min_dtype) {
+        cachedGraph->minTensor = castMPSTensor(mpsGraph, cachedGraph->minTensor, input_dtype);
+    }
+    if (input_dtype != max_dtype) {
+        cachedGraph->maxTensor = castMPSTensor(mpsGraph, cachedGraph->maxTensor, input_dtype);
+    }
     if (cachedGraph->minTensor && cachedGraph->maxTensor) {
         cachedGraph->outputTensor = [mpsGraph clampWithTensor:cachedGraph->inputTensor
                                                minValueTensor:cachedGraph->minTensor
@@ -136,6 +150,7 @@ void clamp_tensor_out_mps(const Tensor& input_t,
 
         string key = op_name + (has_min ? "_min" : "") + (has_max ? "_max" : "")
                              + "_tensor" + tensor_key;
+        std::cout << "clamp key " << key << std::endl;
         MPSGraphCache* cache_ = MPSGraphCache::getInstance();
         CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
 
@@ -147,18 +162,22 @@ void clamp_tensor_out_mps(const Tensor& input_t,
                     MPSGraph* mpsGraph = make_mps_graph();
                     newCachedGraph = new CachedGraph(mpsGraph);
 
-                    if (has_min)
-                        newCachedGraph->minTensor = mpsGraphRankedPlaceHolder(mpsGraph, min_opt_tensor);
-                    if (has_max)
-                        newCachedGraph->maxTensor = mpsGraphRankedPlaceHolder(mpsGraph, max_opt_tensor);
+                    if (has_min) {
+                        MPSGraphTensor* minTensor = mpsGraphRankedPlaceHolder(mpsGraph, min_opt_tensor);
+                        newCachedGraph->minTensor = minTensor;
+                    }
+                    if (has_max) {
+                        MPSGraphTensor* maxTensor = mpsGraphRankedPlaceHolder(mpsGraph, max_opt_tensor);
+                        newCachedGraph->maxTensor = maxTensor;
+                    }
 
-                    clamp_mps_graph(newCachedGraph, input_t);
+                    clamp_mps_graph(newCachedGraph, input_t, min_opt_tensor, max_opt_tensor);
                 }
                 return newCachedGraph;
             });
             cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
         }
-
+        [cachedGraph->graph() dump];
         auto inputPlaceholder  = Placeholder(cachedGraph->inputTensor, input_t);
         auto outputPlaceholder = Placeholder(cachedGraph->outputTensor, output_t);
 
@@ -228,7 +247,7 @@ void clamp_scalar_out_mps(const Tensor& input_t,
                                                                            shape:(mps::getMPSShape(input_t))
                                                                         dataType:(mps::getMPSScalarType(input_t.scalar_type())) ];
 
-                    clamp_mps_graph(newCachedGraph, input_t);
+                    clamp_mps_graph(newCachedGraph, input_t, input_t, input_t);
                 }
                 return newCachedGraph;
             });
