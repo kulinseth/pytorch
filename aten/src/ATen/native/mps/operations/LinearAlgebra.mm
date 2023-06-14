@@ -534,8 +534,8 @@ Tensor& bmm_out_mps_impl(
   MPSShape* shape = nil;
   bool doTranspose = false;
 
-  // Handle transposes for the second batch of matrices (batch2).
-  if (batch2.is_view() || batch2.storage_offset()) {
+  // Handle transposes for the second batch of matrices.
+  if (batch2.is_view() && !batch2.is_contiguous()) {
     if (batch2.numel() == batch2._base().numel()) {
       const IntArrayRef& viewSizes = batch2.sizes();
 
@@ -570,8 +570,8 @@ Tensor& bmm_out_mps_impl(
 
           if (doTranspose) {
             batch2TensorTranspose = [mpsGraph transposeTensor:batch2Tensor
-                                                    dimension:1
-                                                withDimension:2
+                                                    dimension:-1
+                                                withDimension:-2
                                                          name:nil];
           }
           MPSGraphTensor* productTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:batch1Tensor
