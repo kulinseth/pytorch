@@ -187,7 +187,8 @@ struct HeapBlock
     return heapBlock;
   }
   static bool Comparator(const HeapBlock* a, const HeapBlock* b) {
-    return a->size.available < b->size.available;
+    return (a->size.available != b->size.available) ? a->size.available < b->size.available :
+                                                      (uintptr_t)a->heap < (uintptr_t)b->heap;
   }
   static NSUInteger heapAvailableSize(id<MTLHeap> heap, size_t Alignment = vm_page_size) {
     return [heap maxAvailableSizeWithAlignment:Alignment];
