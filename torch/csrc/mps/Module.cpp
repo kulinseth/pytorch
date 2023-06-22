@@ -99,6 +99,18 @@ static PyObject* MPSModule_setMemoryFraction(
   END_HANDLE_TH_ERRORS
 }
 
+static PyObject* MPSModule_setAllocatorSettings(
+    PyObject* _unused,
+    PyObject* args) {
+  HANDLE_TH_ERRORS
+  THPUtils_assert(
+      THPUtils_checkString(args), "invalid argument to setAllocatorSettings()");
+  const std::string config_str = THPUtils_unpackString(args);
+  at::detail::getMPSHooks().setAllocatorSettings(config_str);
+  Py_RETURN_NONE;
+  END_HANDLE_TH_ERRORS
+}
+
 static PyObject* MPSModule_currentAllocatedMemory(
     PyObject* _unused,
     PyObject* noargs) {
@@ -229,6 +241,7 @@ static struct PyMethodDef _MPSModule_methods[] = {
      nullptr},
     {"_mps_emptyCache", MPSModule_emptyCache, METH_NOARGS, nullptr},
     {"_mps_setMemoryFraction", MPSModule_setMemoryFraction, METH_O, nullptr},
+    {"_mps_setAllocatorSettings", MPSModule_setAllocatorSettings, METH_O, nullptr},
     {"_mps_currentAllocatedMemory",
      MPSModule_currentAllocatedMemory,
      METH_NOARGS,

@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include <ATen/mps/MPSAllocatorInterface.h>
+#include <ATen/mps/MPSAllocatorConfig.h>
 #include <ATen/mps/MPSStream.h>
 #include <ATen/mps/MPSEvent.h>
 #include <cstdio>
@@ -19,28 +19,6 @@ namespace at {
 namespace mps {
 namespace HeapAllocator {
 
-// largest "small" allocation is 1 MiB
-static const size_t kMaxSmallAlloc = MB(1);
-// allocations between 1 and 10 MiB may use kLargeHeap
-static const size_t kMinLargeAlloc = MB(10);
-// round up large allocations to 2 MiB
-static const size_t kRoundLarge = MB(2);
-// "small" allocations are packed in 8 MiB heaps
-static const size_t kSmallHeap = MB(8);
-// "large" allocations may be packed in 32 MiB heaps
-static const size_t kLargeHeap = MB(32);
-// largest "scalar" allocation
-static const size_t kMaxScalarAlloc = (sizeof(int64_t));
-// smallest size that gets round up to the next power of 2
-static const size_t kMinRoundUpSize = 1024;
-// largest size that gets round up to the next power of 2
-static const size_t kMaxRoundUpSize = MB(128);
-// "extra large" allocations may be packed in heap sizes of
-// (recommendedMaxWorkingSetSize / kXLargeHeapDivisor)
-// Considering recommendedMaxWorkingSetSize is typically 75% of total system memory,
-// then the ratio (1/12) yields 12 GB heap size on 192 GB system, 8 GB on 128 GB system and so on.
-static const size_t kXLargeHeapDivisor = 12;
-
 // buffer pools could be customized with a combination of usage flags
 enum UsageFlags : uint32_t {
   PRIVATE = 0,
@@ -50,20 +28,10 @@ enum UsageFlags : uint32_t {
   HAZARD  = (1 << 3), // enables Automatic Hazard Tracking for the resources allocated on the pool
   SCALAR  = (1 << 4), // used to import CPU scalar values to GPU and use them in MPS Stream
 };
-// debug verbosity flags
-enum DebugVerbosity : uint32_t {
-  SILENT      = 0,
-  PROFILING   = (1 << 0), // print generic profiling data for total system memory usage
-  ALLOCATIONS = (1 << 1), // print buffer allocations
-  RECYCLES    = (1 << 2), // print buffer recycling
-  RELEASES    = (1 << 3), // print buffer releases
-  LARGE_ONLY  = (1 << 4), // only log large buffer pool transactions
-};
 
 struct HeapBlock;
 
-struct BufferBlock
-{
+struct BufferBlock {
   id<MTLBuffer> buffer;
   void* cpu_ptr = nullptr; // stores the pointer to CPU mapping of a Shared MTLBuffer
   size_t size; // size after alignment
@@ -98,17 +66,17 @@ struct BufferBlock
 typedef bool (*BufferComparison)(const BufferBlock*, const BufferBlock*);
 
 struct BufferPool;
-struct AllocParams
-{
-  AllocParams(size_t Alloc_Size, size_t Requested_Size, BufferPool* Pool) :
+struct AllocParams {
+  AllocParams(size_t Alloc_Size, size_t Requested_Size, BufferPool* Pool, const MPSAllocatorConfig& Configs) :
               search_key(Alloc_Size), pool(Pool), buffer_block(nullptr),
-              requested_size(Requested_Size) { }
+              requested_size(Requested_Size), configs(Configs) { }
   size_t size() const { return search_key.size; }
 
   BufferBlock search_key;
   BufferPool* pool;
   BufferBlock* buffer_block;
   size_t requested_size;
+  const MPSAllocatorConfig& configs;
   // true if we exceed the low watermark limit. In this case
   // we apply strategies to relieve the pressure before allocation.
   bool has_memory_pressure = false;
@@ -116,8 +84,7 @@ struct AllocParams
   bool has_unified_memory = true;
 };
 
-struct HeapBlock
-{
+struct HeapBlock {
   id<MTLHeap> heap;
   struct { size_t total, available; } size;
   BufferPool* pool;
@@ -152,16 +119,14 @@ struct HeapBlock
     HeapBlock *heapBlock = nullptr;
     bool is_split = true;
     const size_t size = params.size();
-    // see comments for kXLargeHeapDivisor
-    const size_t extra_large_heap_size = device.recommendedMaxWorkingSetSize / kXLargeHeapDivisor;
     MTLHeapDescriptor *d = [MTLHeapDescriptor new];
     if (d) {
       if (size <= kMaxSmallAlloc) {
-        d.size = kSmallHeap;
+        d.size = params.configs.smallHeapSize();
       } else if (size < kMinLargeAlloc) {
-        d.size = kLargeHeap;
-      } else if (size < extra_large_heap_size / 2 && !params.has_memory_pressure) {
-        d.size = extra_large_heap_size;
+        d.size = params.configs.largeHeapSize();
+      } else if (size < params.configs.xLargeHeapSize() / 2 && !params.has_memory_pressure) {
+        d.size = params.configs.xLargeHeapSize();
       } else {
         d.size = kRoundLarge * ((size + kRoundLarge - 1) / kRoundLarge);
         is_split = false;
@@ -228,8 +193,7 @@ struct HeapBlock
 };
 typedef bool (*HeapComparison)(const HeapBlock*, const HeapBlock*);
 
-struct BufferPool
-{
+struct BufferPool {
   enum class Kind {
     PRIVATE_SMALL,
     PRIVATE_LARGE,
@@ -266,12 +230,12 @@ struct BufferPool
   std::unordered_set<HeapBlock*> heaps_pending_update;
 };
 
-class MPSHeapAllocatorImpl
-{
+class MPSHeapAllocatorImpl {
 public:
   explicit MPSHeapAllocatorImpl() :
     m_device(at::mps::MPSDevice::getInstance()->device()),
     m_max_buffer_size([m_device maxBufferLength]),
+    m_configs([m_device hasUnifiedMemory], [m_device recommendedMaxWorkingSetSize]),
     m_stream(getDefaultMPSStream()),
     m_event_pool(getMPSEventPool()) {
     init_allocator();
@@ -313,14 +277,6 @@ public:
   // low watermark limit which is used to detect if we're under memory pressure
   // This returns zero if we've reached the low watermark limit
   ssize_t getLowWatermarkValue();
-  // (see m_low_watermark_ratio for description)
-  void setLowWatermarkRatio(double ratio);
-  // (see m_high_watermark_ratio for description)
-  void setHighWatermarkRatio(double ratio);
-  // (see m_low_watermark_limit for description)
-  size_t getLowWatermarkLimit() const { return m_low_watermark_limit; }
-  // (see m_max_total_allowed_size for description)
-  size_t getHighWatermarkLimit() const { return m_max_total_allowed_size; }
   // (see m_total_allocated_memory for description)
   size_t getTotalAllocatedMemory() const { return m_total_allocated_memory; }
   // (see m_current_allocated_memory for description)
@@ -328,23 +284,14 @@ public:
   // total GPU memory allocated in the process by Metal driver; including
   // implicit allocations from MPS/MPSGraph frameworks and MPSHeapAllocatorImpl.
   size_t getDriverAllocatedMemory() const { return current_allocated_size(); }
-  // (see enum DebugVerbosity for description)
-  uint32_t getDebugVerbosity() const { return m_debug_verbosity; }
   // returns the device that we allocate from
   inline id<MTLDevice> Device() const { return m_device; }
-
+  // allocator configs
+  MPSAllocatorConfig& configs() { return m_configs; }
   // TODO: make a common function to do size unit conversions in PyTorch.
-  inline std::string format_size(uint64_t size) const;
+  inline std::string format_size(uint64_t size) const { return m_configs.format_size(size); }
 
 private:
-  // (see m_high_watermark_ratio for description)
-  constexpr static double default_high_watermark_ratio = 1.7;
-  // we set the allowed upper bound to twice the size of recommendedMaxWorkingSetSize.
-  constexpr static double default_high_watermark_upper_bound = 2.0;
-  // (see m_low_watermark_ratio for description)
-  constexpr static double default_low_watermark_ratio_unified  = 1.0;
-  constexpr static double default_low_watermark_ratio_discrete = 1.0;
-
   const id<MTLDevice> m_device;
   std::recursive_mutex m_mutex;
   // allocated buffers by device pointer
@@ -357,25 +304,8 @@ private:
   size_t m_current_allocated_memory = 0;
   // max buffer size allowed by Metal
   size_t m_max_buffer_size = 0;
-  // maximum total size allowed to be allocated
-  size_t m_max_total_allowed_size = 0;
-  // high watermark ratio is a hard limit for the total allowed allocations
-  // 0. : disables high watermark limit (may cause system failure if system-wide OOM occurs)
-  // 1. : recommended maximum allocation size (i.e., device.recommendedMaxWorkingSetSize)
-  // >1.: allows limits beyond the device.recommendedMaxWorkingSetSize
-  // e.g., value 0.95 means we allocate up to 95% of recommended maximum
-  // allocation size; beyond that, the allocations would fail with OOM error.
-  double m_high_watermark_ratio = 0.0;
-  // low watermark ratio is a soft limit to attempt limiting memory allocations up to the lower watermark
-  // level by garbage collection or committing command buffers more frequently (a.k.a, adaptive commit).
-  // Value between 0 to m_high_watermark_ratio (setting 0.0 disables adaptive commit and garbage collection)
-  // e.g., value 0.9 means we 'attempt' to limit allocations up to 90% of recommended maximum
-  // allocation size.
-  double m_low_watermark_ratio = 0.0;
-  // low watermark size limit (in Bytes) at the time we initialize the allocator
-  size_t m_low_watermark_limit = 0;
-  // use "PYTORCH_DEBUG_MPS_ALLOCATOR" env-var to set debug verbosity
-  uint32_t m_debug_verbosity = DebugVerbosity::SILENT;
+  // allocator configurations
+  MPSAllocatorConfig m_configs;
   // default MPS stream
   MPSStream* m_stream;
   // we hold a reference to MPSEventPool so it could get destroyed after MPSAllocator

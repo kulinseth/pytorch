@@ -6464,6 +6464,18 @@ class TestNLLLoss(TestCaseMPS):
         print(f"current_allocated: {torch.mps.current_allocated_memory() / 1024} KB, "
               f"driver_allocated: {torch.mps.driver_allocated_memory() / 1024} KB\n")
 
+        # test allocator's settings parser
+        with self.assertRaises(RuntimeError):
+            torch.mps.memory.set_allocator_settings("foo:1,bar:2")
+
+        # test OOM by lowering the watermark ratios and allocating a large tensor
+        torch.mps.memory.set_allocator_settings("high_watermark_ratio:0.1,low_watermark_ratio:0.05")
+        with self.assertRaises(RuntimeError):
+            torch.empty(10 * 1024 * 1024 * 1024, device='mps')
+
+        # reset watermark limits
+        torch.mps.memory.set_allocator_settings("high_watermark_ratio:1.5,low_watermark_ratio:1.0")
+
     # to verify this test, run XCode Instruments "Logging" tool, press record, then
     # run this python test, and press stop. Next expand the os_signposts->PyTorchMPS
     # and check if events or intervals are logged like this example:

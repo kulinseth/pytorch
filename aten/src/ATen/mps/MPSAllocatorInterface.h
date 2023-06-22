@@ -25,14 +25,12 @@ public:
   virtual bool isSharedStorageSupported() const = 0;
   virtual c10::DataPtr allocScalarBufferWithValue(void* value, size_t size) const = 0;
   virtual std::string formatSize(size_t size) const = 0;
-  virtual void setLowWatermarkRatio(double ratio) const = 0;
   virtual void setHighWatermarkRatio(double ratio) const = 0;
   virtual ssize_t getLowWatermarkValue() const = 0;
-  virtual size_t getLowWatermarkLimit() const = 0;
-  virtual size_t getHighWatermarkLimit() const = 0;
   virtual size_t getTotalAllocatedMemory() const = 0;
   virtual size_t getCurrentAllocatedMemory() const = 0;
   virtual size_t getDriverAllocatedMemory() const = 0;
+  virtual void setAllocatorSettings(const std::string& configStr) const = 0;
   virtual std::pair<void*, uint32_t> getSharedBufferPtr(void* buffer) const = 0;
   virtual bool recordEvents(c10::ArrayRef<void*> buffers) const = 0;
   virtual bool waitForEvents(c10::ArrayRef<void*> buffers) const = 0;
