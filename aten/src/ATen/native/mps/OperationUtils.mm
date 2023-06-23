@@ -26,7 +26,7 @@ void runMPSGraph(MPSStream* mpsStream, MPSCachedGraph *cachedGraph, NSDictionary
           shapes[graphTensor] = [[[MPSGraphShapedType alloc] initWithShape:nil dataType:graphTensorData.dataType] autorelease];
         }
         MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
-
+        [compilationDescriptor disableTypeInference];
         executable = [[mpsGraph compileWithDevice:nil
                                             feeds:shapes
                                     targetTensors:[results allKeys]
