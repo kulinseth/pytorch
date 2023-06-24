@@ -255,7 +255,7 @@ std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype, boo
           str += "Scalar";
         } else {
           if (exclude_shape) {
-            str += std::to_string(tensor.dim());
+            str += "[-1]"
           } else {
             str += std::string([[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","].UTF8String);
           }
