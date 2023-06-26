@@ -102,7 +102,7 @@ TORCH_IMPL_FUNC(softmax_mps_out)
           assert(0 && "Invalid dim\n");
       }
     }
-
+    bool disableTypeInference = input_.dim() <= 4;
     string key = "softmax_mps_out" + getTensorsStringKey(input, true, /*exclude_shape*/true) + ":" +
                  mem_format_key + ":" + std::to_string(dim_);
     CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
@@ -162,7 +162,7 @@ TORCH_IMPL_FUNC(softmax_mps_out)
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    runMPSGraph(stream, cachedGraph, feeds, results, /*disable_type_inference*/ true);
+    runMPSGraph(stream, cachedGraph, feeds, results, disableTypeInference);
   }
 
 }
