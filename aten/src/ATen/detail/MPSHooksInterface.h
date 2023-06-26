@@ -65,6 +65,9 @@ struct TORCH_API MPSHooksInterface {
   virtual void setMemoryFraction(double /*ratio*/) const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }
+  virtual void setAllocatorSettings(const std::string& configStr) const {
+    FAIL_MPSHOOKS_FUNC(__func__);
+  }
   virtual void profilerStartTrace(const string& mode, bool waitUntilCompleted) const {
     FAIL_MPSHOOKS_FUNC(__func__);
   }

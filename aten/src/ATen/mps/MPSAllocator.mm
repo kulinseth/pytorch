@@ -18,20 +18,6 @@ uint64_t BufferBlock::buffer_counter = 0;
 uint64_t HeapBlock::heap_counter = 0;
 
 void MPSHeapAllocatorImpl::init_allocator() {
-  // debug verbosity flags (see DebugVerbosity enum)
-  static const char *verbosity_str = getenv("PYTORCH_DEBUG_MPS_ALLOCATOR");
-  m_debug_verbosity = verbosity_str ? strtol(verbosity_str, nullptr, 0) : DebugVerbosity::SILENT;
-
-  static const char *high_watermark_ratio_str = getenv("PYTORCH_MPS_HIGH_WATERMARK_RATIO");
-  const double high_watermark_ratio = high_watermark_ratio_str ? strtod(high_watermark_ratio_str, nullptr) :
-                                                                 default_high_watermark_ratio;
-  setHighWatermarkRatio(high_watermark_ratio);
-
-  const double default_low_watermark_ratio =  m_device.hasUnifiedMemory ? default_low_watermark_ratio_unified :
-                                                                          default_low_watermark_ratio_discrete;
-  static const char *low_watermark_ratio_str = getenv("PYTORCH_MPS_LOW_WATERMARK_RATIO");
-  const double low_watermark_ratio = low_watermark_ratio_str ? strtod(low_watermark_ratio_str, nullptr) : default_low_watermark_ratio;
-  setLowWatermarkRatio(low_watermark_ratio);
 
   init_buffer_pools();
 }
@@ -72,38 +58,14 @@ BufferPool& MPSHeapAllocatorImpl::get_pool(size_t requested_size, size_t aligned
   return *m_pools[poolKind];
 }
 
-void MPSHeapAllocatorImpl::setHighWatermarkRatio(double ratio) {
-  TORCH_CHECK(ratio >= 0.0 && ratio <= default_high_watermark_upper_bound, "invalid high watermark ratio ", ratio);
-  m_max_total_allowed_size = (ratio == 0.0) ? std::numeric_limits<size_t>::max() :
-                             static_cast<size_t>(ratio * (double)max_device_size());
-  if (m_debug_verbosity & DebugVerbosity::PROFILING) {
-    std::cerr << "\nHigh watermark memory allocation limit: "
-              << (ratio == 0.0 ? "unlimited" : format_size(m_max_total_allowed_size)) << "\n";
-  }
-  m_high_watermark_ratio = ratio;
-}
-
-void MPSHeapAllocatorImpl::setLowWatermarkRatio(double ratio) {
-  // used for comparison with lower_watermark_ratio
-  const double high_watermark_limit = m_high_watermark_ratio == 0.0 ? default_high_watermark_upper_bound : m_high_watermark_ratio;
-  TORCH_CHECK(ratio >= 0.0 && ratio <= high_watermark_limit, "invalid low watermark ratio ", ratio);
-  // we use this to detect if there's memory pressure
-  m_low_watermark_limit = (ratio == 0.0) ? std::numeric_limits<size_t>::max() :
-                          static_cast<size_t>(ratio * (double)max_device_size());
-  if (m_debug_verbosity & DebugVerbosity::PROFILING) {
-    std::cerr << "Low watermark memory allocation limit: "
-              << (ratio == 0.0 ? "unlimited" : format_size(m_low_watermark_limit)) << "\n";
-  }
-  m_low_watermark_ratio = ratio;
-}
-
 size_t MPSHeapAllocatorImpl::get_allocation_size(size_t size, uint32_t usage) const {
   // for the non-scalar buffers that are within the range of [kMinRoundUpSize, kMaxRoundUpSize],
-  // we round up the allocation sizes to the next power of 2.
+  // we round up the allocation sizes to the next power of 2 (if maxPow2RoundupSize > 0).
   // This helps with sequential allocations with odd sizes (e.g., 1.11 MB, then 1.12 MB, ...)
   // that would prevent older buffers in the pool to be reused due to their slightly smaller sizes
   // compared to the new allocation size requests.
-  if (!(usage & UsageFlags::SCALAR) && size > kMinRoundUpSize && size < kMaxRoundUpSize) {
+  const size_t kMaxRoundUpSize = m_configs.maxPow2RoundupSize();
+  if (kMaxRoundUpSize && !(usage & UsageFlags::SCALAR) && size > kMinRoundUpSize && size < kMaxRoundUpSize) {
     size = llvm::PowerOf2Ceil(size);
   }
   MTLSizeAndAlign sizeAlign = [m_device heapBufferSizeAndAlignWithLength: size
@@ -120,7 +82,8 @@ HeapBlock* MPSHeapAllocatorImpl::get_free_heap(AllocParams& params) {
   if (it == pool.heaps.end()) {
     heap_block = HeapBlock::createHeapBlock(params, pool.device, pool.usage);
     if (heap_block) {
-      if (m_debug_verbosity & DebugVerbosity::ALLOCATIONS) {
+      m_total_allocated_memory += heap_block->size.total;
+      if (m_configs.debugVerbosity() & DebugVerbosity::ALLOCATIONS) {
         std::cerr << "\nAllocated "
                   << ((pool.usage & UsageFlags::SHARED) ? "shared" : "private")
                   << " heap #" << heap_block->heap_id
@@ -139,8 +102,8 @@ HeapBlock* MPSHeapAllocatorImpl::get_free_heap(AllocParams& params) {
 }
 
 bool MPSHeapAllocatorImpl::alloc_buffer(AllocParams& params) {
-  if (m_max_total_allowed_size != std::numeric_limits<size_t>::max() &&
-      current_allocated_size() + params.size() > m_max_total_allowed_size) {
+  if (m_configs.highWatermarkLimit() != std::numeric_limits<size_t>::max() &&
+      current_allocated_size() + params.size() > m_configs.highWatermarkLimit()) {
     return false;
   }
   HeapBlock *heap = get_free_heap(params);
@@ -156,12 +119,11 @@ bool MPSHeapAllocatorImpl::alloc_buffer(AllocParams& params) {
   pool.heaps.insert(heap);
   params.buffer_block = new BufferBlock(params.size(), params.requested_size, buffer, heap);
   m_allocated_buffers[params.buffer_block->buffer] = params.buffer_block;
-  m_total_allocated_memory += params.size();
   pool.allocated_size += params.size();
   pool.n_buffers++;
 
-  if ((m_debug_verbosity & DebugVerbosity::ALLOCATIONS) &&
-    (!(m_debug_verbosity & DebugVerbosity::LARGE_ONLY) || !(pool.usage & UsageFlags::SMALL))) {
+  if ((m_configs.debugVerbosity() & DebugVerbosity::ALLOCATIONS) &&
+    (!(m_configs.debugVerbosity() & DebugVerbosity::LARGE_ONLY) || !(pool.usage & UsageFlags::SMALL))) {
     std::cerr << "Allocated "
               << ((params.pool->usage & UsageFlags::SHARED) ? "shared" : "private")
               << ((params.pool->usage & UsageFlags::SCALAR) ? " scalar" : "")
@@ -178,12 +140,13 @@ bool MPSHeapAllocatorImpl::alloc_buffer(AllocParams& params) {
 
 bool MPSHeapAllocatorImpl::get_free_buffer(AllocParams& params) {
   // this helps to monitor "implicit" allocations from MPS backend and to prevent OOM and system failure.
-  if (m_high_watermark_ratio > 0.0 && current_allocated_size() + params.size() > m_max_total_allowed_size) {
+  if (m_configs.highWatermarkLimit() != std::numeric_limits<size_t>::max() &&
+      current_allocated_size() + params.size() > m_configs.highWatermarkLimit()) {
     return false;
   }
   BufferPool& pool = *params.pool;
   // track buffer reuse intervals only on large pool when low watermark limit is enabled.
-  if (m_low_watermark_ratio > 0.0 && !(pool.usage & UsageFlags::SMALL)) {
+  if (m_configs.lowWatermarkLimit() != std::numeric_limits<size_t>::max() && !(pool.usage & UsageFlags::SMALL)) {
     for (auto& b : pool.available_buffers) {
       ++b->gc_count;
     }
@@ -194,7 +157,7 @@ bool MPSHeapAllocatorImpl::get_free_buffer(AllocParams& params) {
 
     // the logic in here is simple: keep reusing existing heaps capacity as long as possible (by splitting
     // or releasing oversize buffers, if required), and avoid 'new' heap allocations as much as possible.
-    if (buffer_block->size <= params.size() + kLargeHeap) {
+    if (buffer_block->size <= params.size() + kMinLargeHeap) {
       // return the existing buffer if it already fits the requested size (i.e., not oversize)
       params.buffer_block = buffer_block;
     } else {
@@ -228,8 +191,8 @@ bool MPSHeapAllocatorImpl::get_free_buffer(AllocParams& params) {
   params.buffer_block->gc_count = 0;
   pool.available_size -= params.buffer_block->size;
 
-  if ((m_debug_verbosity & DebugVerbosity::RECYCLES) &&
-    (!(m_debug_verbosity & DebugVerbosity::LARGE_ONLY) || !(pool.usage & UsageFlags::SMALL))) {
+  if ((m_configs.debugVerbosity() & DebugVerbosity::RECYCLES) &&
+    (!(m_configs.debugVerbosity() & DebugVerbosity::LARGE_ONLY) || !(pool.usage & UsageFlags::SMALL))) {
     std::cerr << "Reusing "
               << ((params.pool->usage & UsageFlags::SHARED) ? "shared" : "private")
               << ((params.pool->usage & UsageFlags::SCALAR) ? " scalar" : "")
@@ -248,7 +211,7 @@ BufferBlock* MPSHeapAllocatorImpl::alloc_buffer_block(size_t size, uint32_t usag
 
   size_t alloc_size = get_allocation_size(size, usage);
   auto& pool = get_pool(size, alloc_size, usage);
-  AllocParams params(alloc_size, size, &pool);
+  AllocParams params(alloc_size, size, &pool, m_configs);
   // we care about memory pressure if only we're allocating large buffers when the
   // low watermark limit has been reached
   params.has_memory_pressure = !(pool.usage & UsageFlags::SMALL) && getLowWatermarkValue() <= 0;
@@ -281,12 +244,13 @@ BufferBlock* MPSHeapAllocatorImpl::alloc_buffer_block(size_t size, uint32_t usag
   //   2- ran out of device memory, or the memory fragmentation is so high that a contiguous
   //      chunk of requested size couldn't be found.
   if (!block_found || !buffer_block) {
-    if (m_high_watermark_ratio > 0.0) {
+    if (m_configs.highWatermarkLimit() != std::numeric_limits<size_t>::max()) {
       TORCH_CHECK(false, "MPS backend out of memory (MPS allocated: ", format_size(m_total_allocated_memory),
                   ", other allocations: ", format_size(current_allocated_size() - m_total_allocated_memory),
-                  ", max allowed: ", format_size(m_max_total_allowed_size), "). Tried to allocate ", format_size(alloc_size),
+                  ", max allowed: ", format_size(m_configs.highWatermarkLimit()), "). Tried to allocate ", format_size(alloc_size),
                   " on ", ((pool.usage & UsageFlags::SHARED) ? "shared" : "private"),
-                  " pool. Use PYTORCH_MPS_HIGH_WATERMARK_RATIO=0.0 to disable upper limit for memory allocations (may cause system failure).");
+                  " pool. Use PYTORCH_MPS_ALLOC_CONF=\"high_watermark_ratio:0.0\" to disable upper limit ",
+                  "for memory allocations (may cause system failure).");
     } else {
       TORCH_CHECK(false, "MPS backend out of memory (MPS allocated: ", format_size(m_total_allocated_memory),
                   ", other allocations: ", format_size(current_allocated_size() - m_total_allocated_memory),
@@ -329,7 +293,6 @@ BufferBlock* MPSHeapAllocatorImpl::get_allocated_buffer_block(void* ptr) {
 bool MPSHeapAllocatorImpl::release_buffer(BufferBlock* buffer_block, bool remove_empty_heap) {
   HeapBlock *heap_block = buffer_block->heap;
   BufferPool& pool = *heap_block->pool;
-  m_total_allocated_memory -= buffer_block->size;
   pool.allocated_size -= buffer_block->size;
   pool.available_size -= buffer_block->size;
   m_allocated_buffers.erase(buffer_block->buffer);
@@ -339,8 +302,8 @@ bool MPSHeapAllocatorImpl::release_buffer(BufferBlock* buffer_block, bool remove
   pool.heaps.erase(heap_block);
   uint32_t retainCount = heap_block->releaseMTLBuffer(buffer_block->buffer);
 
-  if ((m_debug_verbosity & DebugVerbosity::RELEASES) &&
-    (!(m_debug_verbosity & DebugVerbosity::LARGE_ONLY) || !(pool.usage & UsageFlags::SMALL))) {
+  if ((m_configs.debugVerbosity() & DebugVerbosity::RELEASES) &&
+    (!(m_configs.debugVerbosity() & DebugVerbosity::LARGE_ONLY) || !(pool.usage & UsageFlags::SMALL))) {
     std::cerr << "Released buffer #" << buffer_block->buf_id
               << " of size " << format_size(buffer_block->size)
               << " from heap #" << heap_block->heap_id
@@ -353,8 +316,9 @@ bool MPSHeapAllocatorImpl::release_buffer(BufferBlock* buffer_block, bool remove
 
   if (remove_empty_heap && heap_block->n_buffers == 0) {
     pool.heaps_pending_update.erase(heap_block);
+    m_total_allocated_memory -= heap_block->size.total;
     retainCount = heap_block->releaseMTLHeap();
-    if (m_debug_verbosity & DebugVerbosity::RELEASES) {
+    if (m_configs.debugVerbosity() & DebugVerbosity::RELEASES) {
       std::cerr << "Released heap #" << heap_block->heap_id
                 << " of size " << format_size(heap_block->size.total)
                 << " (current allocated: " << format_size(current_allocated_size())
@@ -389,7 +353,7 @@ void MPSHeapAllocatorImpl::release_buffers(BufferPool& pool) {
   if (pool.available_buffers.empty()) {
     return;
   }
-  if ((m_debug_verbosity & DebugVerbosity::RELEASES)) {
+  if ((m_configs.debugVerbosity() >= DebugVerbosity::PROFILING)) {
     std::cerr << "Releasing " << pool.available_buffers.size()
               << " buffers from "
               << ((pool.usage & UsageFlags::SMALL ) ? "small " : "large ")
@@ -437,7 +401,7 @@ bool MPSHeapAllocatorImpl::release_available_cached_buffers(AllocParams& params)
 }
 
 bool MPSHeapAllocatorImpl::release_cached_buffers() {
-  if (m_debug_verbosity >= DebugVerbosity::PROFILING) {
+  if (m_configs.debugVerbosity() >= DebugVerbosity::PROFILING) {
     std::cerr << "Attempting to release cached buffers (MPS allocated: "
               << format_size(m_total_allocated_memory)
               << ", other allocations: "
@@ -462,11 +426,11 @@ bool MPSHeapAllocatorImpl::release_cached_buffers() {
 
 void MPSHeapAllocatorImpl::garbage_collect_cached_buffers(AllocParams& params) {
   // skip garbage collection if memory pressure has already relieved
-  if (current_allocated_size() < m_low_watermark_limit) {
+  if (current_allocated_size() < m_configs.lowWatermarkLimit()) {
     return;
   }
   // attempt to collect garbage until we reach below low watermark limit
-  const auto target_size = current_allocated_size() - m_low_watermark_limit;
+  const auto target_size = current_allocated_size() - m_configs.lowWatermarkLimit();
   const BufferPool& pool = *params.pool;
   // calculate the total age of the free-able blocks. We'll use it later to get the average age threshold.
   double total_age = 0.0;
@@ -504,7 +468,7 @@ void MPSHeapAllocatorImpl::garbage_collect_cached_buffers(AllocParams& params) {
       }
     }
   }
-  if (m_debug_verbosity & DebugVerbosity::RELEASES) {
+  if (m_configs.debugVerbosity() & DebugVerbosity::RELEASES) {
     std::cerr << "Garbage collected " << freed_count
               << " buffers from large "
               << ((pool.usage & UsageFlags::SHARED) ? "shared" : "private")
@@ -694,22 +658,11 @@ void MPSHeapAllocatorImpl::emptyCache() {
 
 ssize_t MPSHeapAllocatorImpl::getLowWatermarkValue() {
   // check if low watermark limit is disabled
-  if (m_low_watermark_ratio == 0.0) {
+  if (m_configs.lowWatermarkLimit() == std::numeric_limits<size_t>::max()) {
     return std::numeric_limits<ssize_t>::max();
   }
-  // current_allocated_size could exceed m_low_watermark_limit (e.g., when swapping to disk)
-  return std::max<ssize_t>(0, (ssize_t)(m_low_watermark_limit - current_allocated_size()) / 1048576L);
-}
-
-inline std::string MPSHeapAllocatorImpl::format_size(uint64_t size) const {
-  std::ostringstream os;
-  os.precision(2);
-  os << std::fixed;
-  if (size <= 1024UL) { os << size << " bytes"; }
-  else if (size <= 1048576UL) { os << ((float) size / 1024.0) << " KB"; }
-  else if (size <= 1073741824UL) { os << ((float) size / 1048576.0) << " MB"; }
-  else { os << ((float) size / 1073741824.0) << " GB"; }
-  return os.str();
+  // current_allocated_size could exceed lowWatermarkLimit (e.g., when swapping to disk)
+  return std::max<ssize_t>(0, (ssize_t)(m_configs.lowWatermarkLimit() - current_allocated_size()) / 1048576L);
 }
 
 } // namespace HeapAllocator
@@ -728,7 +681,7 @@ public:
   explicit MPSAllocator(uint32_t Usage) :
       m_has_unified_memory(_getAllocImpl().Device().hasUnifiedMemory), m_usage(Usage)
   {
-    if (_getAllocImpl().getDebugVerbosity()) {
+    if (_getAllocImpl().configs().debugVerbosity()) {
       if (!(m_usage & HeapAllocator::UsageFlags::SHARED) || m_has_unified_memory) {
         std::cerr << "Initializing "
                   << ((m_usage & HeapAllocator::UsageFlags::SHARED) ? "shared" : "private")
@@ -771,10 +724,8 @@ public:
   size_t getCurrentAllocatedMemory() const override { return _getAllocImpl().getCurrentAllocatedMemory(); }
   size_t getDriverAllocatedMemory() const override { return _getAllocImpl().getDriverAllocatedMemory(); }
   ssize_t getLowWatermarkValue() const override { return _getAllocImpl().getLowWatermarkValue(); }
-  size_t getLowWatermarkLimit() const override { return _getAllocImpl().getLowWatermarkLimit(); }
-  size_t getHighWatermarkLimit() const override { return _getAllocImpl().getHighWatermarkLimit(); }
-  void setLowWatermarkRatio(double ratio) const override { _getAllocImpl().setLowWatermarkRatio(ratio); }
-  void setHighWatermarkRatio(double ratio) const override { _getAllocImpl().setHighWatermarkRatio(ratio); }
+  void setHighWatermarkRatio(double ratio) const override { _getAllocImpl().configs().setHighWatermarkRatio(ratio); }
+  void setAllocatorSettings(const std::string& configStr) const override { _getAllocImpl().configs().parseArgs(configStr.c_str()); }
   bool recordEvents(c10::ArrayRef<void*> buffers) const override { return _getAllocImpl().recordEvents(buffers); }
   bool waitForEvents(c10::ArrayRef<void*> buffers) const override { return _getAllocImpl().waitForEvents(buffers); }
 

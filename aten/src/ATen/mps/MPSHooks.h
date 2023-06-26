@@ -31,6 +31,7 @@ struct MPSHooks : public at::MPSHooksInterface {
   size_t getCurrentAllocatedMemory() const override;
   size_t getDriverAllocatedMemory() const override;
   void setMemoryFraction(double ratio) const override;
+  void setAllocatorSettings(const std::string& configStr) const override;
 
   // MPSProfiler interface
   void profilerStartTrace(const string& mode, bool waitUntilCompleted) const override;
