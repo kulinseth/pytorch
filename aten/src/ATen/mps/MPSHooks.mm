@@ -72,6 +72,10 @@ void MPSHooks::setMemoryFraction(double ratio) const {
   at::mps::getIMPSAllocator()->setHighWatermarkRatio(ratio);
 }
 
+void MPSHooks::setAllocatorSettings(const std::string& configStr) const {
+  at::mps::getIMPSAllocator()->setAllocatorSettings(configStr);
+}
+
 void MPSHooks::profilerStartTrace(const string& mode, bool waitUntilCompleted) const {
   at::mps::getMPSProfiler().StartTrace(mode, waitUntilCompleted);
 }
