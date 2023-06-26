@@ -678,7 +678,7 @@ Tensor& index_select_out_mps(const Tensor & self,
 
   @autoreleasepool {
 
-    string key = "index_select_out_mps" + getTensorsStringKey({self, index}) + ":" + std::to_string(dim);
+    string key = "index_select_out_mps" + getTensorsStringKey({self, index}, true, /*exclude_shape*/true) + ":" + std::to_string(dim);
     CachedGraph* cachedGraph = cache_->LookUpAs<CachedGraph>(key);
 
     if(!cachedGraph) {
@@ -689,8 +689,8 @@ Tensor& index_select_out_mps(const Tensor & self,
           MPSGraph* mpsGraph = make_mps_graph();
           newCachedGraph = new CachedGraph(mpsGraph);
 
-          MPSGraphTensor* inputTensor = mpsGraphRankedPlaceHolder(mpsGraph, inputType, getMPSShape(self));
-          MPSGraphTensor* indexTensor = mpsGraphRankedPlaceHolder(mpsGraph, index);
+          MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, inputType);
+          MPSGraphTensor* indexTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, getMPSDataType(index.scalar_type()));
 
           MPSGraphTensor* outputTensor = [mpsGraph gatherWithUpdatesTensor:inputTensor
                                                              indicesTensor:indexTensor
@@ -720,7 +720,7 @@ Tensor& index_select_out_mps(const Tensor & self,
       outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
     };
 
-    runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+    runMPSGraph(stream, cachedGraph, feeds, results, /*disable_type_inference=*/true);
   }
 
   return output;
