@@ -6,6 +6,8 @@ on:
   #     - ciflow/mps/*
   workflow_dispatch:
   pull_request:
+  schedule:
+    - cron: '0 6 * * *' # run at 6:00 AM UTC (11 PM UTC)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}-${{ github.event_name == 'workflow_dispatch' }}
