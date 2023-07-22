@@ -2797,22 +2797,26 @@ class TestMPS(TestCaseMPS):
             with self.subTest(dtype=dtype, noncontiguous=noncontiguous, dim=dim):
                 helper(dtype, noncontiguous, dim)
 
-    def test_cumsum_all_dtypes(self):
-        def helper(dtype):
-            t = torch.tensor([1, 1, 1, 1], device="mps", dtype=dtype)
-            t_cpu = torch.tensor([1, 1, 1, 1], device="cpu")
+    def test_cumulative_ops_all_dtypes(self):
+        def helper(op, dtype):
+            t = torch.tensor([1, 2, 3, 4], device="mps", dtype=dtype)
+            t_cpu = torch.tensor([1, 2, 3, 4], device="cpu")
 
-            a = t.cumsum(0, dtype=dtype)
-            a_cpu = t_cpu.cumsum(0, dtype=dtype)
+            a = op(t, 0, dtype=dtype)
+            a_cpu = op(t_cpu, 0, dtype=dtype)
 
             self.assertEqual(a.cpu(), a_cpu)
-        [helper(dtype) for dtype in [torch.int8, torch.int16, torch.int32, torch.float32]]
 
-        try:
-            helper(torch.int64)
-        except Exception as e:
-            e_string = str(e)
-            self.assertEqual(e_string, "MPS does not support cumsum op with int64 input. Support has been added in macOS 13.3")
+        for op_and_name in [[torch.cumsum, "cumsum_out"], [torch.cumprod, "cumprod_out"]]:
+            op = op_and_name[0]
+            name = op_and_name[1]
+            [helper(op, dtype) for dtype in [torch.int8, torch.int16, torch.int32, torch.float32]]
+
+            try:
+                helper(op, torch.int64)
+            except Exception as e:
+                e_string = str(e)
+                self.assertEqual(e_string, f"MPS does not support {name} op with int64 input. Support has been added in macOS 13.3")
 
     def test_gelu_tanh(self):
         def helper(shape):
@@ -9608,7 +9612,7 @@ class TestConsistency(TestCaseMPS):
         'cov': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'cummax': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'cummin': ['b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'cumprod': ['f32', 'i16', 'i32', 'i64', 'u8'],
+        'cumprod': ['b8', 'i8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'cumsum': ['i8', 'b8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'deg2rad': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'diag': ['b8', 'f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
@@ -9778,7 +9782,7 @@ class TestConsistency(TestCaseMPS):
         'lu_unpack': ['f32'],
         'masked.argmax': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.argmin': ['f16', 'f32', 'i16', 'i32', 'i64', 'u8'],
-        'masked.cumprod': ['f32', 'i16', 'i32', 'i64', 'u8'],
+        'masked.cumprod': ['b8', 'i8', 'f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.cumsum': ['f32', 'i16', 'i32', 'i64', 'u8'],
         'masked.log_softmax': ['f32'],
         'masked.logaddexp': ['f32'],
@@ -10845,7 +10849,6 @@ class TestConsistency(TestCaseMPS):
         'copysign': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
         'cummax': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
         'cummin': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
-        'cumprod': [torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
         'digamma': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
         'erfc': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
         'erfinv': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],
@@ -10908,7 +10911,6 @@ class TestConsistency(TestCaseMPS):
         'lu': [torch.float32],
         'lu_solve': [torch.float32],
         'lu_unpack': [torch.float32],
-        'masked.cumprod': [torch.float32, torch.int16, torch.int32, torch.int64, torch.uint8],
         'masked.median': [torch.float32],
         'matrix_exp': [torch.float32],
         'mode': [torch.bool, torch.float32, torch.float16, torch.int16, torch.int32, torch.int64, torch.uint8],

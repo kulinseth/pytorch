@@ -4,11 +4,15 @@
 #include <ATen/native/mps/MPSGraphVenturaOps.h>
 
 namespace at::native {
+
+enum class MPSCumulativeOpType : uint8_t {
+  MPS_CUMSUM  = 0,
+  MPS_CUMPROD = 1,
+};
 namespace mps {
 
 typedef MPSGraphTensor* (^UnaryOpBlock)(MPSGraph*, MPSGraphTensor*);
 using is_noop_p = std::function<bool(const Tensor&)>;
-
 
 bool is_empty_tensor(const Tensor& self) {
   return self.numel() == 0;
@@ -415,49 +419,74 @@ TORCH_IMPL_FUNC(logit_backward_out_mps) (
   }
 }
 
-
-
-TORCH_IMPL_FUNC(cumsum_out_mps)
-(const Tensor& self,
- int64_t dim,
- c10::optional<ScalarType> dtype,
- const Tensor& result) {
-
+void cumulative_op_impl(
+  const Tensor& self,
+  int64_t dim,
+  c10::optional<ScalarType> dtype,
+  const Tensor& result,
+  MPSCumulativeOpType cumulativeOpType,
+  const std::string& op_name) {
   bool macOS13_3_plus = is_macos_13_or_newer(MacOSVersion::MACOS_VER_13_3_PLUS);
   auto nDims = self.dim();
   auto wrapped_dim = maybe_wrap_dim(dim, nDims);
-  TORCH_CHECK(wrapped_dim >=0 && wrapped_dim < std::max(1LL, self.ndimension()), "Expected wrapped dim to be between 0 and ", self.ndimension(), " but got ", wrapped_dim , "(original dim is ", dim, ")");
+  TORCH_CHECK(wrapped_dim >= 0 && wrapped_dim < std::max(1LL, self.ndimension()),
+              "Expected wrapped dim to be between 0 and ",
+              self.ndimension(),
+              " but got ",
+              wrapped_dim,
+              "(original dim is ",
+              dim,
+              ")");
+
   if (!is_macos_13_or_newer()) {
-    TORCH_WARN_ONCE("torch.cumsum supported by MPS on MacOS 13+, please upgrade");
+    TORCH_WARN_ONCE(op_name, " supported by MPS on MacOS 13+, please upgrade");
     auto cpu_result = self.to(at::Device(kCPU)).cumsum(dim, dtype);
     at::_copy_from_and_resize(cpu_result, result);
     return;
   }
   auto input = dtype.has_value() ? self.to(dtype.value()) : self;
 
-  // issue #103810551: cumsum is horribly broken for int8, int16 and as chances for overflow is pretty high, cast to int32
-  // fixed in macOS 13.3
-  bool castInputData = (isIntegralType(input.scalar_type()) &&
-                        input.scalar_type() != ScalarType::Int &&
+  // issue #103810551: int8, int16 have a high chance of overflow, cast to int32
+  bool castInputData = (isIntegralType(input.scalar_type(), false) &&
+                        input.scalar_type() != ScalarType::Int     &&
                         input.scalar_type() != ScalarType::Long);
 
   TORCH_CHECK(macOS13_3_plus || input.scalar_type() != ScalarType::Long,
-              "MPS does not support cumsum op with int64 input. Support has been added in macOS 13.3");
+              "MPS does not support ", op_name, " op with int64 input. Support has been added in macOS 13.3");
 
-  mps::unary_op(input, result, "cumsum_out_mp" + std::to_string(dim),
-                ^ MPSGraphTensor* (MPSGraph* mpsGraph, MPSGraphTensor* inputTensor) {
-
-       if (castInputData) {
-           inputTensor = mps::castMPSTensor(mpsGraph, inputTensor, ScalarType::Int);
-       }
-       auto rc = [mpsGraph cumulativeSumWithTensor: inputTensor
-                                              axis: dim
-                                              name: nil];
-       if ((mps::getMPSDataType(result.scalar_type()) != [rc dataType]) || castInputData) {
-         return mps::castMPSTensor(mpsGraph, rc, result.scalar_type());
-       }
-       return rc;
-    });
+  mps::unary_op(input,
+                result,
+                op_name + std::to_string(dim),
+                ^MPSGraphTensor*(MPSGraph* mpsGraph, MPSGraphTensor* inputTensor) {
+                  if (castInputData) {
+                    inputTensor = mps::castMPSTensor(mpsGraph, inputTensor, ScalarType::Int);
+                  }
+                  MPSGraphTensor* cumulativeOpTensor = nil;
+                  switch (cumulativeOpType) {
+                    case MPSCumulativeOpType::MPS_CUMSUM:
+                      cumulativeOpTensor = [mpsGraph cumulativeSumWithTensor:inputTensor axis:dim name:nil];
+                      break;
+                    case MPSCumulativeOpType::MPS_CUMPROD:
+                      cumulativeOpTensor = [mpsGraph cumulativeProductWithTensor:inputTensor axis:dim name:nil];
+                      break;
+                    default:
+                      TORCH_CHECK(false, "Undefined cumulative op type");
+                  }
+                  if ((mps::getMPSDataType(result.scalar_type()) != [cumulativeOpTensor dataType]) || castInputData) {
+                    return mps::castMPSTensor(mpsGraph, cumulativeOpTensor, result.scalar_type());
+                  }
+                  return cumulativeOpTensor;
+                });
 }
 
-} // namespace at::native
+TORCH_IMPL_FUNC(cumsum_out_mps)
+(const Tensor& self, int64_t dim, c10::optional<ScalarType> dtype, const Tensor& result) {
+  cumulative_op_impl(self, dim, dtype, result, MPSCumulativeOpType::MPS_CUMSUM, "cumsum_out");
+}
+
+TORCH_IMPL_FUNC(cumprod_out_mps)
+(const Tensor& self, int64_t dim, c10::optional<ScalarType> dtype, const Tensor& result) {
+  cumulative_op_impl(self, dim, dtype, result, MPSCumulativeOpType::MPS_CUMPROD, "cumprod_out");
+}
+
+}
