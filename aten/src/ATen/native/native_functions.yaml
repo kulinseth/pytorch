@@ -1260,6 +1260,21 @@
     SparseCUDA: bmm_out_sparse_cuda
     SparseCsrCUDA: bmm_out_sparse_csr_cuda
 
+- func: ndmm(Tensor self, Tensor mat2) -> Tensor
+  structured_delegate: ndmm.out
+  variants: function, method
+  tags: core
+
+- func: ndmm.out(Tensor self, Tensor mat2, *, Tensor(a!) out) -> Tensor(a!)
+  structured: True
+  variants: function
+  dispatch:
+    MPS: ndmm_out_mps
+
+- func: ndmm_backward(Tensor self, Tensor mat2, Tensor grad, bool[2] output_mask) -> (Tensor, Tensor)
+  dispatch:
+    MPS: ndmm_backward_mps
+
 - func: broadcast_tensors(Tensor[] tensors) -> Tensor[]
   device_check: NoCheck
   device_guard: False

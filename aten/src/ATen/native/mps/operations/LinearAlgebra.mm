@@ -503,6 +503,97 @@ Tensor& addmm_out_mps_impl(
   return output;
 }
 
+Tensor& ndmm_out_mps_impl(
+  const Tensor & batch1,
+  const Tensor & batch2,
+  Tensor & result) {
+
+  using namespace mps;
+  if (batch1.numel() == 0 || batch2.numel() == 0) {
+    return result;
+  }
+  MPSStream* stream = getCurrentMPSStream();
+
+  struct CachedGraph : public mps::MPSCachedGraph
+  {
+    CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
+    MPSGraphTensor *batch1Tensor_ = nil;
+    MPSGraphTensor *batch2Tensor_ = nil;
+    MPSGraphTensor *outputTensor_ = nil;
+  };
+
+  mps::MPSGraphCache *cache_ = mps::MPSGraphCache::getInstance();
+
+  bool expandBatch2 = (batch1.dim() == 4) && (batch2.dim() == 3);
+  bool expandBatch1 = (batch2.dim() == 4) && (batch1.dim() == 3);
+
+  @autoreleasepool {
+    string key = "ndmm_out_mps_impl" + getTensorsStringKey({batch1, batch2});
+
+    CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
+    if(!cachedGraph) {
+
+      mps::MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ mps::MPSCachedGraph * () {
+        CachedGraph *newCachedGraph = nil;
+
+        @autoreleasepool{
+          MPSGraph *mpsGraph = mps::make_mps_graph();
+          newCachedGraph = new CachedGraph(mpsGraph);
+
+          MPSGraphTensor *batch1Tensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, batch1);
+          MPSGraphTensor *batch2Tensor =  mps::mpsGraphRankedPlaceHolder(mpsGraph, batch2);
+
+          // If left or right tensors are 1D vector, perform expand to make them 2D
+          MPSGraphTensor *batch1InputTensor = batch1Tensor;
+          if(batch1.dim() == 1 || expandBatch1) {
+              batch1InputTensor = [mpsGraph expandDimsOfTensor:batch1Tensor axis:0 name:nil];
+          }
+          MPSGraphTensor *batch2InputTensor = batch2Tensor;
+          if(batch2.dim() == 1) {
+              batch2InputTensor = [mpsGraph expandDimsOfTensor:batch2Tensor axis:1 name:nil];
+          }
+          if(expandBatch2) {
+              batch2InputTensor = [mpsGraph expandDimsOfTensor:batch2Tensor axis:0 name:nil];
+          }
+
+          MPSGraphTensor* productTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:batch1InputTensor
+                                                                          secondaryTensor:batch2InputTensor
+                                                                                     name:@"MM/(batch1@batch2)"];
+
+          if(batch1.dim() == 1) {
+              productTensor = [mpsGraph squeezeTensor:productTensor axis:-2 name:nil];
+          }
+          if(batch2.dim() == 1) {
+              productTensor = [mpsGraph squeezeTensor:productTensor axis:-1 name:nil];
+          }
+
+          newCachedGraph->batch1Tensor_ = batch1Tensor;
+          newCachedGraph->batch2Tensor_ = batch2Tensor;
+          newCachedGraph->outputTensor_ = productTensor;
+        }
+        return newCachedGraph;
+      });
+      cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
+    }
+
+    Placeholder batch1Placeholder = Placeholder(cachedGraph->batch1Tensor_, batch1);
+    Placeholder batch2Placeholder = Placeholder(cachedGraph->batch2Tensor_, batch2);
+    Placeholder outputPlaceholder = Placeholder(cachedGraph->outputTensor_, result);
+
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
+      batch1Placeholder.getMPSGraphTensor() : batch1Placeholder.getMPSGraphTensorData(),
+      batch2Placeholder.getMPSGraphTensor() : batch2Placeholder.getMPSGraphTensorData(),
+    };
+
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
+      outputPlaceholder.getMPSGraphTensor() : outputPlaceholder.getMPSGraphTensorData()
+    };
+
+    mps::runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+  }
+
+  return result;
+}
 
 Tensor& bmm_out_mps_impl(
   const Tensor & batch1,
@@ -738,6 +829,220 @@ Tensor& addbmm_or_baddbmm_out_mps_impl(
   return result;
 }
 
+bool ndmm_gradient_reduction(NSMutableArray<NSNumber *> * reduction_axes, MPSShape* input1_shape, MPSShape* input2_shape, MPSShape* grad_output_shape, bool is_grad_input1) {
+
+  auto input1_dims = [input1_shape count];
+  auto input2_dims = [input2_shape count];
+  auto grad_output_dims = [grad_output_shape count];
+
+  auto input_tensor_matmul_dims = is_grad_input1? input2_dims: input1_dims;
+  auto output_tensor_matmul_dims = is_grad_input1? input1_dims: input2_dims;
+
+  // Batch dimensions of the product
+  auto product_tensor_batch_shape = (input_tensor_matmul_dims > grad_output_dims)? (is_grad_input1? input2_shape: input1_shape): grad_output_shape;
+  // Batch dimensions of the final gradient
+  auto output_tensor_batch_shape = is_grad_input1? input1_shape: input2_shape;
+  // All batch dims will be present in product through bcast
+  auto product_batch_dims = std::max(input_tensor_matmul_dims - 2, grad_output_dims - 2);
+  // Number of batch dims in grad_input tensor
+  auto final_batch_dims = output_tensor_matmul_dims - 2;
+
+  // If there are fewer batch dims in final result than in product, we must reduce them
+  if(product_batch_dims > final_batch_dims) {
+      auto num_dims_to_reduce = product_batch_dims - final_batch_dims;
+      for(int i = 0; i < num_dims_to_reduce; ++i)
+          [reduction_axes addObject:[NSNumber numberWithInteger:i]];
+  }
+  // In the equal dims, check for bcast dims. They must be reduced
+  auto product_batch_start = product_batch_dims - std::min(product_batch_dims, final_batch_dims);
+  for(int i = 0; i < product_batch_dims; ++i) {
+      auto product_batch_iter = product_batch_start + i;
+      if(output_tensor_batch_shape[i].intValue == 1)
+          [reduction_axes addObject:[NSNumber numberWithInteger:product_batch_iter]];
+  }
+  auto num_reduction_axes = [reduction_axes count];
+  return (num_reduction_axes > 0);
+
+}
+
+
+Tensor ndmm_backward_out_mps(
+  const Tensor       & tensor1,
+  const Tensor       & tensor2,
+  const Tensor       & grad_output,
+  bool               is_grad_input1) {
+  using namespace mps;
+
+  TORCH_CHECK(tensor1.is_mps());
+  TORCH_CHECK(tensor2.is_mps());
+  TORCH_CHECK(grad_output.is_mps());
+
+  MPSShape* input1_final_shape = nil;
+  MPSShape* input2_final_shape = nil;
+  MPSShape* grad_output_shape = getMPSShape(grad_output);
+  MPSShape* grad_output_final_shape = nil;
+  NSMutableArray<NSNumber *>* grad_output_mutable = [grad_output_shape mutableCopy];
+  MPSShape* grad_input_final_shape = nil;
+
+  if(tensor1.dim() == 1 || tensor2.dim() == 1) {
+    NSUInteger indexToUpdate;
+    // Is input1 a vector, convert it to a row matrix, and expand grad_output
+    if(tensor1.dim() == 1) {
+        input1_final_shape = @[[NSNumber numberWithInteger:1], [NSNumber numberWithInteger:tensor1.size(0)]];
+        indexToUpdate = [grad_output_mutable count] - 1;
+    }
+
+    // Is input2 a vector, convert it to a column matrix, and expand grad_output
+    if(tensor2.dim() == 1) {
+        input2_final_shape = @[[NSNumber numberWithInteger:tensor2.size(0)], [NSNumber numberWithInteger:1]];
+        indexToUpdate = [grad_output_mutable count];
+    }
+
+    [grad_output_mutable insertObject:[NSNumber numberWithInteger:1] atIndex:indexToUpdate];
+    grad_output_final_shape = [NSArray arrayWithArray:grad_output_mutable];
+  }
+  if(tensor1.dim() == 3 && tensor2.dim() == 4) {
+    input1_final_shape = @[[NSNumber numberWithInteger:1], [NSNumber numberWithInteger:tensor1.size(0)], [NSNumber numberWithInteger:tensor1.size(1)], [NSNumber  numberWithInteger:tensor1.size(2)]];
+  }
+  if(tensor2.dim() == 3 && tensor1.dim() == 4) {
+    input2_final_shape = @[[NSNumber numberWithInteger:1], [NSNumber numberWithInteger:tensor2.size(0)], [NSNumber numberWithInteger:tensor2.size(1)], [NSNumber  numberWithInteger:tensor2.size(2)]];
+  }
+
+  NSMutableArray<NSNumber *> *reduction_axes = [[NSMutableArray alloc] init];
+  MPSShape* tensor1_dims = input1_final_shape? input1_final_shape: getMPSShape(tensor1);
+  MPSShape* tensor2_dims = input2_final_shape? input2_final_shape: getMPSShape(tensor2);
+  MPSShape* grad_output_dims = grad_output_final_shape? grad_output_final_shape: getMPSShape(grad_output);
+  bool needs_reduction = ndmm_gradient_reduction(reduction_axes, tensor1_dims, tensor2_dims, grad_output_dims, is_grad_input1);
+
+  MPSStream* stream = getCurrentMPSStream();
+
+  struct CachedGraph : public mps::MPSCachedGraph
+  {
+    CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
+    MPSGraphTensor *fwdInputTensor_ = nil;
+    MPSGraphTensor *gradOutputTensor_ = nil;
+    MPSGraphTensor *gradInputTensor_ = nil;
+  };
+
+  IntArrayRef grad_input_size = is_grad_input1? tensor1.sizes() : tensor2.sizes();
+  Tensor grad_input = at::native::empty_mps(grad_input_size,
+                                          grad_output.scalar_type(),
+                                          c10::nullopt,
+                                          kMPS,
+                                          c10::nullopt,
+                                          grad_output.suggest_memory_format());
+  MPSShape* grad_input_shape = getMPSShape(grad_input);
+  TORCH_CHECK(grad_input.is_mps());
+
+  mps::MPSGraphCache *cache_ = mps::MPSGraphCache::getInstance();
+
+  @autoreleasepool {
+    std::string key = "ndmm_backward_out_mps" + getTensorsStringKey({tensor1, tensor2, grad_output}) + std::to_string(is_grad_input1);
+
+    CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
+    if(!cachedGraph) {
+      mps::MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ mps::MPSCachedGraph * () {
+      CachedGraph *newCachedGraph = nil;
+
+      /*
+      Case 1: No bcast in batch dim
+      Forward: A_pmk x B_pkn = C_pmn
+      dA_pmk = dC_pmn x B_pkn^T
+      dB_pkn = A_pmk^T x dC_pmn
+      
+      Case 2: With bcast in batch dim
+      Forward: A_pmk x B_kn = C_pmn
+      dA_pmk = dC_pmn x B_kn^T
+      dB_kn = ReduceOverP(A_pmk^T x dC_pmn)
+      */
+      @autoreleasepool{
+        MPSGraph *mpsGraph = mps::make_mps_graph();
+        newCachedGraph = new CachedGraph(mpsGraph);
+        MPSGraphTensor *fwdInputTensor = is_grad_input1? mps::mpsGraphRankedPlaceHolder(mpsGraph, tensor2): mps::mpsGraphRankedPlaceHolder(mpsGraph, tensor1);
+        MPSGraphTensor *gradOutputTensor = mps::mpsGraphRankedPlaceHolder(mpsGraph, grad_output);
+        MPSGraphTensor *gradInputTensor =  mps::mpsGraphRankedPlaceHolder(mpsGraph, grad_input);
+        MPSGraphTensor* fwdInputTensorExpanded = fwdInputTensor;
+        MPSGraphTensor* gradOutputTensorExpanded = gradOutputTensor;
+
+        if(is_grad_input1) {
+          if(input2_final_shape) {
+            fwdInputTensorExpanded = [mpsGraph reshapeTensor:fwdInputTensorExpanded
+                                                   withShape:input2_final_shape
+                                                        name:nil];
+          }
+          if(grad_output_final_shape) {
+            gradOutputTensorExpanded = [mpsGraph reshapeTensor:gradOutputTensorExpanded
+                                                     withShape:grad_output_final_shape
+                                                          name:nil];
+          }
+          MPSGraphTensor* input2Transpose = [mpsGraph transposeTensor: fwdInputTensorExpanded
+                                                            dimension: -1
+                                                        withDimension: -2
+                                                                 name: nil];
+          gradInputTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:gradOutputTensorExpanded
+                                                            secondaryTensor:input2Transpose
+                                                                       name:nil];
+        }
+        else {
+
+          if(input1_final_shape) {
+              fwdInputTensorExpanded = [mpsGraph reshapeTensor:fwdInputTensorExpanded
+                                                     withShape:input1_final_shape
+                                                          name:nil];
+          }
+          if(grad_output_final_shape) {
+              gradOutputTensorExpanded = [mpsGraph reshapeTensor:gradOutputTensorExpanded
+                                                       withShape:grad_output_final_shape
+                                                            name:nil];
+          }
+          MPSGraphTensor* input1Transpose = [mpsGraph transposeTensor: fwdInputTensorExpanded
+                                                            dimension: -1
+                                                        withDimension: -2
+                                                                 name: nil];
+          gradInputTensor = [mpsGraph matrixMultiplicationWithPrimaryTensor:input1Transpose
+                                                            secondaryTensor:gradOutputTensorExpanded
+                                                                       name:nil];
+        }
+        if(needs_reduction) {
+          gradInputTensor = [mpsGraph reductionSumWithTensor: gradInputTensor
+                                                        axes: reduction_axes
+                                                        name: nil];
+        }
+
+          gradInputTensor = [mpsGraph reshapeTensor:gradInputTensor
+                                          withShape:grad_input_shape
+                                               name:nil];
+
+          newCachedGraph->fwdInputTensor_  = fwdInputTensor;
+          newCachedGraph->gradOutputTensor_ = gradOutputTensor;
+          newCachedGraph->gradInputTensor_ = gradInputTensor;
+        }
+        return newCachedGraph;
+      });
+      cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
+    }
+
+    Tensor fwd_input = is_grad_input1? tensor2 : tensor1;
+    Placeholder fwdInputPlaceholder  = Placeholder(cachedGraph->fwdInputTensor_,  fwd_input);
+    Placeholder gradOutputPlaceholder = Placeholder(cachedGraph->gradOutputTensor_, grad_output);
+    Placeholder gradInputPlaceholder = Placeholder(cachedGraph->gradInputTensor_, grad_input);
+
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{
+      fwdInputPlaceholder.getMPSGraphTensor()  : fwdInputPlaceholder.getMPSGraphTensorData(),
+      gradOutputPlaceholder.getMPSGraphTensor() : gradOutputPlaceholder.getMPSGraphTensorData()
+    };
+
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{
+      gradInputPlaceholder.getMPSGraphTensor() : gradInputPlaceholder.getMPSGraphTensorData(),
+    };
+
+    mps::runMPSGraph(stream, cachedGraph->graph(), feeds, results);
+  }
+
+  return grad_input;
+}
+
+
 TORCH_IMPL_FUNC(mm_out_mps)(const Tensor& self, const Tensor& mat2, const Tensor& result) {
   mm_out_mps_impl(self, mat2, const_cast<Tensor&>(result));
 }
@@ -754,6 +1059,10 @@ TORCH_IMPL_FUNC(baddbmm_out_mps) (const Tensor & self, const Tensor & batch1, co
   addbmm_or_baddbmm_out_mps_impl(self, batch1, batch2, beta, alpha, const_cast<Tensor&>(result), BADDBMM_OP_TYPE);
 }
 
+TORCH_IMPL_FUNC(ndmm_out_mps) (const Tensor & batch1, const Tensor & batch2, const Tensor & result) {
+  ndmm_out_mps_impl(batch1, batch2, const_cast<Tensor&>(result));
+}
+
 Tensor& addbmm_out_mps(const Tensor& self, const Tensor& batch1, const Tensor& batch2, const Scalar& beta, const Scalar& alpha, Tensor& result) {
   auto b_self = expand_size(self, {batch1.size(1), batch2.size(2)}, "addbmm_out");
 
@@ -768,6 +1077,17 @@ Tensor addbmm_mps(const Tensor& self, const Tensor& batch1, const Tensor& batch2
 
 Tensor &addbmm_mps_(Tensor& self, const Tensor& batch1, const Tensor& batch2, const Scalar& beta, const Scalar& alpha) {
   return addbmm_out_mps(self, batch1, batch2, beta, alpha, self);
+}
+
+std::tuple<Tensor, Tensor> ndmm_backward_mps(
+    const Tensor& input1, const Tensor& input2,
+    const Tensor& grad, std::array<bool,2> grad_mask) {
+    Tensor grad_input1, grad_input2;
+  if(grad_mask[0])
+      grad_input1 = ndmm_backward_out_mps(input1, input2, grad, true);
+  if(grad_mask[1])
+      grad_input2 = ndmm_backward_out_mps(input1, input2, grad, false);
+    return std::tuple<Tensor, Tensor>(grad_input1, grad_input2);
 }
 
 Tensor& linalg_solve_triangular_mps_impl( const Tensor& A, const Tensor& B, bool upper, bool transpose, bool left, bool unitriangular, Tensor& out) {
