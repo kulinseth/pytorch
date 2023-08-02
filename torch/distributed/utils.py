@@ -59,6 +59,8 @@ def _recursive_to(inputs, target_gpu, use_side_stream_for_tensor_copies):
             device = obj.data.device if isinstance(obj, PackedSequence) else obj.device
             if device == torch.device("cuda", target_gpu):
                 return (obj,)
+            if device == torch.device("mps", target_gpu):
+                return (obj,)
             if not use_side_stream_for_tensor_copies:
                 return (obj.to(target_gpu),)
             else:

@@ -352,6 +352,10 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_broadcast_basics(self):
         self._test_broadcast_basics(lambda t: t.clone())
 
+    @requires_gloo()
+    def test_broadcast_basics_mps(self):
+        self._test_broadcast_basics(lambda t: t.clone().to("mps"))
+
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_broadcast_basics_cuda(self):
@@ -377,6 +381,13 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     @requires_gloo()
     def test_broadcast_stress(self):
         inputs = [torch.tensor([i * self.world_size + self.rank]) for i in range(1000)]
+        self._test_broadcast_stress(inputs)
+
+    @requires_gloo()
+    def test_broadcast_stress_mps(self):
+        inputs = [
+            torch.tensor([i * self.world_size + self.rank]).to("mps") for i in range(1000)
+        ]
         self._test_broadcast_stress(inputs)
 
     @skip_if_lt_x_gpu(2)
@@ -452,6 +463,10 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     @requires_gloo()
     def test_allreduce_basics(self):
         self._test_allreduce_basics(lambda t: t.clone())
+
+    @requires_gloo()
+    def test_allreduce_basics_mps(self):
+        self._test_allreduce_basics(lambda t: t.clone().to("mps"))
 
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
@@ -532,6 +547,11 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     @requires_gloo()
     def test_allreduce_stress(self):
         inputs = [torch.tensor([i + self.rank]) for i in range(1000)]
+        self._test_allreduce_stress(inputs)
+
+    @requires_gloo()
+    def test_allreduce_stress_mps(self):
+        inputs = [torch.tensor([i + self.rank]).to("mps") for i in range(1000)]
         self._test_allreduce_stress(inputs)
 
     @skip_if_lt_x_gpu(2)
@@ -811,6 +831,10 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_scatter_basics(self):
         self._test_scatter_basics(lambda t: t.clone())
 
+    @requires_gloo()
+    def test_scatter_basics_mps(self):
+        self._test_scatter_basics(lambda t: t.clone().to("mps"))
+
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_scatter_basics_cuda(self):
@@ -857,6 +881,14 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
             for i in range(1000)
         ]
         self._test_scatter_stress(inputs, lambda t: t.clone())
+
+    @requires_gloo()
+    def test_scatter_stress_mps(self):
+        inputs = [
+            [torch.tensor([i + self.rank]) for _ in range(self.world_size)]
+            for i in range(1000)
+        ]
+        self._test_scatter_stress(inputs, lambda t: t.clone().to("mps"))
 
     @sandcastle_skip(
         "Test is flaky, see https://github.com/pytorch/pytorch/issues/15963"
@@ -984,6 +1016,10 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_gather_basics(self):
         self._test_gather_basics(lambda t: t.clone())
 
+    @requires_gloo()
+    def test_gather_basics_mps(self):
+        self._test_gather_basics(lambda t: t.clone().to("mps"))
+
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_gather_basics_cuda(self):
@@ -1034,6 +1070,11 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_gather_stress(self):
         inputs = [torch.tensor([i + self.rank]) for i in range(1000)]
         self._test_gather_stress(inputs, lambda t: t.clone())
+
+    @requires_gloo()
+    def test_gather_stress_mps(self):
+        inputs = [torch.tensor([i + self.rank]).to("mps") for i in range(1000)]
+        self._test_gather_stress(inputs, lambda t: t.clone().to("mps"))
 
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
@@ -1115,6 +1156,10 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_allgather_basics(self):
         self._test_allgather_basics(lambda t: t.clone())
 
+    @requires_gloo()
+    def test_allgather_basics_mps(self):
+        self._test_allgather_basics(lambda t: t.clone().to("mps"))
+
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_allgather_basics_cuda(self):
@@ -1162,6 +1207,11 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_allgather_stress(self):
         inputs = [torch.tensor([i + self.rank]) for i in range(1000)]
         self._test_allgather_stress(inputs, lambda t: t.clone())
+
+    @requires_gloo()
+    def test_allgather_stress_mps(self):
+        inputs = [torch.tensor([i + self.rank]).to("mps") for i in range(1000)]
+        self._test_allgather_stress(inputs, lambda t: t.clone().to("mps"))
 
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
@@ -1298,6 +1348,10 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     def test_reduce_basics(self):
         self._test_reduce_basics(lambda t: t.clone())
 
+    @requires_gloo()
+    def test_reduce_basics_mps(self):
+        self._test_reduce_basics(lambda t: t.clone().to("mps"))
+
     @skip_if_lt_x_gpu(2)
     @requires_gloo()
     def test_reduce_basics_cuda(self):
@@ -1339,6 +1393,11 @@ class ProcessGroupGlooTest(MultiProcessTestCase):
     @requires_gloo()
     def test_reduce_stress(self):
         inputs = [torch.tensor([i + self.rank]) for i in range(1000)]
+        self._test_reduce_stress(inputs)
+
+    @requires_gloo()
+    def test_reduce_stress_mps(self):
+        inputs = [torch.tensor([i + self.rank]).to("mps") for i in range(1000)]
         self._test_reduce_stress(inputs)
 
     @skip_if_lt_x_gpu(2)
@@ -1480,7 +1539,7 @@ class DistributedDataParallelTest(
 
     @requires_gloo()
     def test_gloo_backend_cpu_module(self):
-        self._test_gloo_backend([torch.device("cpu")], None)
+        self._test_gloo_backend([torch.device("mps")], None)
 
     @requires_gloo()
     def test_gloo_backend_cpu_module_grad_is_view(self):

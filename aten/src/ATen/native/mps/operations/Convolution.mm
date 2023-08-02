@@ -554,9 +554,10 @@ Tensor mps_convolution_backward_weights(
 }
 
 std::tuple<at::Tensor,at::Tensor,at::Tensor> mps_convolution_backward(
-    const at::Tensor& input, const at::Tensor& grad_output, const at::Tensor& weight,
+    const at::Tensor& input, const at::Tensor& grad_output_t, const at::Tensor& weight,
     IntArrayRef padding, IntArrayRef stride, IntArrayRef dilation, int64_t groups,
     std::array<bool,3> output_mask) {
+  Tensor grad_output = grad_output_t.contiguous(input.suggest_memory_format());
   Tensor grad_input, grad_weight, grad_bias;
   if (input.numel() == 0) {
     if (output_mask[0]) {
@@ -621,9 +622,10 @@ Tensor mps_convolution_transpose_backward_weight(
 
 
 std::tuple<Tensor,Tensor> mps_convolution_transpose_backward(
-    const Tensor& input, const Tensor& grad_output, const Tensor& weight,
+    const Tensor& input, const Tensor& grad_output_t, const Tensor& weight,
     IntArrayRef padding, IntArrayRef output_padding, IntArrayRef stride, IntArrayRef dilation, int64_t groups,
     std::array<bool,2> output_mask) {
+  Tensor grad_output = grad_output_t.contiguous(input.suggest_memory_format());
   Tensor grad_input, grad_weight;
   if (output_mask[0]) {
     grad_input = mps_convolution_transpose_backward_input(grad_output, weight, padding, stride, dilation, groups, input.sizes());
