@@ -806,6 +806,7 @@ def mps_ops_modifier(ops):
         'geometric_': None,
         'log_normal_': None,
         'log_normal': None,
+        'bfloat16': [] if product_version >= 14.0 else None,
         'cdouble': None,
         'double': None,
         'nn.functional.softminwith_dtype': None,
