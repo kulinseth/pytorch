@@ -304,6 +304,7 @@ const std::string& getMetalScalarType(const c10::ScalarType& scalar_type) {
   static std::unordered_map<c10::ScalarType, std::string> scalarToMetalType = {
     {c10::ScalarType::Float, "float"},
     {c10::ScalarType::Half,  "half"},
+    {c10::ScalarType::BFloat16,  "bfloat"},
     {c10::ScalarType::Long,  "long"},
     {c10::ScalarType::Int,   "int"},
     {c10::ScalarType::Short, "short"},

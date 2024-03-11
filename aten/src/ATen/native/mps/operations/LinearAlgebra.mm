@@ -536,6 +536,7 @@ Tensor& bmm_out_mps_impl(
 
   TORCH_CHECK(batch1.scalar_type() == ScalarType::Double
               || batch1.scalar_type() == ScalarType::Float
+              || batch1.scalar_type() == ScalarType::BFloat16
               || batch1.scalar_type() == ScalarType::Half, "MPS device does not support bmm for non-float inputs");
 
   if (batch1.numel() == 0 || batch2.numel() == 0) {
@@ -646,6 +647,7 @@ Tensor& addbmm_or_baddbmm_out_mps_impl(
 
   TORCH_CHECK(batch1.scalar_type() == ScalarType::Double
               || batch1.scalar_type() == ScalarType::Float
+              || batch1.scalar_type() == ScalarType::BFloat16
               || batch1.scalar_type() == ScalarType::Half, "MPS device does not support addbmm or baddbmm for non-float inputs");
 
   TORCH_CHECK(batch1.dim() == 3, "batch1 must be a 3D tensor");
