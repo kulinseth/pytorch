@@ -36,7 +36,7 @@ cd $BUILD_ROOT
 # leveldb, lmdb, etc.
 cmake "$CAFFE2_ROOT" \
     -DCMAKE_VERBOSE_MAKEFILE=1 \
-    -DCAFFE2_CPU_FLAGS="-mfpu=neon -mfloat-abi=hard" \
+    -DCAFFE2_CPU_FLAGS="-mfloat-abi=hard" \
     || exit 1
 
 # Note: while Raspberry pi has 4 cores, running too many builds in parallel may
