@@ -195,7 +195,7 @@ void cross_mps_impl(const Tensor& out, const Tensor& input, const Tensor& other,
                 threadsPerThreadgroup: threadGroupSize];
 
       [computeEncoder endEncoding];
-      mpsStream->commit(true);
+      mpsStream->commitAdaptive({input, other}, out, crossPSO);
     }
   });
 }

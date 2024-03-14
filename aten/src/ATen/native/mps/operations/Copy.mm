@@ -2,6 +2,7 @@
 
 #include <ATen/native/mps/Copy.h>
 #include <ATen/native/mps/OperationUtils.h>
+#include <ATen/mps/MPSProfiler.h>
 
 namespace at::native {
 namespace mps {
@@ -94,61 +95,39 @@ static id<MTLComputePipelineState> getPipelineState(id<MTLDevice> device,
 // Copy sourceBuffer into destBuffer, casting sourceBuffer to src.scalar_type().
 // The shapes and dtypes are taken from dst and src, but their storage pointers are not used.
 void copy_cast_mps(at::Tensor& dst, const at::Tensor& src,
-                   id<MTLBuffer> destBuffer, id<MTLBuffer> sourceBuffer, bool non_blocking = true) {
+                   id<MTLBuffer> destBuffer, id<MTLBuffer> sourceBuffer,
+                   bool non_blocking = true, int64_t dstOffset = -1, int64_t srcOffset = -1) {
   using namespace mps;
+  uint32_t numThreads = dst.numel();
+  MPSStream* mpsStream = getCurrentMPSStream();
+  dispatch_sync(mpsStream->queue(), ^(){
+    @autoreleasepool {
+      id<MTLComputeCommandEncoder> computeEncoder = mpsStream->commandEncoder();
+      std::string functionName = "copy_cast_kernel";
+      id<MTLComputePipelineState> copyCastPSO = getPipelineState(MPSDevice::getInstance()->device(),
+                                                              functionName,
+                                                              getMetalScalarType(src),
+                                                              getMetalScalarType(dst));
+      getMPSProfiler().beginProfileKernel(copyCastPSO, functionName, {src, dst});
+      [computeEncoder setComputePipelineState: copyCastPSO];
+      [computeEncoder setBuffer:sourceBuffer offset:(srcOffset != -1) ? srcOffset : src.storage_offset() * src.element_size() atIndex:0];
+      [computeEncoder setBuffer:destBuffer offset:(dstOffset != -1) ? dstOffset : dst.storage_offset() * dst.element_size() atIndex:1];
 
-  struct CachedGraph : public MPSCachedGraph
-  {
-    CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
-    MPSGraphTensor* inputTensor_ = nil;
-    MPSGraphTensor* outputTensor_ = nil;
-  };
+      MTLSize gridSize = MTLSizeMake(numThreads, 1, 1);
+      NSUInteger threadsPerThreadgroup_ = copyCastPSO.maxTotalThreadsPerThreadgroup;
+      if (threadsPerThreadgroup_ > numThreads) {
+          threadsPerThreadgroup_ = numThreads;
+      }
 
-  MPSStream* stream = getCurrentMPSStream();
-  MPSGraphCache* cache_ = MPSGraphCache::getInstance();
-
-  MPSDataType dstDType = getMPSDataType(dst.scalar_type());
-  MPSDataType srcDType = getMPSDataType(src.scalar_type());
-  MPSShape* dstShape = getMPSShape(dst);
-  MPSShape* srcShape = getMPSShape(src);
-
-  @autoreleasepool {
-    string key = "copy_cast_mps" + getTensorsStringKey({src, dst}, true, /*exclude_shape*/true);
-    CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
-
-    if (!cachedGraph) {
-      MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
-        CachedGraph *newCachedGraph = nil;
-        @autoreleasepool {
-          MPSGraph* mpsGraph = make_mps_graph();
-          newCachedGraph = new CachedGraph(mpsGraph);
-
-          MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, srcDType);
-          MPSGraphTensor* inputCastTensor = inputTensor;
-          if (isFloatingType(src.scalar_type()) && dstDType == MPSDataTypeUInt8) {
-            inputCastTensor = [mpsGraph castTensor:inputTensor toType:MPSDataTypeInt32 name:@"cast"];
-          }
-          MPSGraphTensor* outputTensor = [mpsGraph castTensor:inputCastTensor toType:dstDType name:@"cast"];
-
-          newCachedGraph->inputTensor_ = inputTensor;
-          newCachedGraph->outputTensor_ = outputTensor;
-        }
-        return newCachedGraph;
-      });
-      cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
+      MTLSize threadsPerThreadgroup = MTLSizeMake(threadsPerThreadgroup_, 1, 1);
+      [computeEncoder dispatchThreads:gridSize threadsPerThreadgroup:threadsPerThreadgroup];
+      mpsStream->synchronize(!non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT_ADAPTIVE);
+      auto& profiler = getMPSProfiler();
+      if (profiler.isOperationProfilingEnabled()) {
+        profiler.endProfileKernel(copyCastPSO, SyncType::COMMIT_ADAPTIVE);
+      }
     }
-    MPSGraphTensorData* srcData = [[[MPSGraphTensorData alloc]
-                                    initWithMTLBuffer:sourceBuffer shape:srcShape dataType:srcDType]
-                                   autorelease];
-    MPSGraphTensorData* dstData = [[[MPSGraphTensorData alloc]
-                                    initWithMTLBuffer:destBuffer shape:dstShape dataType:dstDType]
-                                   autorelease];
-    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{cachedGraph->inputTensor_: srcData};
-    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{cachedGraph->outputTensor_: dstData};
-
-    runMPSGraph(stream, cachedGraph, feeds, results, /*disable_type_inference*/ true,
-                !non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT_ADAPTIVE);
-  }
+  });
 }
 
 static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool non_blocking)
@@ -197,31 +176,28 @@ static at::Tensor& copy_from_mps_(at::Tensor& dst_, const at::Tensor& src_, bool
                                                     deallocator:nil];
     id<MTLBuffer> tmpBuffer = sourceBuffer;
     Tensor tmp;
-    bool needsBlit = true;
-    if (src_.dtype() != dst.dtype()) {
-      if (destOffset == 0 && storage_byte_offset == 0) {
-        // Return the casted tensor directly if there's no destination offset
-        needsBlit = false;
-        tmpBuffer = destBuffer;
-      } else if (src.element_size() < dst.element_size()) {
-          tmp = at::native::empty_mps(dst.sizes(), dst.scalar_type(), c10::nullopt, kMPS);
-          tmpBuffer = getMTLBufferStorage(tmp);
-      }
-    }
 
     size_t size_to_copy = src.nbytes();
     // In case of dtype change, first convert src inplace
     if (src_.dtype() != dst.dtype()) {
-      copy_cast_mps(dst, src, tmpBuffer, sourceBuffer, non_blocking);
-    }
-
-    if (needsBlit) {
+      copy_cast_mps(
+        dst,
+        src,
+        destBuffer,
+        sourceBuffer,
+        !dst.is_same(dst_) ? true : non_blocking,
+        destOffset,
+        storage_byte_offset);
+    } else {
       size_to_copy = (size_to_copy / src.element_size()) * dst.element_size();
 
       // If there's anything wrong with source, we shouldn't return dst_ silently and must error out.
       TORCH_INTERNAL_ASSERT(sourceBuffer && dst_tensor_nbytes > 0);
+      uint64_t profile_id = getMPSProfiler().beginProfileCopy(sourceBuffer, destBuffer,
+                                        src, dst, size_to_copy, non_blocking);
 
-      stream->copy_and_sync(tmpBuffer, destBuffer, size_to_copy, storage_byte_offset, destOffset, non_blocking);
+      stream->copy_and_sync(tmpBuffer, destBuffer, size_to_copy, storage_byte_offset,
+                            destOffset, non_blocking, profile_id);
       [destBuffer release];
     }
   }
@@ -243,7 +219,7 @@ static void copy_to_mps_stride_contig(at::Tensor& dst, const at::Tensor& src, bo
   const size_t size_to_copy = src.nbytes();
   const void* host_src = static_cast<char *>(src.storage().data()) + src_byte_offset;
 
-  TORCH_INTERNAL_ASSERT(src.dtype() == dst.dtype() && src.strides() == dst.strides() && is_strided_contiguous(src));
+  TORCH_INTERNAL_ASSERT(src.strides() == dst.strides() && is_strided_contiguous(src));
 
   @autoreleasepool {
     MTLResourceOptions options = MTLResourceOptionCPUCacheModeDefault | MTLResourceStorageModeShared;
@@ -257,15 +233,28 @@ static void copy_to_mps_stride_contig(at::Tensor& dst, const at::Tensor& src, bo
                                          options:options
                                      deallocator:nil];
 
-    stream->copy_and_sync(sourceBuffer, destBuffer, size_to_copy, sourceOffset, dst_byte_offset, non_blocking);
+    uint64_t profile_id = getMPSProfiler().beginProfileCopy(sourceBuffer, destBuffer,
+                              src, dst, size_to_copy, non_blocking);
+    if (src.dtype() == dst.dtype()) {
+      stream->copy_and_sync(sourceBuffer, destBuffer, size_to_copy, sourceOffset,
+                          dst_byte_offset, non_blocking, profile_id);
+    } else {
+      copy_cast_mps(dst, src, destBuffer, sourceBuffer, non_blocking, dst_byte_offset, sourceOffset);
+    }
     [sourceBuffer release];
   }
 }
 
 static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_, bool non_blocking)
 {
-  // Typecast to dst_ if needed and expand, which is a no-op
-  Tensor src = (src_.dtype() != dst_.dtype() ? src_.to(dst_.dtype()) : src_).expand_as(dst_);
+  //  Expand to dst sizes, which is a no-op
+  Tensor src = src_.expand_as(dst_);
+
+  // Metal doesn't support Double
+  // Cast it directly on CPU to `dst` data type
+  if (src.dtype() == kDouble) {
+    src = src.to(dst_.dtype());
+  }
 
   // If src is not contiguously strided it must be cloned
   // It does not mean that tensor is contiguous, but rather
@@ -289,8 +278,12 @@ static at::Tensor& copy_to_mps_(at::Tensor& dst_, const at::Tensor& src_, bool n
 }
 
 void copy_blit_mps(void* dst, const void* src, size_t size) {
+  // we don't have tensors info for profiling here
+  uint64_t profile_id = getMPSProfiler().beginProfileCopy(src, dst,
+          at::OptionalTensorRef(), at::OptionalTensorRef(), size, false);
+
   MPSStream* stream = getCurrentMPSStream();
-  stream->copy_and_sync((id<MTLBuffer>)(src), (id<MTLBuffer>)(dst), size, 0, 0, true);
+  stream->copy_and_sync((id<MTLBuffer>)(src), (id<MTLBuffer>)(dst), size, 0, 0, true, profile_id);
 }
 
 static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_, bool non_blocking)
@@ -336,15 +329,66 @@ static at::Tensor& copy_kernel_mps(at::Tensor& dst_, const at::Tensor& src_, boo
   src._set_conj(src_.is_conj());
   src._set_neg(src_.is_neg());
 
-  const size_t src_size = src.nbytes();
+  MPSStream* stream = getCurrentMPSStream();
   if (sameDataType) {
-    MPSStream* stream = getCurrentMPSStream();
+    uint64_t profile_id = getMPSProfiler().beginProfileCopy(sourceBuffer, destBuffer,
+                                  src, dst_, src.nbytes(), true);
     // for GPU to GPU copies we only encode to stream's command buffer (no flushing)
-    stream->copy(sourceBuffer, destBuffer, src_size, src_byte_offset, dst_byte_offset);
+    stream->copy(sourceBuffer, destBuffer, src.nbytes(), src_byte_offset, dst_byte_offset, profile_id);
   } else {
     copy_cast_mps(dst_, src, destBuffer, sourceBuffer);
   }
   return dst_;
+}
+
+// tries to copy scalar buffers if any of them are allocated on MPSAllocator
+// with Shared-storage mode on Unified devices (supports CPU <-> MPS copies only).
+static bool try_copy_scalars_mps(at::Tensor& dst, const at::Tensor& src, bool non_blocking)
+{
+  const auto& allocator = *getIMPSAllocator();
+  if (!allocator.isSharedStorageSupported()) {
+    return false;
+  }
+  void* src_buf = src.storage().data();
+  void* dst_buf = dst.storage().data();
+  void* src_cpu_ptr = src_buf;
+  void* dst_cpu_ptr = dst_buf;
+  uint32_t src_retain_count = 0, dst_retain_count = 0;
+
+  if (src.device().type() == at::kMPS) {
+    std::tie(src_cpu_ptr, src_retain_count) = allocator.getSharedBufferPtr(src_buf);
+  }
+  if (dst.device().type() == at::kMPS) {
+    std::tie(dst_cpu_ptr, dst_retain_count) = allocator.getSharedBufferPtr(dst_buf);
+  }
+  if (!src_cpu_ptr || !dst_cpu_ptr) {
+    return false;
+  }
+  size_t src_offset = src.storage_offset() * src.itemsize();
+  size_t dst_offset = dst.storage_offset() * dst.itemsize();
+  size_t length = std::min(src.nbytes(), dst.nbytes());
+  bool needsSync = !non_blocking && (src_retain_count > 1 || dst_retain_count > 1);
+
+  // this generates profile_id if only copy profiling is enabled
+  uint64_t profile_id = getMPSProfiler().beginProfileCopy(src_cpu_ptr, dst_cpu_ptr,
+                                                src, dst, length, !needsSync, false);
+  if (needsSync) {
+    // wait for any possible GPU operations to finish before reading/writing to Metal buffers
+    bool syncedBufferEvents = allocator.waitForEvents({src_buf, dst_buf});
+    if (!syncedBufferEvents) {
+      auto stream = getDefaultMPSStream();
+      dispatch_sync(stream->queue(), ^() {
+        stream->synchronize(SyncType::COMMIT_AND_WAIT);
+      });
+    }
+  }
+  memcpy((char*) dst_cpu_ptr + dst_offset, (char*) src_cpu_ptr + src_offset, length);
+
+  if (profile_id) {
+    getMPSProfiler().endProfileCopy(profile_id, SyncType::NONE);
+  }
+
+  return true;
 }
 
 at::Tensor& mps_copy_(at::Tensor& dst, const at::Tensor& src, bool non_blocking)
@@ -364,6 +408,17 @@ at::Tensor& mps_copy_(at::Tensor& dst, const at::Tensor& src, bool non_blocking)
     needs_broadcasting = true;
   }
 
+  // copying scalars from MPS to MPS is possible with try_copy_scalars_mps(), but it
+  // may require syncing with CPU. So it's better to use blit encoder without syncing.
+  if (src.device().type() == at::kMPS && dst.device().type() == at::kMPS) {
+    return copy_kernel_mps(dst, needs_broadcasting ? src.expand_as(dst) : src, non_blocking);
+  }
+  // for scalar tensors, try to copy with memcpy (if Unified memory)
+  if (src.dim() == 0 && src.dtype() == dst.dtype()) {
+    if (try_copy_scalars_mps(dst, src, non_blocking)) {
+      return dst;
+    }
+  }
   if (src.device().type() == at::kMPS && dst.device().type() == at::kCPU) {
     return copy_from_mps_(dst, needs_broadcasting ? src.expand_as(dst) : src, non_blocking);
   }
@@ -371,9 +426,6 @@ at::Tensor& mps_copy_(at::Tensor& dst, const at::Tensor& src, bool non_blocking)
     return copy_to_mps_(dst, needs_broadcasting ? src.expand_as(dst) : src, non_blocking);
   }
 
-  if (src.device().type() == at::kMPS && dst.device().type() == at::kMPS) {
-    return copy_kernel_mps(dst, needs_broadcasting ? src.expand_as(dst) : src, non_blocking);
-  }
   TORCH_INTERNAL_ASSERT(
       src.device().type() == DeviceType::MPS,
       "mps_copy_ is implemented only for *->MPS; MPS->*");

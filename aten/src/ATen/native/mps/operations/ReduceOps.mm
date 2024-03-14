@@ -160,7 +160,7 @@ void reduction_out_mps(
   NSMutableArray<NSNumber*> *output_shape = nil;
 
   set_axes_and_shapes(input_t, opt_dim, axes, apparent_input_shape, apparent_output_shape, output_shape);
-  NSArray<NSNumber*>* wrappedAxes = mps::getTensorAxes(input_t, opt_dim);
+  NSArray<NSNumber*>* wrappedAxes = mps::getTensorAxes(input_t);
   auto cache_ = MPSGraphCache::getInstance();
 
   if (output_t.numel() == 0 || input_t.numel() == 0) {
@@ -499,7 +499,7 @@ void impl_func_norm_mps(
                       input_shape,
                       axes);
 
-  NSArray<NSNumber*>* wrappedAxes = mps::getTensorAxes(input_t, dim);
+  NSArray<NSNumber*>* wrappedAxes = mps::getTensorAxes(input_t);
   if (cdist) {
     apparent_input_shape  = [mps::getMPSShape(input_tensor.sizes()) mutableCopy];
     apparent_output_shape = [mps::getMPSShape(output_t.sizes()) mutableCopy];
@@ -744,7 +744,7 @@ Tensor std_var_common_impl_mps(
   int64_t correction_n = 1;
 
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
-  NSArray<NSNumber*>* wrappedAxes = getTensorAxes(input_t, dim);
+  NSArray<NSNumber*>* wrappedAxes = getTensorAxes(input_t);
 
   int64_t num_output_dims = 0;
   NSMutableArray<NSNumber *> *axes = nil;
