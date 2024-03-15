@@ -519,25 +519,6 @@ MPSGraphTensorData* getMPSGraphTensorDataForView(const Tensor& src, MPSShape *mp
     src_ndim_base = src_base_shape.size();
   }
 
-  int64_t base_idx = 0;
-
-  std::vector<int64_t> src_base_shape_vec;
-
-  if (src_ndim_view != src_ndim_base) {
-    src_base_shape_vec.reserve(src_ndim_view);
-    for (const auto i : c10::irange(src_ndim_view)) {
-      if (src_view_shape[i] == 1 && src_base_shape[base_idx] != 1) {
-        src_base_shape_vec.emplace_back(1);
-      } else {
-        src_base_shape_vec.emplace_back(src_base_shape[base_idx]);
-        if (base_idx < src_ndim_base - 1)
-          base_idx += 1;
-      }
-    }
-    src_base_shape = IntArrayRef(src_base_shape_vec);
-    src_ndim_base = src_base_shape.size();
-  }
-
   srcTensorNDArray = ndArrayFromTensor(src, getMPSShape(src_base_shape), mpsDataType);
   srcTensorNDArrayDesc = srcTensorNDArray.descriptor;
 
