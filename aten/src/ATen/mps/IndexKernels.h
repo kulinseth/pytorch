@@ -198,7 +198,6 @@ kernel void index_put_accumulate_native_dtypes(
     constant packed_uint3 * strides    [[buffer(9)]],
     uint thread_index [[thread_position_in_grid]]) {
     uint3 offsets = get_idx(thread_index, iter_shape, num_dimensions, strides);
->>>>>>> 9122498f098 (Internal branch changes)
     constant int64_t * index_sizes   = (constant int64_t *)indexSizes;
     constant int64_t * index_strides = (constant int64_t *)indexStrides;
     int64_t offset = 0;

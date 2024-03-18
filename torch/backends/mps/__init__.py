@@ -36,16 +36,19 @@ def is_macos13_or_newer(minor: int = 0) -> bool:
     return torch._C._mps_is_on_macos_or_newer(13, minor)
 
 
-# Register prims as implementation of var_mean and group_norm
-if is_built():
-    from ...library import Library as _Library
-    from ..._refs import var_mean as _var_mean, native_group_norm as _native_group_norm
-    from ..._decomp.decompositions import native_group_norm_backward as _native_group_norm_backward
-    from ..._decomp.decompositions import im2col as _im2col
-    from ..._decomp.decompositions import col2im as _col2im
+_lib: Optional[_Library] = None
+
+
+def _init():
+    r"""Register prims as implementation of var_mean and group_norm."""
+    global _lib
+    if is_built() is False or _lib is not None:
+        return
+    from ..._decomp.decompositions import (
+        native_group_norm_backward as _native_group_norm_backward,
+    )
+    from ..._refs import native_group_norm as _native_group_norm
 
     _lib = _Library("aten", "IMPL")
     _lib.impl("native_group_norm", _native_group_norm, "MPS")
     _lib.impl("native_group_norm_backward", _native_group_norm_backward, "MPS")
-    _lib.impl("im2col", _im2col, "MPS")
-    _lib.impl("col2im", _col2im, "MPS")
