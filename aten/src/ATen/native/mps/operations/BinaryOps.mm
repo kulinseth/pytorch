@@ -302,6 +302,62 @@ void div_mode_template(const Tensor& self, const Tensor& other,
   binaryOpTensor(self, other, Scalar(1.0), output, op_name + "_mps:" + (rounding_mode.has_value() ? c10::str(*rounding_mode) : ""), div_mode_op_block);
 }
 
+static void add_sub_lerp_template(const Tensor& self,
+                                  const Tensor& other,
+                                  const Scalar& alpha,
+                                  const Tensor& output,
+                                  std::string op_name) {
+  if (alpha.toDouble() == 0.0) {
+    if (!self.is_alias_of(output)) { // if inplace, no-op
+      output.copy_(self);
+    }
+    return;
+  }
+
+  const bool alpha_has_value = alpha.toDouble() != 1.0;
+  if (alpha_has_value) {
+    auto commonDtype = at::result_type(self, other);
+    at::native::alpha_check(commonDtype, alpha);
+  }
+
+  if (!alpha_has_value && op_name == "lerp") {
+    if (!self.is_alias_of(other)) { // if inplace, no-op
+      output.copy_(other);
+    }
+    return;
+  }
+
+  BinaryOpBlock add_sub_lerp_op_block = ^BinaryOpFn(cachedGraph, primaryCastTensor, secondaryCastTensor) {
+    MPSGraph* mpsGraph = cachedGraph->graph();
+    MPSGraphTensor* secondaryTensor = secondaryCastTensor;
+
+    if (op_name == "lerp") {
+      secondaryCastTensor = [mpsGraph subtractionWithPrimaryTensor:secondaryCastTensor
+                                                   secondaryTensor:primaryCastTensor
+                                                              name:nil];
+    }
+
+    // if alpha is 1.0, then we don't bother adding another multiply to graph
+    if (alpha_has_value) {
+      cachedGraph->alphaTensor = mpsGraphRankedPlaceHolder(mpsGraph, getMPSScalarType(other.scalar_type()), @[ @1 ]);
+      secondaryTensor = [mpsGraph multiplicationWithPrimaryTensor:secondaryCastTensor
+                                                  secondaryTensor:cachedGraph->alphaTensor
+                                                             name:nil];
+    }
+    if (op_name == "add" || op_name == "lerp")
+      return [mpsGraph additionWithPrimaryTensor:primaryCastTensor secondaryTensor:secondaryTensor name:nil];
+    else
+      return [mpsGraph subtractionWithPrimaryTensor:primaryCastTensor secondaryTensor:secondaryTensor name:nil];
+  };
+  // add alpha's type to the key only if multiply was added to graph
+  binaryOpTensor(self,
+                 other,
+                 alpha,
+                 output,
+                 op_name + "_out_mps:" + (alpha_has_value ? getMPSTypeString(alpha.type()) : ""),
+                 add_sub_lerp_op_block);
+}
+
 void add_sub_template(const Tensor& self, const Tensor& other, const Scalar& alpha, const Tensor& output, std::string op_name)
 {
   if (alpha.toDouble() == 0.0) {
@@ -409,6 +465,14 @@ TORCH_IMPL_FUNC(div_out_mode_mps) (const Tensor& self, const Tensor& other, c10:
   mps::div_mode_template(self, other, rounding_mode, output, "div_mode_out");
 }
 
+TORCH_IMPL_FUNC(pow_Scalar_out_mps)(const Scalar& base, const Tensor& exp, const Tensor& out) {
+  if (base.equal(1.0)) {
+    out.fill_(1);
+  } else {
+    at::pow_out(const_cast<Tensor&>(out), mps::wrapped_scalar_tensor_mps(base, exp.device()), exp); // redispatch!
+  }
+}
+
 TORCH_IMPL_FUNC(div_out_mps) (const Tensor& self, const Tensor& other, const Tensor& output) {
   mps::div_mode_template(self, other, c10::nullopt, output, "div_out");
 }
@@ -514,6 +578,10 @@ TORCH_IMPL_FUNC(xlogy_out_mps) (const Tensor& self, const Tensor& other, const T
     return outputTensor;
   };
   mps::binaryOpTensor(self, other, Scalar(1.0), output, "xlogy_out_mps", xlogy_op_block);
+}
+
+TORCH_IMPL_FUNC(lerp_Scalar_mps)(const Tensor& self, const Tensor& end, const Scalar& weight, const Tensor& out) {
+  mps::add_sub_lerp_template(self, end, weight, out, "lerp");
 }
 
 } // namespace at::native

@@ -11,12 +11,17 @@
 #include <c10/core/ScalarType.h>
 #include <torch/library.h>
 #include <unordered_map>
+#include <ATen/native/TensorAdvancedIndexing.h>
+#include <ATen/native/IndexingUtils.h>
 #include <ATen/ops/scalar_tensor.h>
 
 #ifdef __OBJC__
 #include <MetalPerformanceShaders/MetalPerformanceShaders.h>
 #endif
 
+//namespace at {
+//  struct TensorIteratorBase;
+//}
 using namespace at::mps;
 
 namespace at {
@@ -114,6 +119,8 @@ class Placeholder {
   MPSGraphTensorData* _value;
   Tensor _tensor;
 };
+
+id<MTLBuffer> generateKernelDataOffsets(id<MTLComputeCommandEncoder> commandEncoder, const TensorIteratorBase& iter, bool use_64bit_index = false);
 
 inline NSDictionary* dictionaryFromPlaceholders(Placeholder& p1) {
         return @{ p1.getMPSGraphTensor(): p1.getMPSGraphTensorData() };

@@ -30,6 +30,14 @@ void set_xpu_enabled(bool new_enabled) {
   c10::impl::tls_set_dispatch_key_excluded(DispatchKey::AutocastXPU, !new_enabled);
 }
 
+bool is_mps_enabled() {
+  return !c10::impl::tls_is_dispatch_key_excluded(DispatchKey::AutocastMPS);
+}
+
+void set_mps_enabled(bool new_enabled) {
+  c10::impl::tls_set_dispatch_key_excluded(DispatchKey::AutocastMPS, !new_enabled);
+}
+
 bool is_ipu_enabled() {
   return !c10::impl::tls_is_dispatch_key_excluded(DispatchKey::AutocastIPU);
 }
@@ -97,6 +105,9 @@ thread_local at::ScalarType autocast_cpu_dtype = at::kBFloat16;
 // autocast_xpu_dtype is the lower_precision_fp used by AutocastXPU.
 thread_local at::ScalarType autocast_xpu_dtype = at::kBFloat16;
 
+// autocast_mps_dtype is the lower_precision_fp used by AutocastMPS.
+thread_local at::ScalarType autocast_mps_dtype = at::kHalf;
+
 // autocast_ipu_dtype is the lower_precision_fp used by AutocastIPU.
 thread_local at::ScalarType autocast_ipu_dtype = at::kHalf;
 
@@ -141,6 +152,10 @@ at::ScalarType get_autocast_xpu_dtype() {
   return autocast_xpu_dtype;
 }
 
+at::ScalarType get_autocast_mps_dtype() {
+  return autocast_mps_dtype;
+}
+
 at::ScalarType get_autocast_ipu_dtype() {
   return autocast_ipu_dtype;
 }
@@ -167,6 +182,13 @@ void set_autocast_gpu_dtype(at::ScalarType dtype) {
 
 void set_autocast_xpu_dtype(at::ScalarType dtype) {
   autocast_xpu_dtype = dtype;
+}
+
+void set_autocast_mps_dtype(at::ScalarType dtype) {
+  TORCH_CHECK(
+      dtype == at::kHalf,
+      "Currently, AutocastMPS only support Half as the autocast_mps_dtype");
+  autocast_mps_dtype = dtype;
 }
 
 void set_autocast_ipu_dtype(at::ScalarType dtype) {
