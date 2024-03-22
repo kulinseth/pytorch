@@ -49,6 +49,36 @@ void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds, 
   mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE);
 }
 
+// this should be merged into runMPSGraph() with new arg "disableTypeInference" for executables
+void runMPSGraph(MPSStream* mpsStream, MPSCachedGraph *cachedGraph, NSDictionary* feeds,
+                 NSDictionary* results, bool disableTypeInference, SyncType syncType) {
+  MPSGraphExecutable* executable = nil;
+  if (disableTypeInference) {
+    @autoreleasepool {
+      MPSGraph *mpsGraph = cachedGraph->graph();
+      executable = cachedGraph->getExecultable();
+      if (!executable) {
+        NSMutableDictionary* shapes = [[NSMutableDictionary new] autorelease];
+        for (MPSGraphTensor* graphTensor in feeds) {
+          MPSGraphTensorData* graphTensorData = [feeds objectForKey:graphTensor];
+          shapes[graphTensor] = [[[MPSGraphShapedType alloc] initWithShape:nil dataType:graphTensorData.dataType] autorelease];
+        }
+        MPSGraphCompilationDescriptor *compilationDescriptor = [[MPSGraphCompilationDescriptor new] autorelease];
+        [compilationDescriptor disableTypeInference];
+        executable = [[mpsGraph compileWithDevice:nil
+                                            feeds:shapes
+                                    targetTensors:[results allKeys]
+                                 targetOperations:nil
+                            compilationDescriptor:compilationDescriptor] retain];
+        // store the executable within the cachedGraph to reuse next time
+        cachedGraph->setExecultable(executable);
+      }
+    }
+  }
+
+  mpsStream->executeMPSGraph(cachedGraph->graph(), feeds, results, syncType, executable);
+}
+
 static inline void checkSupportsComplex() {
   TORCH_CHECK_TYPE(supportsComplex(), "MPS complex types are only supported on MacOS 14.0 or newer.");
 }
@@ -276,26 +306,29 @@ std::string getArrayRefString(const IntArrayRef s) {
   return ss.str();
 }
 
-std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype) {
-  std::string str;
-  // The key format per tensor would look like ":Float32[1,1,1,10]:"
-  for (const Tensor& tensor : tensors) {
-    str += ":";
-    if (tensor.defined()) {
-      str += getMPSTypeString(tensor.scalar_type(), short_dtype) + "[";
-      // if tensor is a scalar
-      if (tensor.dim() == 0) {
-        str += "Scalar";
+std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype, bool exclude_shape) {
+    std::string str;
+    // The key format per tensor would look like ":Float32[1,1,1,10]:"
+    for (const Tensor& tensor: tensors) {
+      str += ":";
+      if (tensor.defined()) {
+        str += getMPSTypeString(tensor.scalar_type(), short_dtype) + "[";
+        // if tensor is a scalar
+        if (tensor.dim() == 0) {
+          str += "Scalar";
+        } else {
+          if (exclude_shape) {
+            str += std::to_string(tensor.dim());
+          } else {
+            str += std::string([[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","].UTF8String);
+          }
+        }
+        str += "]";
       } else {
-        const NSString* ns_shape_key = [[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","];
-        str += std::string(ns_shape_key.UTF8String);
+        str += "Undefined";
       }
-      str += "]";
-    } else {
-      str += "Undefined";
     }
-  }
-  return str;
+    return str;
 }
 
 MPSShape* getMPSShape(const Tensor& t, c10::MemoryFormat memory_format) {
@@ -395,6 +428,20 @@ Placeholder::Placeholder(MPSGraphTensor* mpsGraphTensor,
 
   TORCH_INTERNAL_ASSERT(_value);
   _placeholder = mpsGraphTensor;
+}
+
+MPSGraphTensorData* allocMPSGraphTensorData(id<MTLBuffer> buffer,
+                                            MPSShape *mpsShape,
+                                            MPSDataType mpsDataType) {
+  MPSGraphTensorData *tensorData = [[[MPSGraphTensorData alloc] initWithMTLBuffer: buffer
+                                                                            shape: mpsShape
+                                                                         dataType: mpsDataType] autorelease];
+  TORCH_INTERNAL_ASSERT(tensorData);
+  // there's no way to get the underlying buffer from an
+  // MPSGraphTensorData or from its internal MPSNDArray.
+  // So we have to keep a mapping of them here.
+  getDefaultMPSStream()->addActiveResource(tensorData, buffer);
+  return tensorData;
 }
 
 MPSGraphTensorData* getMPSGraphTensorData(MPSGraph* mpsGraph, MPSStream* mpsStream, const Tensor& tensor) {
