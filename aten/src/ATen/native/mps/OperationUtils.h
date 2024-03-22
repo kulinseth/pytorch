@@ -52,14 +52,12 @@ struct MPSScalar {
   } value {};
 };
 
-struct MPSCachedGraph;
-
-void runMPSGraph(
-    MPSStream* mpsStream,
+void runMPSGraph(MPSStream* mpsStream,
     MPSGraph* mpsGraph,
     NSDictionary* feeds,
     NSDictionary* results);
 
+struct MPSCachedGraph;
 void runMPSGraph(
   MPSStream *mpsStream,
   MPSCachedGraph* cachedGraph,
@@ -77,12 +75,10 @@ static inline MPSDataType getMPSScalarType(const Tensor& t) {
   return getMPSScalarType(t.scalar_type());
 }
 MPSScalar   getMPSScalar(const Scalar& scalar, ScalarType type);
-
 std::string getMPSTypeString(ScalarType scalar_type, bool short_name = false);
 static inline std::string getMPSTypeString(const Tensor& t, bool short_name = false) {
   return getMPSTypeString(t.scalar_type(), short_name);
 }
-
 std::string scalarToMetalTypeString(const c10::ScalarType& scalar_type);
 NSArray<NSNumber*>* getTensorAxes(const Tensor& t);
 NSArray<NSNumber*>* getTensorAxes(const IntArrayRef& sizes, at::OptionalIntArrayRef dim);

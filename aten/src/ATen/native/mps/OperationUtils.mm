@@ -49,7 +49,6 @@ void runMPSGraph(MPSStream* mpsStream, MPSGraph* mpsGraph, NSDictionary* feeds, 
   mpsStream->executeMPSGraph(mpsGraph, feeds, results, SyncType::COMMIT_ADAPTIVE);
 }
 
-// this should be merged into runMPSGraph() with new arg "disableTypeInference" for executables
 void runMPSGraph(MPSStream* mpsStream, MPSCachedGraph *cachedGraph, NSDictionary* feeds,
                  NSDictionary* results, bool disableTypeInference, SyncType syncType) {
   MPSGraphExecutable* executable = nil;
@@ -318,16 +317,16 @@ std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype, boo
           str += "Scalar";
         } else {
           if (exclude_shape) {
-            str += std::to_string(tensor.dim());
+            str += "[-1]";
           } else {
             str += std::string([[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","].UTF8String);
           }
         }
         str += "]";
-      } else {
+       } else {
         str += "Undefined";
-      }
-    }
+       }
+     }
     return str;
 }
 

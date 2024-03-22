@@ -30,57 +30,49 @@ static void* pageAlignedBlockPtr(const void* ptr, NSUInteger size, NSUInteger* a
 
 // Copy sourceBuffer into destBuffer, casting sourceBuffer to dst.scalar_type().
 // The shapes and dtypes are taken from dst and src, but their storage pointers are not used.
-static void copy_cast_mps(at::Tensor& dst, const at::Tensor& src,
-                   id<MTLBuffer> destBuffer, id<MTLBuffer> sourceBuffer, bool non_blocking = true) {
+static void copy_cast_mps(at::Tensor& dst,
+                          const at::Tensor& src,
+                          id<MTLBuffer> destBuffer,
+                          id<MTLBuffer> sourceBuffer,
+                          bool non_blocking = true) {
   using namespace mps;
 
-  struct CachedGraph : public MPSCachedGraph
-  {
-    CachedGraph(MPSGraph *graph) : MPSCachedGraph(graph) {}
-    MPSGraphTensor* inputTensor_ = nil;
-    MPSGraphTensor* outputTensor_ = nil;
-  };
+  using CachedGraph = MPSUnaryCachedGraph;
 
   MPSStream* stream = getCurrentMPSStream();
   MPSGraphCache* cache_ = MPSGraphCache::getInstance();
 
-  MPSDataType dstDType = getMPSDataType(dst.scalar_type());
-  MPSDataType srcDType = getMPSDataType(src.scalar_type());
+  MPSDataType dstDType = getMPSDataType(dst);
+  MPSDataType srcDType = getMPSDataType(src);
   MPSShape* dstShape = getMPSShape(dst);
   MPSShape* srcShape = getMPSShape(src);
 
   @autoreleasepool {
-    string key = "copy_cast_mps" + getTensorsStringKey({src, dst}, true, /*exclude_shape*/true);
-    CachedGraph* cachedGraph = static_cast<CachedGraph *>(cache_->LookUp(key));
+    const bool needs_conj = src.is_conj() != dst.is_conj();
+    string key = "copy_cast_mps" + getTensorsStringKey({src, dst}, true, /*exclude_shape*/true) + ":" + std::to_string(needs_conj);
+    auto cachedGraph = LookUpOrCreateCachedGraph<CachedGraph>(key, [&](auto mpsGraph, auto newCachedGraph) {
+      MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, srcDType);
+      auto outputTensor = inputTensor;
+      if (isFloatingType(src.scalar_type()) && dstDType == MPSDataTypeUInt8) {
+        outputTensor = [mpsGraph castTensor:inputTensor toType:MPSDataTypeInt32 name:@"cast"];
+      }
+      if (srcDType != dstDType) {
+        outputTensor = [mpsGraph castTensor:outputTensor toType:dstDType name:@"cast"];
+      }
+      if (needs_conj) {
+        TORCH_CHECK(supportsComplex(), "MPS complex tensors conjugation needs MacOS14+");
+        outputTensor = [mpsGraph conjugateWithTensor:outputTensor name:nil];
+      }
 
-    if (!cachedGraph) {
-      MPSCachedGraph *tmpCachedGraph = cache_->CreateCachedGraph(key, ^ MPSCachedGraph * () {
-        CachedGraph *newCachedGraph = nil;
-        @autoreleasepool {
-          MPSGraph* mpsGraph = make_mps_graph();
-          newCachedGraph = new CachedGraph(mpsGraph);
-
-          MPSGraphTensor* inputTensor = mpsGraphUnrankedPlaceHolder(mpsGraph, srcDType);
-          MPSGraphTensor* inputCastTensor = inputTensor;
-          if (isFloatingType(src.scalar_type()) && dstDType == MPSDataTypeUInt8) {
-            inputCastTensor = [mpsGraph castTensor:inputTensor toType:MPSDataTypeInt32 name:@"cast"];
-          }
-          MPSGraphTensor* outputTensor = [mpsGraph castTensor:inputCastTensor toType:dstDType name:@"cast"];
-
-          newCachedGraph->inputTensor_ = inputTensor;
-          newCachedGraph->outputTensor_ = outputTensor;
-        }
-        return newCachedGraph;
-      });
-      cachedGraph = static_cast<CachedGraph *>(tmpCachedGraph);
-    }
+      newCachedGraph->inputTensor_ = inputTensor;
+      newCachedGraph->outputTensor_ = outputTensor;
+    });
     MPSGraphTensorData* srcData = allocMPSGraphTensorData(sourceBuffer, srcShape, srcDType);
     MPSGraphTensorData* dstData = allocMPSGraphTensorData(destBuffer, dstShape, dstDType);
-    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{cachedGraph->inputTensor_: srcData};
-    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{cachedGraph->outputTensor_: dstData};
-    stream->executeMPSGraph(cachedGraph->graph(), feeds, results, !non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT_ADAPTIVE);
-//    runMPSGraph(stream, cachedGraph, feeds, results, /*disable_type_inference*/ true,
-//                !non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT_ADAPTIVE);
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* feeds = @{cachedGraph->inputTensor_ : srcData};
+    NSDictionary<MPSGraphTensor*, MPSGraphTensorData*>* results = @{cachedGraph->outputTensor_ : dstData};
+    runMPSGraph(stream, cachedGraph, feeds, results, /*disable_type_inference*/ true,
+                !non_blocking ? SyncType::COMMIT_AND_WAIT : SyncType::COMMIT_ADAPTIVE);
   }
 }
 

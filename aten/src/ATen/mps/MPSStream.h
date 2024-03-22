@@ -34,8 +34,7 @@ typedef void* MTLDevice_t;
 #endif
 
 
-namespace at {
-namespace mps {
+namespace at::mps {
 
 //-----------------------------------------------------------------
 //  MPSStream
@@ -76,7 +75,6 @@ public:
                      bool non_blocking, uint64_t profileId);
   void executeMPSGraph(MPSGraph* mpsGraph, NSDictionary* feeds, NSDictionary* results,
                        SyncType syncType = SyncType::NONE, MPSGraphExecutable* executable = nullptr);
-
   void addCompletedHandler(MTLCommandBufferHandler block, SyncType syncType = SyncType::NONE);
   // see description for "_activeResources"
   void addActiveResource(MPSGraphTensorData* tensorData, void* buffer);
@@ -114,7 +112,6 @@ private:
   void commitAndWait();
   void commitAndContinue();
   void flush();
-
   bool updateCommandBufferResourceSize(NSArray<MPSGraphTensorData*> *feeds,
                                        NSArray<MPSGraphTensorData*> *results);
 };
@@ -146,5 +143,4 @@ class TORCH_API MPSStreamImpl
   MPSStreamImpl();
 };
 
-} // namespace mps
-} // namespace at
+} // namespace at::mps
