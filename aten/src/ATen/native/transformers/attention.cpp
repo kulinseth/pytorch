@@ -38,6 +38,7 @@
 #include <ATen/ops/_scaled_dot_product_flash_attention_backward_native.h>
 #include <ATen/ops/_scaled_dot_product_flash_attention_native.h>
 #include <ATen/ops/_scaled_dot_product_cudnn_attention.h>
+#include <ATen/ops/_scaled_dot_product_attention_mps.h>
 #include <ATen/ops/_scaled_dot_product_flash_attention_for_cpu.h>
 #include <ATen/ops/_scaled_dot_product_flash_attention_for_cpu_native.h>
 #include <ATen/ops/_scaled_dot_product_flash_attention_for_cpu_backward.h>
@@ -65,6 +66,7 @@
 #endif
 
 #include <ATen/native/nested/NestedTensorTransformerFunctions.h>
+#include <iostream>
 namespace at {
 
 namespace native {
@@ -652,6 +654,7 @@ Tensor scaled_dot_product_attention(
   if (query_.device().type() == DeviceType::CUDA
       || query_.device().type() == DeviceType::CPU
       || query_.device().type() == DeviceType::HIP
+      || query_.device().type() == DeviceType::MPS
       || query_.device().type() == DeviceType::PrivateUse1){
     if (query_.device().type() == DeviceType::PrivateUse1){
       choice_int = handle_private_use(
@@ -671,6 +674,11 @@ Tensor scaled_dot_product_attention(
       auto out_lse_softmax = at::_scaled_dot_product_cudnn_attention(
           query_, key, value, dropout_p, is_causal, compute_logsumexp, scale);
       return std::get<0>(out_lse_softmax);
+    }
+    case sdp::SDPBackend::mps_attention: {
+        auto out_softmax = at::_scaled_dot_product_attention_mps(
+          query_, key, value, dropout_p, is_causal, scale);
+        return out_softmax;
     }
     case sdp::SDPBackend::flash_attention: {
       if(query_.device().type() == DeviceType::CUDA){

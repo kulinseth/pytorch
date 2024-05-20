@@ -1795,6 +1795,20 @@ class TestMPS(TestCaseMPS):
                             expected = self._brute_cdist(x, y, p=p)
                             self.assertEqual(expected, actual)
 
+    def test_sdpa(self):
+        k = torch.randn(3, 4, 25, 64, device='cpu') # b, h, L, E
+        q = torch.randn(3, 4, 28, 64, device='cpu') # b, h, S, E
+        v = torch.randn(3, 4, 28, 64, device='cpu') # b, h, S, E
+        cpu_ref = F.scaled_dot_product_attention(k, q, v)
+        
+        device = 'mps'
+        k_mps = k.detach().clone().to(device)
+        q_mps = q.detach().clone().to(device)
+        v_mps = v.detach().clone().to(device)
+        mps = F.scaled_dot_product_attention(k_mps, q_mps, v_mps)
+
+        torch.testing.assert_close(mps.to('cpu'), cpu_ref)
+
     def test_mm(self):
         B = torch.ones(5, 6).to("mps")
         C = torch.ones(6, 5).to("mps")
