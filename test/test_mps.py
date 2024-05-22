@@ -1796,18 +1796,24 @@ class TestMPS(TestCaseMPS):
                             self.assertEqual(expected, actual)
 
     def test_sdpa(self):
-        k = torch.randn(3, 4, 25, 64, device='cpu') # b, h, L, E
-        q = torch.randn(3, 4, 28, 64, device='cpu') # b, h, S, E
-        v = torch.randn(3, 4, 28, 64, device='cpu') # b, h, S, E
-        cpu_ref = F.scaled_dot_product_attention(k, q, v)
-        
-        device = 'mps'
-        k_mps = k.detach().clone().to(device)
-        q_mps = q.detach().clone().to(device)
-        v_mps = v.detach().clone().to(device)
-        mps = F.scaled_dot_product_attention(k_mps, q_mps, v_mps)
+        for is_causal in [True, False]:
+            b = 4 #batch
+            h = 2 #heads
+            L = 3 #prompt size
+            E = 2 #features
+            S = 2 #context
+            k = torch.randn(b, h, L, E, device='cpu') # b, h, L, E
+            q = torch.randn(b, h, S, E, device='cpu') # b, h, S, E
+            v = torch.randn(b, h, S, E, device='cpu') # b, h, S, E
+            cpu_ref = F.scaled_dot_product_attention(k, q, v, is_causal=is_causal)
+            
+            device = 'mps'
+            k_mps = k.detach().clone().to(device)
+            q_mps = q.detach().clone().to(device)
+            v_mps = v.detach().clone().to(device)
+            mps = F.scaled_dot_product_attention(k_mps, q_mps, v_mps, is_causal=is_causal)
 
-        torch.testing.assert_close(mps.to('cpu'), cpu_ref)
+            torch.testing.assert_close(mps.to('cpu'), cpu_ref)
 
     def test_mm(self):
         B = torch.ones(5, 6).to("mps")

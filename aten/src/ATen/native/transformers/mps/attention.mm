@@ -7,10 +7,13 @@
 #include <ATen/native/transformers/attention.h>
 #include <ATen/native/transformers/sdp_utils_cpp.h>
 #include <ATen/ops/zeros_like.h>
+#include <ATen/ops/zeros.h>
+#include <ATen/ops/ones.h>
 #include <ATen/ops/ones_like_native.h>
 #include <ATen/native/mps/OperationUtils.h>
 #include <ATen/native/mps/MPSGraphSonomaOps.h>
 #include <ATen/mps/MPSProfiler.h>
+
 #endif
 
 #include<iostream>
@@ -30,11 +33,17 @@ Tensor _fused_scaled_dot_product_attention_mps(Tensor const& query, Tensor const
 //Do I need to do this in MPS namespace? Directly it causes an issue so it needs to be reflected elsewhere.
 Tensor _fused_scaled_dot_product_attention_mps(Tensor const& query, Tensor const& key, Tensor const& value, double dropout_p, bool is_causal, c10::optional<double> scale) {
     using namespace mps;
-    std::cout<<"IN FUSED"<<std::endl;
     if (query.numel() == 0 || key.numel() == 0 || value.numel() == 0) {
       //TODO: Check if zeros is the expectation in this case. Or just empty.
       return at::zeros_like(query);                                                                      
     }          
+
+    double scale_;
+    if(scale) {
+        scale_ = scale.value();
+    } else {
+        scale_ = 1.0 / sqrt(query.size(-1));
+    }
 
     const int64_t batch_size = query.size(0);
     const int64_t num_heads = query.size(1);
@@ -44,8 +53,14 @@ Tensor _fused_scaled_dot_product_attention_mps(Tensor const& query, Tensor const
     const int64_t max_seqlen_batch_k = key.size(2);
     const int64_t max_seqlen_batch_v = value.size(2);
 
-    Tensor out = at::zeros_like(query);
-    Tensor mask = ones_like(query);
+    Tensor out = at::zeros_like(query, query.options());
+    const auto L = query.size(-2), S = key.size(-2);
+    auto mask = at::zeros({L, S}, query.options());
+    if (is_causal) {
+        auto temp = at::ones({L, S}, query.options().dtype(at::kBool)).tril();
+        mask.masked_fill_(temp.logical_not(), -std::numeric_limits<double>::infinity());
+    }
+
 
     MPSStream* stream = getCurrentMPSStream();
     @autoreleasepool {
@@ -59,20 +74,17 @@ Tensor _fused_scaled_dot_product_attention_mps(Tensor const& query, Tensor const
         newCachedGraph->inputTensors_ = {queryTensor, keyTensor, valueTensor, maskTensor};
 
         MPSGraphTensor *sdpa = [mpsGraph scaledDotProductAttentionWithQueryTensor:queryTensor
-                                                                        keyTensor:keyTensor 
-                                                                      valueTensor:valueTensor 
-                                                                       maskTensor:maskTensor
-                                                                            scale:1.0
-                                                                             name:nil];
+                                                   keyTensor:keyTensor
+                                                 valueTensor:valueTensor
+                                                  maskTensor:maskTensor
+                                                       scale:scale_
+                                                        name:nil];
+
 
         newCachedGraph->outputTensor_ = sdpa;
         return newCachedGraph;
       });
 
-//      Placeholder queryPlaceholder = Placeholder(cachedGraph->inputTensors_[0], query, nil, false);
-//      Placeholder keyPlaceholder = Placeholder(cachedGraph->inputTensors_[1], key, nil, false);
-//      Placeholder valuePlaceholder = Placeholder(cachedGraph->inputTensors_[2], value, nil, false);
-//      Placeholder maskPlaceholder = Placeholder(cachedGraph->inputTensors_[3], mask, nil, false);
       Placeholder queryPlaceholder = Placeholder(cachedGraph->inputTensors_[0], query, getMPSShape(query));
       Placeholder keyPlaceholder = Placeholder(cachedGraph->inputTensors_[1], key, getMPSShape(key));
       Placeholder valuePlaceholder = Placeholder(cachedGraph->inputTensors_[2], value, getMPSShape(value));
