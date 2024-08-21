@@ -264,12 +264,18 @@ NSArray<NSNumber*>* getTensorAxes(const IntArrayRef& sizes, at::OptionalIntArray
   return getTensorAxes(sizes);
 }
 
-std::string getMPSShapeString(MPSShape* shape) {
-  std::string str;
-  for (NSNumber* elem in shape) {
-    str += std::to_string(elem.unsignedLongValue) + ",";
+inline std::string getMPSShapeString(const Tensor& t) {
+  std::ostringstream oss;
+  oss << "[";
+  if (t.sizes().size() > 0) {
+    for (int i = 0; i < t.sizes().size(); i++) {
+      oss << t.sizes()[i] << ",";
+    }
+    oss.seekp(-1, std::ios_base::end);
+    oss << "]";
+    return oss.str();
   }
-  return str;
+  return "";
 }
 
 std::string getArrayRefString(const IntArrayRef s) {
@@ -279,29 +285,22 @@ std::string getArrayRefString(const IntArrayRef s) {
 }
 
 std::string getTensorsStringKey(const TensorList& tensors, bool short_dtype, bool exclude_shape) {
-  std::string str;
+  std::ostringstream oss;
   // The key format per tensor would look like ":Float32[1,1,1,10]:"
   for (const Tensor& tensor : tensors) {
-    str += ":";
+    oss << ":";
     if (tensor.defined()) {
-      str += getMPSTypeString(tensor.scalar_type(), short_dtype) + "[";
-      // if tensor is a scalar
-      if (tensor.dim() == 0) {
-        str += "Scalar";
-      } else {
-        if (exclude_shape) {
-          str += "[-1]";
+        oss << getMPSTypeString(tensor.scalar_type(), short_dtype);
+        if (tensor.dim() == 0) {
+          oss << "[Scalar]";
         } else {
-          str +=
-              std::string([[getMPSShape(tensor) valueForKey:@"description"] componentsJoinedByString:@","].UTF8String);
+          oss << (exclude_shape ? "[-1]" : getMPSShapeString(tensor));
         }
-      }
-      str += "]";
     } else {
-      str += "Undefined";
+      oss << "Undefined";
     }
   }
-  return str;
+  return oss.str();
 }
 
 Tensor getTensorView(const Tensor& t, MPSShape* shape) {
@@ -327,17 +326,20 @@ MPSShape* getMPSShape(IntArrayRef sizes, c10::MemoryFormat memory_format) {
     const NSUInteger W = sizes[3];
     return @[ @(N), @(H), @(W), @(C) ];
   }
+  
   const int sz = sizes.size();
-  const int sz_ = (sz > 0) ? sz : 1;
-
-  std::vector<NSNumber*> numbers(sz_);
-
-  for (int i = 0; i < sz_; i++) {
-    NSInteger sz_i = (i < sz) ? sizes[i] : 1;
-    NSNumber* number = [NSNumber numberWithInteger:sz_i];
-    numbers[i] = number;
+  
+  if (sz == 0) {
+    return @[ @(1) ];
   }
-  return [NSArray arrayWithObjects:numbers.data() count:numbers.size()];
+  
+  NSMutableArray* shape = [[NSMutableArray alloc] initWithCapacity:sz];
+  
+  for (int i = 0; i < sz; i++) {
+    [shape addObject:@(sizes[i])];
+  }
+  
+  return shape;
 }
 
 void printTensorNDArray(const Tensor& t) {
