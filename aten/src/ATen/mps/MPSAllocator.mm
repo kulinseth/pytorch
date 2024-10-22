@@ -521,7 +521,6 @@ id<MTLBuffer> MPSHeapAllocatorImpl::registerCPUBackedPtr(void* cpu_ptr, size_t s
     TORCH_INTERNAL_ASSERT(buffer_block->is_cpu_backed);
     return buffer_block->buffer;
   } else {
-
     MTLResourceOptions options = MTLResourceCPUCacheModeDefaultCache | MTLResourceStorageModeShared;
     id<MTLDevice> device = MPSDevice::getInstance()->device();
     id<MTLBuffer> buffer = [device newBufferWithBytesNoCopy:cpu_ptr
