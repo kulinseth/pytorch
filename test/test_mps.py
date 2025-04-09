@@ -73,6 +73,24 @@ _ref_test_ops = tuple(
     )
 )
 
+def timeOp(op, mps_args, mps_kwargs, num_warmup=100, num_iter=10000):
+    # Warm up
+    for _ in range(num_warmup):
+        op(*mps_args, **mps_kwargs)
+    torch.mps.synchronize()
+
+    # Measurement
+    start = time.perf_counter()
+    for _ in range(num_iter):
+        op(*mps_args, **mps_kwargs)
+    torch.mps.synchronize()
+    end = time.perf_counter()
+    walltime_per_iter = 1e6*(end-start)/num_iter
+
+    op_info = f"op: {op.name}, x shape: {list(mps_args[0].shape)}, y shape: {list(mps_args[1].shape)}"
+    space_pad = " " * (70 - len(op_info))
+    print(f"\n{op_info}{space_pad}: {walltime_per_iter:.1f}us")
+
 def xfailIf(condition):
     def wrapper(func):
         if condition:
@@ -11983,8 +12001,6 @@ class TestPerformance(TestCase):
     @ops(mps_op_db([op for op in test_performance_op_db if isinstance(op, BinaryUfuncInfo)]))
     def test_binary_op_performance(self, device, op, dtype):
         self.assertEqual(device, "mps:0")
-        num_warmup=100
-        num_iters=10000
 
         # TODO: Enable per-sample seed setting and tweak tolerances / fix xfails
         def get_samples():
@@ -12009,21 +12025,7 @@ class TestPerformance(TestCase):
 
             with warnings.catch_warnings():
                 warnings.filterwarnings("ignore", category=UserWarning)
-                # Warm up
-                for _ in range(num_warmup):
-                    op(*mps_args, **mps_kwargs)
-                torch.mps.synchronize()
-
-                # Measurement
-                start = time.perf_counter()
-                for _ in range(num_iters):
-                    op(*mps_args, **mps_kwargs)
-                torch.mps.synchronize()
-                end = time.perf_counter()
-                walltime_per_iter = 1e6*(end-start)/num_iters
-            op_info = f"op: {op.name}, x shape: {list(mps_args[0].shape)}, y shape: {list(mps_args[1].shape)}"
-            space_pad = " " * (70 - len(op_info))
-            print(f"\n{op_info}{space_pad}: {walltime_per_iter:.1f}us")
+                timeOp(op, mps_args, mps_kwargs)
 
 class TestErrorInputs(TestCase):
     _ignore_not_implemented_error = True
