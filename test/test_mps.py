@@ -9,6 +9,7 @@ import warnings
 import shutil
 import subprocess
 import tempfile
+import time
 import os
 import copy
 import gc
@@ -49,6 +50,7 @@ import operator
 
 test_consistency_op_db = copy.deepcopy(op_db)
 test_error_inputs_op_db = copy.deepcopy(op_db)
+test_performance_op_db = copy.deepcopy(op_db)
 
 # Add bicubic2d_aa to test_consistency_op_db
 for op in op_db:
@@ -11976,6 +11978,52 @@ class TestConsistency(TestCaseMPS):
             self.assertEqual(op(x, y[0]), op(x.to("mps"), y.to("mps")[0]).cpu())
 
 
+class TestPerformance(TestCase):
+
+    @ops(mps_op_db([op for op in test_performance_op_db if isinstance(op, BinaryUfuncInfo)]))
+    def test_binary_op_performance(self, device, op, dtype):
+        self.assertEqual(device, "mps:0")
+        num_warmup=100
+        num_iters=10000
+
+        # TODO: Enable per-sample seed setting and tweak tolerances / fix xfails
+        def get_samples():
+            return op.sample_inputs(
+                device,
+                dtype,
+                requires_grad=(dtype.is_floating_point or dtype.is_complex),
+                # TODO: Enable per-sample seed setting and tweak tolerances / fix xfails
+                set_seed=False,
+            )
+        cpu_samples = get_samples()
+
+        for cpu_sample in cpu_samples:
+            mps_sample_input = transform_opinfo_sample_to_mps(cpu_sample)
+
+            mps_args = [mps_sample_input.input] + list(mps_sample_input.args)
+            mps_kwargs = mps_sample_input.kwargs
+
+            # for tensor_split(), the second tensor arg ("tensor_indices_or_sections") must be on CPU only
+            if (op.name == "tensor_split" and isinstance(mps_args[1], torch.Tensor)):
+                mps_args[1] = mps_args[1].cpu()
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings("ignore", category=UserWarning)
+                # Warm up
+                for _ in range(num_warmup):
+                    op(*mps_args, **mps_kwargs)
+                torch.mps.synchronize()
+
+                # Measurement
+                start = time.perf_counter()
+                for _ in range(num_iters):
+                    op(*mps_args, **mps_kwargs)
+                torch.mps.synchronize()
+                end = time.perf_counter()
+                walltime_per_iter = 1e6*(end-start)/num_iters
+            op_info = f"op: {op.name}, x shape: {list(mps_args[0].shape)}, y shape: {list(mps_args[1].shape)}"
+            space_pad = " " * (70 - len(op_info))
+            print(f"\n{op_info}{space_pad}: {walltime_per_iter:.1f}us")
 
 class TestErrorInputs(TestCase):
     _ignore_not_implemented_error = True
@@ -12223,6 +12271,7 @@ class TestMetalLibrary(TestCaseMPS):
 # to achieve this.
 instantiate_device_type_tests(TestConsistency, globals(), only_for="cpu")
 instantiate_device_type_tests(TestErrorInputs, globals(), allow_mps=True, only_for="mps")
+instantiate_device_type_tests(TestPerformance, globals(), allow_mps=True, only_for="mps")
 instantiate_device_type_tests(TestCommon, globals(), allow_mps=True, only_for="mps")
 instantiate_device_type_tests(TestLinalgMPS, globals(), allow_mps=True, only_for="mps")
 instantiate_parametrized_tests(TestLogical)
