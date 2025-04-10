@@ -86,8 +86,8 @@ def timeOp(op, mps_args, mps_kwargs, num_warmup=100, num_iter=10000):
     torch.mps.synchronize()
     end = time.perf_counter()
     walltime_per_iter = 1e6*(end-start)/num_iter
-
-    op_info = f"op: {op.name}, x shape: {list(mps_args[0].shape)}, y shape: {list(mps_args[1].shape)}"
+    input_shapes_str = "".join([f"shape{i}: "+str(list(x.shape))+" " for i,x in enumerate(mps_args)])
+    op_info = f"op: {op.name}, {input_shapes_str}"
     space_pad = " " * (70 - len(op_info))
     print(f"\n{op_info}{space_pad}: {walltime_per_iter:.1f}us")
 
